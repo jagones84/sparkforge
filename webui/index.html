@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>⚡ SparkForge — DGX Harness</title>
+<style>
+  :root {
+    --bg: #06070c; --panel: rgba(16,20,34,.72); --line: rgba(120,140,255,.14);
+    --txt: #dfe4ff; --dim: #7c86ad; --acc: #6c8cff; --acc2: #b56cff; --ok: #4ade80; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: radial-gradient(1200px 800px at 80% -10%, #141a3a 0%, var(--bg) 55%),
+                radial-gradient(900px 700px at -10% 110%, #241638 0%, transparent 60%);
+    color: var(--txt); font: 14px/1.55 ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 12px 20px;
+    border-bottom: 1px solid var(--line); background: rgba(8,10,20,.6); backdrop-filter: blur(10px);
+  }
+  header .logo { font-weight: 700; letter-spacing: .06em; font-size: 16px;
+    background: linear-gradient(90deg, var(--acc), var(--acc2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header .sub { color: var(--dim); font-size: 11px; }
+  .pill { font-size: 10px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); }
+  .pill.ok { color: var(--ok); border-color: rgba(74,222,128,.35); }
+  main { flex: 1; display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--line); padding: 14px; overflow-y: auto; background: rgba(8,10,20,.45); }
+  section h2 { font-size: 10px; letter-spacing: .18em; color: var(--dim); margin: 14px 0 8px; text-transform: uppercase; }
+  section h2:first-child { margin-top: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .step, .task { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 8px; margin-bottom: 4px; font-size: 12.5px; }
+  .step:hover, .task:hover { background: rgba(108,140,255,.08); cursor: pointer; }
+  .step.done { color: var(--dim); text-decoration: line-through; }
+  .task .st { font-size: 9px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); flex-shrink: 0; }
+  .task .st.doing { color: var(--warn); border-color: rgba(251,191,36,.4); }
+  .task .st.done { color: var(--ok); border-color: rgba(74,222,128,.4); }
+  #chat { display: flex; flex-direction: column; min-height: 0; }
+  #log { flex: 1; overflow-y: auto; padding: 22px 26px; }
+  .msg { margin-bottom: 14px; max-width: 860px; }
+  .msg .who { font-size: 10px; letter-spacing: .14em; color: var(--dim); margin-bottom: 4px; }
+  .msg.user .who { color: var(--acc2); }
+  .msg .bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user .bubble { border-color: rgba(181,108,255,.25); }
+  details.think { margin-bottom: 8px; }
+  details.think summary { cursor: pointer; font-size: 11px; color: var(--acc); letter-spacing: .08em; }
+  details.think .t { color: var(--dim); font-size: 12px; white-space: pre-wrap; border-left: 2px solid rgba(108,140,255,.3);
+    padding: 6px 0 6px 12px; margin-top: 6px; }
+  #composer { display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--line); background: rgba(8,10,20,.6); }
+  #inp { flex: 1; background: rgba(12,16,30,.8); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 12px; padding: 12px 16px; font: inherit; outline: none; }
+  #inp:focus { border-color: rgba(108,140,255,.5); box-shadow: 0 0 0 3px rgba(108,140,255,.12); }
+  button { background: linear-gradient(90deg, var(--acc), var(--acc2)); border: 0; color: #fff;
+    border-radius: 12px; padding: 12px 22px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--dim); font-weight: 400; padding: 8px 14px; }
+  button.ghost:hover { color: var(--txt); border-color: rgba(108,140,255,.4); }
+  .feed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .feed-dot.off { background: var(--dim); box-shadow: none; }
+  .remaining { color: var(--dim); font-size: 11px; }
+  .agentline { font-size: 12px; color: var(--dim); padding: 4px 0; }
+  .agentline b { color: var(--acc); }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } aside { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">⚡ SPARKFORGE</span>
+  <span class="sub">agent harness · dgx spark · local router</span>
+  <span style="flex:1"></span>
+  <span class="pill" id="modelPill">model: …</span>
+  <span class="pill" id="srvPill">server</span>
+  <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
+</header>
+<main>
+  <aside>
+    <section>
+      <h2>Plan</h2>
+      <div class="card">
+        <div id="planGoal" class="remaining">no goal yet</div>
+        <div id="planSteps" style="margin-top:8px"></div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;background:rgba(12,16,30,.8);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font:inherit;font-size:12px;outline:none">
+          <button class="ghost" onclick="genPlan()">plan it</button>
+        </div>
+      </div>
+    </section>
+    <section>
+      <h2>Tasks <span id="taskCount" class="remaining"></span></h2>
+      <div class="card">
+        <div id="tasks"></div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input id="taskInp" placeholder="new task…" style="flex:1;background:rgba(12,16,30,.8);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font:inherit;font-size:12px;outline:none">
+          <button class="ghost" onclick="addTask()">+</button>
+        </div>
+        <div id="remaining" class="remaining" style="margin-top:8px"></div>
+      </div>
+    </section>
+    <section>
+      <h2>Feed</h2>
+      <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
+    </section>
+  </aside>
+  <div id="chat">
+    <div id="log"></div>
+    <div id="composer">
+      <input id="inp" placeholder="command the forge… (Enter to send)" autofocus>
+      <button onclick="send()">send</button>
+      <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let sessionId = localStorage.getItem("sf_session") || null;
+let curThink = null, curAns = null, feedSince = 0;
+
+function scroll() { const l = $("log"); l.scrollTop = l.scrollHeight; }
+function who(role, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + (role === "user" ? "user" : "ai");
+  d.innerHTML = `<div class="who">${role === "user" ? "YOU" : "SPARKFORGE"}</div><div class="bubble"></div>`;
+  d.querySelector(".bubble").textContent = text;
+  $("log").appendChild(d); scroll(); return d;
+}
+function ensureThink() {
+  if (!curThink) {
+    const d = document.createElement("div"); d.className = "msg ai";
+    d.innerHTML = `<div class="who">SPARKFORGE</div><details class="think" open><summary>🧠 thinking…</summary><div class="t"></div></details>`;
+    $("log").appendChild(d); curThink = d; scroll();
+  }
+  return curThink.querySelector(".t");
+}
+function ensureAnswer() {
+  if (!curAns) {
+    const d = who("ai", "");
+    if (curThink) curThink.querySelector("details").open = false;
+    curAns = d; curThink = null;
+  }
+  return curAns.querySelector(".bubble");
+}
+
+function send(text) {
+  const inp = $("inp");
+  const msg = (text !== undefined ? text : inp.value).trim();
+  if (!msg) return;
+  inp.value = ""; who("user", msg); curThink = curAns = null;
+  const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "");
+  const es = new EventSource(url);
+  es.addEventListener("chat.delta", e => {
+    const d = JSON.parse(e.data);
+    if (!sessionId) { sessionId = d.session; localStorage.setItem("sf_session", sessionId); }
+    if (d.channel === "think") { ensureThink().textContent += d.text; }
+    else { ensureAnswer().textContent += d.text; }
+    scroll();
+  });
+  es.addEventListener("done", () => { es.close(); curAns = curThink = null; loadPlan(); loadTasks(); });
+  es.addEventListener("error", () => { es.close(); curAns = curThink = null; });
+}
+
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: {"Content-Type": "application/json"},
+                                body: body ? JSON.stringify(body) : undefined });
+  return r.json();
+}
+
+async function loadPlan() {
+  const p = await api("GET", "/api/plan");
+  $("planGoal").textContent = p.goal || "no goal yet";
+  $("planSteps").innerHTML = "";
+  (p.steps || []).forEach(s => {
+    const d = document.createElement("div");
+    d.className = "step" + (s.done ? " done" : "");
+    d.innerHTML = `<span>${s.done ? "☑" : "☐"}</span><span>${s.title}</span>`;
+    d.onclick = () => api("POST", "/api/plan/toggle", { id: s.id }).then(loadPlan);
+    $("planSteps").appendChild(d);
+  });
+}
+async function genPlan() {
+  const goal = $("planInp").value.trim(); if (!goal) return;
+  $("planInp").value = ""; who("user", "⚙ plan: " + goal); curThink = curAns = null;
+  const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6");
+  es.addEventListener("agent.iteration", e => { const d = JSON.parse(e.data);
+    const l = document.createElement("div"); l.className = "agentline";
+    l.innerHTML = `── iteration <b>${d.i}/${d.of}</b> ──`; $("log").appendChild(l); scroll(); });
+  es.addEventListener("agent.think", e => { const d = JSON.parse(e.data);
+    if (d.channel === "think") { ensureThink().textContent += d.text; scroll(); } });
+  es.addEventListener("agent.thought", e => { const d = JSON.parse(e.data);
+    const l = document.createElement("div"); l.className = "agentline";
+    l.innerHTML = `🧠 <b>${d.action}</b> — ${(d.thought || "").slice(0, 160)}`;
+    $("log").appendChild(l); scroll(); });
+  es.addEventListener("agent.observation", e => { const d = JSON.parse(e.data);
+    const l = document.createElement("div"); l.className = "agentline";
+    l.textContent = "👁 " + d.observation; $("log").appendChild(l); scroll(); });
+  es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
+    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadTasks(); });
+  es.addEventListener("error", () => es.close());
+}
+async function loadTasks() {
+  const t = await api("GET", "/api/tasks");
+  $("tasks").innerHTML = ""; $("remaining").innerHTML = "";
+  const open = (t.tasks || []).filter(x => x.status !== "done").length;
+  $("taskCount").textContent = open ? `(${open} open)` : "";
+  (t.tasks || []).forEach(x => {
+    const d = document.createElement("div"); d.className = "task";
+    d.innerHTML = `<span class="st ${x.status}">${x.status}</span><span>${x.title}</span>`;
+    const next = x.status === "todo" ? "doing" : x.status === "doing" ? "done" : "todo";
+    d.onclick = () => api("PATCH", "/api/tasks", { id: x.id, status: next }).then(loadTasks);
+    $("tasks").appendChild(d);
+  });
+  (t.remaining || []).forEach(r => {
+    const d = document.createElement("div"); d.textContent = "▢ " + r.replace(/^[a-z]+: /, "");
+    $("remaining").appendChild(d);
+  });
+}
+async function addTask() {
+  const v = $("taskInp").value.trim(); if (!v) return;
+  $("taskInp").value = ""; await api("POST", "/api/tasks", { title: v }); loadTasks();
+}
+async function loadStatus() {
+  try {
+    const s = await api("GET", "/api/status");
+    $("modelPill").textContent = "model: " + (s.default_model || "?");
+    $("srvPill").textContent = "server ok";
+    $("srvPill").className = "pill ok";
+  } catch { $("srvPill").textContent = "server down"; $("srvPill").className = "pill"; }
+}
+function connectFeed() {
+  const es = new EventSource("/api/feed");
+  es.onopen = () => { $("feedDot").classList.remove("off"); };
+  es.onerror = () => { $("feedDot").classList.add("off"); };
+  const push = line => {
+    const f = $("feed"); const d = document.createElement("div");
+    d.textContent = line; f.appendChild(d); f.scrollTop = f.scrollHeight;
+    while (f.children.length > 60) f.removeChild(f.firstChild);
+  };
+  es.addEventListener("backlog", e => {
+    const arr = JSON.parse(e.data); feedSince = Math.max(feedSince, ...arr.map(x => x.id));
+    arr.slice(-15).forEach(x => push(`${x.kind}`));
+  });
+  es.addEventListener("chat.user", e => { const d = JSON.parse(e.data); push("💬 user: " + (d.text || "").slice(0, 60)); });
+  es.addEventListener("chat.done", () => push("💬 chat done"));
+  es.addEventListener("plan.update", () => { push("🗺 plan updated"); loadPlan(); });
+  es.addEventListener("tasks.update", () => { push("✅ tasks updated"); loadTasks(); });
+  es.addEventListener("agent.start", e => { const d = JSON.parse(e.data || "{}"); push("⚡ agent: " + (d.goal || "").slice(0, 60)); });
+  es.addEventListener("agent.finish", () => push("🏁 agent finished"));
+}
+$("inp").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+$("taskInp").addEventListener("keydown", e => { if (e.key === "Enter") addTask(); });
+$("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progress on the current plan"; $("inp").value = ""; runAgent(g); };
+
+loadPlan(); loadTasks(); loadStatus(); connectFeed();
+setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>
