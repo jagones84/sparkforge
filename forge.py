@@ -10,6 +10,12 @@ Usage:
   python3 forge.py approvals ls | approvals show ID | approvals approve ID | approvals deny ID
   python3 forge.py runs ls | runs show RUN_ID | control pause|resume|abort RUN_ID
   python3 forge.py status | models | feed | sandbox | mcp
+  python3 forge.py memory store <kind> <content> | search <query> [--kind K] [--semantic]
+  python3 forge.py subagent spawn <goal> [--max-steps N] | collect <id> | status [id]
+  python3 forge.py meta run [--n-candidates N] | status | best
+  python3 forge.py blackboard post <topic> <content> [--tags T] | get [--id I] [--topic T] | search <q>
+  python3 forge.py acp server <method> '[params]' | connect <name> <url> [--token T]
+  python3 forge.py swarm <goal> [--n-workers N] [--max-steps N]
 Environment:
   SPARKFORGE_URL (default http://127.0.0.1:8790)
   SPARKFORGE_TOKEN (bearer token, optional)
@@ -219,6 +225,103 @@ def cmd_control(args):
     print(json.dumps({k: out.get(k) for k in ("id", "status", "goal")}, indent=2))
 
 
+def cmd_memory(args):
+    if args.action == "store":
+        out = req("POST", "/api/memory", {"kind": args.value, "content": args.value2})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    elif args.action == "search":
+        query = args.value
+        params = "?query=%s&limit=%d" % (query, args.limit)
+        if args.kind:
+            params += "&kind=" + args.kind
+        if args.semantic:
+            params += "&semantic=1"
+        out = req("GET", "/api/memory" + params)
+        for r in out.get("results", []):
+            print(" [%.3f] %s" % (r.get("score", 0), r.get("content", "")[:120]))
+
+
+def cmd_subagent(args):
+    if args.action == "spawn":
+        out = req("POST", "/api/subagent/spawn", {"goal": args.value, "max_steps": args.max_steps})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    elif args.action == "collect":
+        out = req("POST", "/api/subagent/collect", {"id": args.value, "timeout": 120})
+        print(json.dumps({k: v for k, v in out.items() if k in ("ok", "status", "summary", "steps")}, indent=2))
+    elif args.action == "status":
+        url = "/api/subagent"
+        if args.value:
+            url += "?id=" + args.value
+        print(json.dumps(req("GET", url), indent=2))
+
+
+def cmd_meta(args):
+    if args.action == "run":
+        out = req("POST", "/api/meta", {"action": "run", "n_candidates": args.n_candidates})
+        print("Candidates: %d" % len(out.get("results", [])))
+        print("Frontier: %d" % len(out.get("frontier", [])))
+        for r in out.get("frontier", []):
+            print(" %s quality=%.3f cost=%d tok" % (r.get("label"), r.get("quality"), r.get("cost_tokens")))
+        print("\nsaved to:", out.get("saved_to"))
+    elif args.action == "status":
+        print(json.dumps(req("GET", "/api/meta"), indent=2))
+    elif args.action == "best":
+        print(json.dumps(req("GET", "/api/meta?action=best"), indent=2))
+
+
+def cmd_blackboard(args):
+    if args.action == "post":
+        out = req("POST", "/api/blackboard", {"topic": args.value, "content": args.value2,
+                                                 "tags": [t.strip() for t in (args.tags or "").split(",") if t]})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    elif args.action == "get":
+        url = "/api/blackboard?limit=%d" % args.limit
+        if args.id:
+            url += "&id=" + args.id
+        if args.topic:
+            url += "&topic=" + args.topic
+        out = req("GET", url)
+        entries = out.get("entries", out.get("thread", [out]))
+        for e in (entries if isinstance(entries, list) else [entries]):
+            if isinstance(e, dict) and e.get("content"):
+                print(" [%s] %s (%s) content: %s" % (e.get("topic"), e.get("id"), e.get("tags", ""), e["content"][:150]))
+    elif args.action == "search":
+        out = req("GET", "/api/blackboard?query=%s&limit=%d" % (args.value, args.limit))
+        for e in out.get("entries", []):
+            print(" [%s] %s" % (e.get("topic"), e.get("content", "")[:120]))
+    elif args.action == "stats":
+        out = req("GET", "/api/blackboard")
+        print(json.dumps(out.get("stats", {}), indent=2))
+
+
+def cmd_acp(args):
+    if args.action == "server":
+        try:
+            params = json.loads(args.value2) if args.value2 else {}
+        except json.JSONDecodeError:
+            params = {}
+        out = req("POST", "/api/acp", {"jsonrpc": "2.0", "id": "cli",
+                                         "method": args.value, "params": params})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    elif args.action == "connect":
+        out = req("POST", "/api/acp/connect", {"name": args.value, "url": args.value2, "token": args.token})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    elif args.action == "list":
+        out = req("GET", "/api/mcp/clients")
+        print(json.dumps(out, indent=2))
+
+
+def cmd_swarm(args):
+    out = req("POST", "/api/swarm/run", {"goal": args.goal, "n_workers": args.n_workers,
+                                          "max_steps": args.max_steps})
+    print("Goal id: %s" % out.get("goal_id"))
+    print("Subgoal ids: %s" % out.get("subgoal_ids"))
+    print("Synthesis id: %s" % out.get("synthesis_id"))
+    print("Worker count: %d" % out.get("worker_count", 0))
+    for s in out.get("summaries", []):
+        print(" - %s" % s[:160])
+
+
 def cmd_mcp(_):
     """Tiny MCP client: initialize a session over HTTP and list tools."""
     init = req("POST", "/mcp", {"jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -277,6 +380,24 @@ def main():
     sub.add_parser("status").set_defaults(fn=cmd_status)
     sub.add_parser("models").set_defaults(fn=cmd_models)
     sub.add_parser("feed").set_defaults(fn=cmd_feed)
+    p = sub.add_parser("memory"); p.add_argument("action", choices=["store", "search"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); \
+        p.add_argument("--kind"); p.add_argument("--semantic", action="store_true"); \
+        p.add_argument("--limit", type=int, default=10); p.set_defaults(fn=cmd_memory)
+    p = sub.add_parser("subagent"); p.add_argument("action", choices=["spawn", "collect", "status"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("--max-steps", type=int, default=4); \
+        p.set_defaults(fn=cmd_subagent)
+    p = sub.add_parser("meta"); p.add_argument("action", choices=["run", "status", "best"]); \
+        p.add_argument("--n-candidates", type=int, default=8); p.set_defaults(fn=cmd_meta)
+    p = sub.add_parser("blackboard"); p.add_argument("action", choices=["post", "get", "search", "stats"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); \
+        p.add_argument("--id"); p.add_argument("--topic"); p.add_argument("--tags"); \
+        p.add_argument("--limit", type=int, default=20); p.set_defaults(fn=cmd_blackboard)
+    p = sub.add_parser("acp"); p.add_argument("action", choices=["server", "connect", "list"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); \
+        p.add_argument("--token"); p.set_defaults(fn=cmd_acp)
+    p = sub.add_parser("swarm"); p.add_argument("goal"); p.add_argument("--n-workers", type=int, default=3); \
+        p.add_argument("--max-steps", type=int, default=4); p.set_defaults(fn=cmd_swarm)
     args = ap.parse_args()
     if args.cmd == "plan":
         args.goal = args.value if getattr(args, "action", None) == "generate" else None

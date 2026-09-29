@@ -18,6 +18,15 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
 
+## ✨ Sperimentale — frontier features
+
+- 🧬 **Meta-harness self-improvement**: outer-loop proposes variants, evaluates on Pareto frontier (quality vs. cost)
+- 🔄 **ACP (Agent Client Protocol)**: bidirectional interop between harnesses
+- 🐝 **Swarm / blackboard**: multiple agents cooperate on shared state
+- 🧠 **Persistent memory**: append-only markdown + numpy vector index
+- 🔌 **MCP client**: connect external MCP servers as native tools
+- 👶 **Subagent delegation**: spawn child agent runs for delegated subtasks
+
 ## Quick start
 
 ```bash
@@ -81,6 +90,19 @@ Register SparkForge as an MCP server (stdio):
 | GET/POST/PATCH | `/api/tasks` | Task board; `PATCH /api/tasks {id, status?}` |
 | POST | `/api/agent/run` | Agent loop `{goal, max_steps, script?}` (also GET `/api/agent/run?goal=` for SSE) |
 | GET | `/api/sessions`, `/api/history?session=` | Chat session store |
+| GET | `/api/runs`, `/api/runs/<id>/trace` | Run trace + token/cost accounting |
+| GET | `/api/eval/tasks`, `/api/eval/run` | Eval harness (gold tasks + scoring) |
+| GET/POST | `/api/voice/status`, `/api/voice/stt`, `/api/voice/tts` | Speech I/O (whisper.cpp + sherpa-onnx) |
+| GET/POST | `/api/memory` | Persistent memory store (keyword + semantic search) |
+| GET | `/api/mcp/clients` | Connected MCP client status |
+| GET | `/api/subagent` | Subagent status list |
+| POST | `/api/subagent/spawn`, `/api/subagent/collect` | Subagent delegation |
+| GET/POST | `/api/meta` | Meta-harness self-improvement |
+| POST | `/api/acp` | ACP JSON-RPC (server mode) |
+| POST | `/api/acp/connect` | ACP client connect |
+| GET/POST | `/api/blackboard` | Swarm blackboard |
+| GET | `/api/blackboard/watch` | SSE blackboard watcher |
+| POST | `/api/swarm/run` | Swarm coordinator |
 | GET/POST | `/api/tools` | Tool registry (allowlist); POST flips `enabled`/`approval` |
 | POST | `/api/tools/call` | Run one tool through the approval gate `{tool, args, wait?}` |
 | GET | `/api/approvals`, `/api/approvals/<id>` | Approval queue + stats / one record |

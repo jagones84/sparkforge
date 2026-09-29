@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""SparkForge subagent delegation — v0.3
+
+Pattern (deepagents / hierarchical agents): the main agent loop can spawn child
+agent runs (subagents) with an isolated context, let them execute, and collect
+their result. This enables:
+
+  - Parallel subtask execution
+  - Delegation of specialized goals to a different model
+  - Recursive decomposition of complex goals
+
+Subagent runs share the same harness infrastructure (tools, sandbox, approvals)
+but get their own plan/tasks context and a fresh transcript. The parent receives
+a summary / trace when the child finishes.
+
+Usage (from agent loop):
+    {"action": "subagent", "goal": "...", "max_steps": 4, "model": "..."}
+    {"action": "subagent_result", "id": "..."}
+"""
+
+import json
+import threading
+import time
+import uuid
+
+import api_v02  # for the RunState / agent_run_v2 machinery
+import approvals
+import registry
+import sandbox
+import tools as toolmod
+
+_lock = threading.RLock()
+_running = {}     # subagent_id -> {state, parent_run_id, goal, result}
+
+
+def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None):
+    """Spawn a subagent run and return its id.
+
+    The subagent runs asynchronously in a background thread. Call
+    `collect(subagent_id)` to get the result (blocks until done).
+
+    Returns a dict with subagent_id (caller should store it).
+    """
+    sid = "sub_%s" % uuid.uuid4().hex[:10]
+    st = api_v02.new_run("%s (subagent %s)" % (goal[:80], sid), model, max_steps)
+    st.parent_run_id = parent_run_id
+
+    entry = {
+        "id": sid,
+        "state": st,
+        "goal": goal,
+        "max_steps": max_steps,
+        "model": model,
+        "parent_run_id": parent_run_id,
+        "created": time.time(),
+        "result": None,
+        "done": threading.Event(),
+    }
+
+    with _lock:
+        _running[sid] = entry
+
+    def _run():
+        try:
+            from server import publish as _publish
+            _publish("subagent.start", subagent_id=sid, parent=parent_run_id,
+                     goal=goal, max_steps=max_steps, model=model)
+        except Exception:
+            pass
+        result = api_v02.agent_run_v2(
+            goal, max_steps, model, on_event=on_event, run_id=st.id)
+        entry["result"] = result
+        entry["done"].set()
+        try:
+            from server import publish as _publish
+            _publish("subagent.done", subagent_id=sid, parent=parent_run_id,
+                     goal=goal, status=result.get("status"), steps=len(result.get("trace", [])))
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, daemon=True, name="subagent-%s" % sid).start()
+    _publish_event(parent_run_id, "subagent.spawned",
+                   subagent_id=sid, goal=goal, max_steps=max_steps, model=model)
+    return {"subagent_id": sid, "run_id": st.id, "goal": goal}
+
+
+def collect(subagent_id, timeout=None):
+    """Wait for a subagent to finish and return the result.
+
+    If timeout is None, blocks indefinitely (the main agent loop has a
+    max_steps counter, so this is bounded in practice).
+
+    Returns: {"ok": bool, "result": ..., "trace": [...], "summary": str}
+    """
+    with _lock:
+        entry = _running.get(subagent_id)
+    if entry is None:
+        return {"ok": False, "error": "subagent %r not found" % subagent_id}
+    if not entry["done"].wait(timeout=timeout):
+        return {"ok": False, "error": "subagent timeout", "subagent_id": subagent_id}
+    result = entry["result"] or {}
+    return {
+        "ok": result.get("status") == "done",
+        "status": result.get("status"),
+        "result": result,
+        "trace": result.get("trace", []),
+        "summary": result.get("summary", ""),
+        "steps": len(result.get("trace", [])),
+        "subagent_id": subagent_id,
+    }
+
+
+def status(subagent_id=None):
+    """List running / recent subagents, or one by id."""
+    with _lock:
+        if subagent_id:
+            e = _running.get(subagent_id)
+            if not e:
+                return None
+            return {
+                "id": e["id"],
+                "goal": e["goal"][:120],
+                "state": e["state"].status if e["state"] else "unknown",
+                "done": e["done"].is_set(),
+                "created": e["created"],
+            }
+        return [{
+            "id": e["id"],
+            "goal": e["goal"][:80],
+            "state": e["state"].status if e["state"] else "unknown",
+            "done": e["done"].is_set(),
+            "created": e["created"],
+        } for e in sorted(_running.values(), key=lambda x: x["created"], reverse=True)]
+
+
+def _publish_event(run_id, kind, **data):
+    try:
+        from server import publish
+        publish(kind, run_id=run_id, **data)
+    except Exception:
+        pass
+
+
+def observation_formatter(result, max_chars=1200):
+    """Format a subagent result as an agent observation string."""
+    if result.get("ok"):
+        return ("[subagent] status=%s summary=%s steps=%d trace_bytes=%d"
+                % (result.get("status"), result.get("summary", "")[:160],
+                   result.get("steps"), len(json.dumps(result.get("trace", [])))))
+    return "[subagent] ERROR: %s" % result.get("error", "unknown")
+
+
+# ------------------------------------------------------------- API helpers ---
+
+def handle_agent_action(act, parent_run_id=None):
+    """Handle subagent-related actions from the agent loop.
+
+    Called from server.py or api_v02.py when the agent emits a subagent action.
+
+    Returns an observation string to feed back into the loop.
+    """
+    action = act.get("action")
+
+    if action == "subagent":
+        goal = str(act.get("goal") or act.get("detail") or "")
+        if not goal:
+            return "subagent error: goal required"
+        max_steps = int(act.get("max_steps", 4))
+        model = act.get("model") or None
+        result = spawn(goal, parent_run_id=parent_run_id, max_steps=max_steps, model=model)
+        return "subagent spawned: %s (goal: %s, max_steps=%d)" % (
+            result["subagent_id"], goal[:80], max_steps)
+
+    if action == "subagent_result":
+        sid = str(act.get("id") or act.get("subagent_id") or "")
+        if not sid:
+            return "subagent_result error: subagent id required"
+        # Wait a short time to allow near-instant subagents to finish
+        result = collect(sid, timeout=120)
+        return observation_formatter(result)
+
+    if action == "subagent_status":
+        sid = act.get("id") or act.get("subagent_id")
+        return json.dumps(status(sid) or {"error": "not found"}, indent=2)
+
+    return None  # not a subagent action

@@ -477,8 +477,13 @@ def _r(handler, code, obj):
 
 
 def handle(handler, method, path, qs, body):
-    """Return True if this module produced the response."""
+    """Return True if this module produced the response.
+
+    Routes: v0.2 core + Sperimentale (memory, subagent, meta, acp, blackboard, swarm).
+    """
+
     if method == "GET":
+        # v0.2 core GET routes
         if path == "/api/tools":
             return _r(handler, 200, {"tools": registry.catalog(),
                                      "sandbox": sandbox.probe(force=qs.get("probe") == "1"),
@@ -509,9 +514,60 @@ def handle(handler, method, path, qs, body):
             max_steps = int(qs.get("max_steps", 6))
             st = new_run(goal, qs.get("model"), max_steps)
             return _sse(handler, agent_stream_gen_v2(goal, max_steps, qs.get("model"), st.id))
+
+        # --- Sperimentale GET routes ---
+        if path == "/api/memory":
+            _lazy('memory')
+            query_text = qs.get("query", "")
+            kind = qs.get("kind")
+            limit = int(qs.get("limit", 20))
+            semantic = qs.get("semantic", "").lower() in ("1", "true", "yes")
+            if query_text:
+                results = _MEMORY.search(query_text, kind, limit, semantic)
+                return _r(handler, 200, {"results": [{"score": s, **r} for s, r in results]})
+            return _r(handler, 200, _MEMORY.stats())
+
+        if path == "/api/mcp/clients":
+            _lazy('mcp_client')
+            return _r(handler, 200, _MCP_CLIENT.status())
+
+        if path == "/api/subagent":
+            _lazy('subagent')
+            sid = qs.get("id")
+            return _r(handler, 200, _SUBAGENT.status(sid))
+
+        if path == "/api/meta":
+            _lazy('meta')
+            action = qs.get("action", "status")
+            if action == "best":
+                return _r(handler, 200, _META.propose_best())
+            return _r(handler, 200, _META.status())
+
+        if path == "/api/blackboard":
+            _lazy('swarm')
+            eid = qs.get("id")
+            topic = qs.get("topic")
+            tags = qs.get("tags")
+            limit = int(qs.get("limit", 50))
+            tag_list = tags.split(",") if tags else None
+            if eid:
+                thread = qs.get("thread", "").lower() in ("1", "true", "yes")
+                if thread:
+                    return _r(handler, 200, {"thread": _SWARM.thread(eid)})
+                entry = _SWARM.get(entry_id=eid)
+                return _r(handler, 200, entry[0] if entry else {"error": "not found"})
+            entries = _SWARM.get(topic=topic, tags=tag_list, limit=limit)
+            return _r(handler, 200, {"entries": entries, "stats": _SWARM.stats()})
+
+        if path == "/api/blackboard/watch":
+            _lazy('swarm')
+            since = int(qs.get("since", 0))
+            return _sse(handler, _SWARM.watch_gen(since))
+
         return False
 
     if method == "POST":
+        # v0.2 core POST routes
         if path == "/api/tools":
             return _r(handler, 200, update_policy(body))
         if path == "/api/tools/call":
@@ -547,6 +603,83 @@ def handle(handler, method, path, qs, body):
             result = agent_run_v2(goal, int(body.get("max_steps", 6)), body.get("model"),
                                   script=script)
             return _r(handler, 200, result)
+
+        # --- Sperimentale POST routes ---
+        if path == "/api/memory":
+            _lazy('memory')
+            kind = body.get("kind", "memory.store")
+            content = body.get("content", "")
+            meta = {k: v for k, v in body.items() if k not in ("kind", "content")}
+            rec = _MEMORY.store(kind, content, **meta)
+            return _r(handler, 200, rec)
+
+        if path == "/api/subagent/spawn":
+            _lazy('subagent')
+            goal = body.get("goal", "")
+            if not goal:
+                return _r(handler, 400, {"error": "goal required"})
+            max_steps = int(body.get("max_steps", 4))
+            result = _SUBAGENT.spawn(goal, parent_run_id=body.get("run_id"),
+                                     max_steps=max_steps, model=body.get("model"))
+            return _r(handler, 200, result)
+
+        if path == "/api/subagent/collect":
+            _lazy('subagent')
+            sid = body.get("id") or body.get("subagent_id")
+            if not sid:
+                return _r(handler, 400, {"error": "subagent_id required"})
+            timeout = body.get("timeout", 120)
+            result = _SUBAGENT.collect(sid, timeout=timeout)
+            return _r(handler, 200, result)
+
+        if path == "/api/meta":
+            _lazy('meta')
+            action = body.get("action", "run")
+            if action == "run":
+                n_candidates = int(body.get("n_candidates", 8))
+                candidates = _META.sample_candidates(n=n_candidates)
+                report = _META.meta_run(candidates, eval_task_id=body.get("eval_task_id"))
+                return _r(handler, 200, report)
+            return _r(handler, 200, _META.status())
+
+        if path == "/api/acp":
+            _lazy('acp')
+            resp = _ACP.handle_http(body)
+            return _r(handler, 200, resp if resp else {})
+
+        if path == "/api/acp/connect":
+            _lazy('acp')
+            name = body.get("name", "")
+            url = body.get("url", "")
+            if not name or not url:
+                return _r(handler, 400, {"error": "name and url required"})
+            ok = _ACP.get_manager().connect(name, url, body.get("token"))
+            return _r(handler, 200, {"connected": ok, "name": name, "url": url})
+
+        if path == "/api/blackboard":
+            _lazy('swarm')
+            topic = body.get("topic", "general")
+            content = body.get("content", "")
+            if not content:
+                return _r(handler, 400, {"error": "content required"})
+            entry = _SWARM.post(topic, content,
+                               tags=body.get("tags"),
+                               parent=body.get("parent"),
+                               author=body.get("author", "api"),
+                               run_id=body.get("run_id"))
+            return _r(handler, 200, entry)
+
+        if path == "/api/swarm/run":
+            _lazy('swarm')
+            goal = body.get("goal", "")
+            if not goal:
+                return _r(handler, 400, {"error": "goal required"})
+            n_workers = int(body.get("n_workers", 3))
+            max_steps = int(body.get("max_steps", 4))
+            coord = _SWARM.Coordinator()
+            report = coord.run_swarm(goal, n_workers, max_steps, body.get("model"))
+            return _r(handler, 200, report)
+
         return False
     return False
 

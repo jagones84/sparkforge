@@ -9,7 +9,8 @@ Transport-agnostic: `handle(message, api)` takes a JSON-RPC 2.0 message and an
 
 MCP tools exposed: sparkforge_status, sparkforge_chat, sparkforge_plan,
 sparkforge_tasks, sparkforge_agent_run, sparkforge_feed, sparkforge_tools,
-sparkforge_approvals.
+sparkforge_approvals + Sperimentale tools (memory, subagent, meta, blackboard,
+acp, swarm).
 """
 
 import json
@@ -20,7 +21,7 @@ import urllib.request
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "sparkforge", "title": "SparkForge agent harness",
-               "version": "0.2.0"}
+               "version": "0.3.0-sperimentale"}
 
 
 def _text(s):
@@ -87,6 +88,62 @@ MCP_TOOLS = [
             "id": {"type": "string"}, "decision": {"type": "string", "enum": ["approve", "deny"]},
             "by": {"type": "string"}}},
     },
+    # ---- Sperimentale MCP tools ----
+    {
+        "name": "sparkforge_memory",
+        "description": "Search or store persistent memory records. Supports keyword and semantic search.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["store", "search", "stats"]},
+            "query": {"type": "string"}, "kind": {"type": "string"},
+            "content": {"type": "string"}, "semantic": {"type": "boolean"},
+            "limit": {"type": "integer"}},
+            "required": ["action"]},
+    },
+    {
+        "name": "sparkforge_subagent",
+        "description": "Spawn a subagent run for delegated subtask, collect result, or check status.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["spawn", "collect", "status"]},
+            "goal": {"type": "string"}, "max_steps": {"type": "integer"},
+            "model": {"type": "string"}, "id": {"type": "string"}},
+            "required": ["action"]},
+    },
+    {
+        "name": "sparkforge_meta",
+        "description": "Meta-harness self-improvement: run candidate evaluation on Pareto frontier, report status.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["run", "status", "best"]},
+            "n_candidates": {"type": "integer"},
+            "eval_task_id": {"type": "string"}},
+            "required": ["action"]},
+    },
+    {
+        "name": "sparkforge_blackboard",
+        "description": "Swarm blackboard: post and read shared entries for multi-agent cooperation.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["post", "get", "search", "stats"]},
+            "topic": {"type": "string"}, "content": {"type": "string"},
+            "tags": {"type": "string"}, "id": {"type": "string"},
+            "query": {"type": "string"}, "limit": {"type": "integer"}},
+            "required": ["action"]},
+    },
+    {
+        "name": "sparkforge_acp",
+        "description": "ACP (Agent Client Protocol): communicate with external ACP servers or drive this harness as an ACP target.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["server_call", "client_connect", "client_list"]},
+            "method": {"type": "string"}, "params": {"type": "object"},
+            "name": {"type": "string"}, "url": {"type": "string"}},
+            "required": ["action"]},
+    },
+    {
+        "name": "sparkforge_swarm",
+        "description": "Swarm coordinator: decompose a goal, spawn workers, collect results, synthesise.",
+        "inputSchema": {"type": "object", "properties": {
+            "goal": {"type": "string"}, "n_workers": {"type": "integer"},
+            "max_steps": {"type": "integer"}},
+            "required": ["goal"]},
+    },
 ]
 
 
@@ -120,7 +177,119 @@ def call_tool(name, args, api):
         return _text(api.tools())
     if name == "sparkforge_approvals":
         return _text(api.approvals(a))
+    # ---- Sperimentale MCP tool dispatch ----
+    if name == "sparkforge_memory":
+        return _memory_call(a)
+    if name == "sparkforge_subagent":
+        return _subagent_call(a)
+    if name == "sparkforge_meta":
+        return _meta_call(a)
+    if name == "sparkforge_blackboard":
+        return _blackboard_call(a)
+    if name == "sparkforge_acp":
+        return _acp_call(a)
+    if name == "sparkforge_swarm":
+        return _swarm_call(a)
     return _error_text("unknown tool %r" % name)
+
+
+def _memory_call(a):
+    action = a.get("action", "stats")
+    try:
+        import memory as mem
+        if action == "store":
+            return _text(mem.store(a.get("kind", "memory.store"), a.get("content", "")))
+        if action == "search":
+            results = mem.search(a.get("query", ""), a.get("kind"),
+                                 int(a.get("limit", 10)), a.get("semantic", False))
+            return _text({"results": [{"score": s, **r} for s, r in results]})
+        return _text(mem.stats())
+    except Exception as e:
+        return _error_text("memory error: %s" % e)
+
+
+def _subagent_call(a):
+    action = a.get("action")
+    try:
+        import subagent as sub
+        if action == "spawn":
+            goal = a.get("goal", "")
+            if not goal:
+                return _error_text("goal required")
+            return _text(sub.spawn(goal, max_steps=int(a.get("max_steps", 4)),
+                                   model=a.get("model")))
+        if action == "collect":
+            return _text(sub.collect(a.get("id", ""), timeout=int(a.get("timeout", 120))))
+        if action == "status":
+            return _text(sub.status(a.get("id")))
+        return _error_text("unknown subagent action")
+    except Exception as e:
+        return _error_text("subagent error: %s" % e)
+
+
+def _meta_call(a):
+    action = a.get("action", "status")
+    try:
+        import meta as mt
+        if action == "run":
+            candidates = mt.sample_candidates(n=int(a.get("n_candidates", 8)))
+            return _text(mt.meta_run(candidates, a.get("eval_task_id")))
+        if action == "best":
+            return _text(mt.propose_best())
+        return _text(mt.status())
+    except Exception as e:
+        return _error_text("meta error: %s" % e)
+
+
+def _blackboard_call(a):
+    action = a.get("action")
+    try:
+        import swarm as sw
+        if action == "post":
+            return _text(sw.post(a.get("topic", "general"), a.get("content", ""),
+                                  tags=a.get("tags"), author=a.get("author", "mcp")))
+        if action == "get":
+            return _text(sw.get(entry_id=a.get("id"), topic=a.get("topic"),
+                                 limit=int(a.get("limit", 50))))
+        if action == "search":
+            return _text(sw.search(a.get("query", ""), topic=a.get("topic"),
+                                    limit=int(a.get("limit", 20))))
+        return _text(sw.stats())
+    except Exception as e:
+        return _error_text("blackboard error: %s" % e)
+
+
+def _acp_call(a):
+    action = a.get("action")
+    try:
+        import acp as acpmod
+        if action == "server_call":
+            method = a.get("method", "ping")
+            params = a.get("params") or {}
+            return _text(acpmod.handle_acp_message(
+                {"jsonrpc": "2.0", "id": "mcp-acp", "method": method, "params": params}))
+        if action == "client_connect":
+            ok = acpmod.get_manager().connect(a.get("name"), a.get("url"), a.get("token"))
+            return _text({"connected": ok})
+        if action == "client_list":
+            return _text(acpmod.get_manager().list_connections())
+        return _error_text("unknown acp action")
+    except Exception as e:
+        return _error_text("acp error: %s" % e)
+
+
+def _swarm_call(a):
+    try:
+        import swarm as sw
+        goal = a.get("goal", "")
+        if not goal:
+            return _error_text("goal required")
+        coord = sw.Coordinator()
+        report = coord.run_swarm(goal, int(a.get("n_workers", 3)),
+                                  int(a.get("max_steps", 4)), a.get("model"))
+        return _text(report)
+    except Exception as e:
+        return _error_text("swarm error: %s" % e)
 
 
 def handle(msg, api):
@@ -144,7 +313,12 @@ def handle(msg, api):
             "instructions": ("SparkForge harness: chat with visible chain-of-thought, "
                              "plan/tasks stores, an approval-gated agent loop, a live feed "
                              "and sandboxed tools. Actions that touch the world are gated "
-                             "by /api/approvals."),
+                             "by /api/approvals.\n\n"
+                             "Sperimentale features: persistent memory (sparkforge_memory), "
+                             "subagent delegation (sparkforge_subagent), meta-harness "
+                             "self-improvement (sparkforge_meta), swarm blackboard "
+                             "(sparkforge_blackboard), ACP (sparkforge_acp), "
+                             "and swarm coordination (sparkforge_swarm)."),
         })
     if method == "ping":
         return _ok(msg_id, {})

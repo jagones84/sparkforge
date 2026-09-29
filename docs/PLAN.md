@@ -35,7 +35,36 @@ re-verification".
 - ✅ **MCP server mode** — `mcp_server.py` (stdio JSON-RPC 2.0) and `POST /mcp` (HTTP) expose `sparkforge_{status,chat,plan,tasks,agent_run,feed,tools,approvals}` so Paperclip can open an MCP session and pilot the harness
 - ✅ **WebUI + CLI** — approvals panel with approve/deny, sandbox pill, live tool events; `forge.py tools|approvals|runs|control|sandbox|mcp`
 
-## Remaining
+## Done — Sperimentale (frontiera "non ancora rilasciata") — 2026-09-29
+
+Implemented per `docs/specs/2026-09-29-frontier-harness-design.md` §Sperimentale.
+See evidence in `tests/v02_acceptance.py` (meta, acp, swarm are tested through MCP dispatch).
+
+- ✅ **Meta-harness self-improvement** (`meta.py`): outer-loop campiona varianti della
+  harness (modello, prompt stile, approval policy, sandbox, temperature, max_steps, ecc.),
+  le valuta su un task eval standard, e calcola la frontiera di Pareto (qualità vs costo).
+  Endpoint: `GET/POST /api/meta`, MCP: `sparkforge_meta`.
+- ✅ **ACP (Agent Client Protocol)** (`acp.py`): SparkForge espone un endpoint ACP
+  JSON-RPC 2.0 (`POST /api/acp`) per essere pilotato da altri harness, e un client
+  ACP per connettersi e pilotare altri agenti (`POST /api/acp/connect`).
+  MCP: `sparkforge_acp`.
+- ✅ **Swarm / blackboard** (`swarm.py`): blackboard condiviso (append-only, versionato,
+  con SSE watcher `GET /api/blackboard/watch`). Coordinator agent che decomponi il
+  goal, spawna worker via subagent, e sintetizza i risultati.
+  Endpoint: `GET/POST /api/blackboard`, `POST /api/swarm/run`.
+  MCP: `sparkforge_blackboard`, `sparkforge_swarm`.
+- ✅ **Persistent memory** (`memory.py`): scrittura append-only in markdown, indice
+  vettoriale numpy per ricerca semantica (sentence-transformers, endpoint embedding locale,
+  o bag-of-words fallback). Endpoint: `GET/POST /api/memory`. MCP: `sparkforge_memory`.
+- ✅ **MCP client** (`mcp_client.py`): connessione stdio o HTTP a server MCP esterni,
+  discovery tool via tools/list, namespace collision-free (`clientname__toolname`).
+  Config: `config/mcp_clients.yaml`. Endpoint: `GET /api/mcp/clients`.
+- ✅ **Subagent delegation** (`subagent.py`): spawn `agent_run_v2` in background thread,
+  raccogli risultato con `collect()`. Azione agent: `{"action":"subagent","goal":"..."}`.
+  Endpoint: `POST /api/subagent/spawn`, `POST /api/subagent/collect`.
+  MCP: `sparkforge_subagent`.
+
+## Remaining (v0.3 / v0.4 / polish)
 
 - [ ] **v0.2 — SparkPulse bridge**: "Command" tab in the SparkPulse Android app hitting `/api/chat/stream` + `/api/feed`; `POST /api/commands` adapter in sparkpulse-server
 - [ ] **v0.2 — WebUI auth flow** for `--token` mode (token prompt + `?token=` on EventSource) — *present in the tree, not covered by this task's acceptance run*
