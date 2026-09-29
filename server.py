@@ -17,12 +17,18 @@ import json
 import os
 import queue
 import re
+import sqlite3
 import threading
 import time
 import urllib.request
 import uuid
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import api_v02  # v0.2 surface: tool registry, approvals, HITL control, MCP
+import approvals
+import registry
+import sandbox
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(REPO, "data")
@@ -33,6 +39,30 @@ ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
 STORE_LOCK = threading.RLock()
 
+# --------------------------------------------------------------- sqlite ----
+
+DB_PATH = os.environ.get("SPARKFORGE_DB", os.path.join(DATA_DIR, "events.db"))
+_db_lock = threading.Lock()
+_db = None
+
+
+def db():
+    global _db
+    if _db is None:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        _db = sqlite3.connect(DB_PATH, check_same_thread=False)
+        _db.execute("""CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts REAL NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL)""")
+        _db.execute("""CREATE TABLE IF NOT EXISTS runs (
+            id TEXT PRIMARY KEY, kind TEXT NOT NULL, goal TEXT,
+            model TEXT, ts REAL NOT NULL, tokens_in INTEGER DEFAULT 0,
+            tokens_out INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0.0,
+            status TEXT DEFAULT 'running', spans TEXT DEFAULT '[]')""")
+        _db.commit()
+    return _db
+
+
 # ---------------------------------------------------------------- events ----
 
 _feed_lock = threading.Lock()
@@ -42,10 +72,14 @@ _sse_queues = set()  # each: queue.Queue of str chunks
 
 
 def publish(kind, **data):
-    """Record an event in the feed and fan it out to live SSE subscribers."""
+    """Record an event in the SQLite store + memory cache, fan out to SSE."""
     global _feed_seq
     with _feed_lock:
-        _feed_seq += 1
+        with _db_lock:
+            cur = db().execute("INSERT INTO events(ts, kind, data) VALUES(?,?,?)",
+                               (round(time.time(), 3), kind, json.dumps(data, ensure_ascii=False)))
+            db().commit()
+        _feed_seq = cur.lastrowid
         event = {"id": _feed_seq, "ts": round(time.time(), 3), "kind": kind, **data}
         _feed.append(event)
         payload = "id: {id}\nevent: {kind}\ndata: {data}\n\n".format(
@@ -60,8 +94,17 @@ def publish(kind, **data):
 
 
 def events_since(last_id):
+    """Replay events after last_id: memory cache first, SQLite as source of truth."""
     with _feed_lock:
-        return [e for e in _feed if e["id"] > last_id]
+        if _feed and _feed[0]["id"] <= last_id + 1:
+            return [e for e in _feed if e["id"] > last_id]
+        if not _feed and last_id == 0:
+            return []
+    with _db_lock:
+        rows = db().execute(
+            "SELECT id, ts, kind, data FROM events WHERE id > ? ORDER BY id", (last_id,)
+        ).fetchall()
+    return [{"id": r[0], "ts": r[1], "kind": r[2], **json.loads(r[3])} for r in rows]
 
 
 # ---------------------------------------------------------------- stores ----
@@ -259,6 +302,93 @@ def _router_stream(messages, model, on_delta, timeout=300):
     return "".join(answer), "".join(think)
 
 
+# ----------------------------------------------------- tracing / cost ----
+
+# Token pricing per 1M tokens (input, output) for known local model families.
+# Local models are free in $, but we still account tokens; cost is 0 unless a
+# price is configured via SPARKFORGE_PRICES (json: {"alias": [in, out]}).
+try:
+    MODEL_PRICES = json.loads(os.environ.get("SPARKFORGE_PRICES", "{}"))
+except Exception:
+    MODEL_PRICES = {}
+
+
+def count_tokens(text):
+    """Cheap proxy: ~4 chars/token (good enough for local accounting)."""
+    return max(1, len(text) // 4) if text else 0
+
+
+class RunTrace:
+    """Records spans + token/cost accounting for one run (chat, plan, agent)."""
+
+    def __init__(self, kind, goal=None, model=None):
+        self.id = uuid.uuid4().hex[:12]
+        self.kind = kind
+        self.goal = (goal or "")[:300]
+        self.model = model
+        self.ts = round(time.time(), 3)
+        self.tokens_in = 0
+        self.tokens_out = 0
+        self.spans = []
+        self.status = "running"
+        with _db_lock:
+            db().execute(
+                "INSERT INTO runs(id, kind, goal, model, ts) VALUES(?,?,?,?,?)",
+                (self.id, kind, self.goal, model, self.ts))
+            db().commit()
+
+    def span(self, name, **attrs):
+        s = {"name": name, "ts": round(time.time(), 3), **attrs}
+        self.spans.append(s)
+        return s
+
+    def llm_call(self, messages, answer):
+        tin = sum(count_tokens(m.get("content", "")) for m in messages)
+        tout = count_tokens(answer)
+        self.tokens_in += tin
+        self.tokens_out += tout
+        return tin, tout
+
+    def finish(self, status="done"):
+        self.status = status
+        price = MODEL_PRICES.get(self.model or "", [0.0, 0.0])
+        cost = (self.tokens_in / 1e6) * price[0] + (self.tokens_out / 1e6) * price[1]
+        with _db_lock:
+            db().execute(
+                "UPDATE runs SET tokens_in=?, tokens_out=?, cost_usd=?, status=?, spans=? WHERE id=?",
+                (self.tokens_in, self.tokens_out, round(cost, 6), status,
+                 json.dumps(self.spans, ensure_ascii=False), self.id))
+            db().commit()
+
+    def summary(self):
+        return {"run_id": self.id, "kind": self.kind, "goal": self.goal,
+                "model": self.model, "ts": self.ts, "status": self.status,
+                "tokens_in": self.tokens_in, "tokens_out": self.tokens_out,
+                "spans": self.spans}
+
+
+def get_run_trace(run_id):
+    with _db_lock:
+        row = db().execute(
+            "SELECT id, kind, goal, model, ts, tokens_in, tokens_out, cost_usd, status, spans"
+            " FROM runs WHERE id=?", (run_id,)).fetchone()
+    if not row:
+        return None
+    return {"run_id": row[0], "kind": row[1], "goal": row[2], "model": row[3],
+            "ts": row[4], "tokens_in": row[5], "tokens_out": row[6],
+            "cost_usd": row[7], "status": row[8], "spans": json.loads(row[9])}
+
+
+def runs_summary(limit=50):
+    with _db_lock:
+        rows = db().execute(
+            "SELECT id, kind, goal, model, ts, tokens_in, tokens_out, cost_usd, status"
+            " FROM runs ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+    return [{"run_id": r[0], "kind": r[1], "goal": r[2], "model": r[3], "ts": r[4],
+             "tokens_in": r[5], "tokens_out": r[6], "cost_usd": r[7], "status": r[8]}
+            for r in rows]
+
+
 # ------------------------------------------------------------- agent core ----
 
 SYSTEM_PROMPT = (
@@ -306,7 +436,7 @@ def extract_json(text):
     return None
 
 
-def chat_once(sess, message, model=None, on_delta=None):
+def chat_once(sess, message, model=None, on_delta=None, trace=None):
     """Append the user message, run one streamed router call, store the reply."""
     if on_delta is None:
         on_delta = lambda channel, text: publish(
@@ -317,6 +447,9 @@ def chat_once(sess, message, model=None, on_delta=None):
     msgs.append({"role": "user", "content": message})
     model = model or default_model()
     answer, think = _router_stream(msgs, model, on_delta)
+    if trace:
+        trace.span("llm.chat", model=model)
+        trace.llm_call(msgs, answer + think)
     reply = append_message(sess, "assistant", answer.strip(), reasoning=think.strip() or None,
                            meta={"model": model})
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
@@ -329,8 +462,11 @@ def generate_plan(goal, model=None):
     sys = SYSTEM_PROMPT + "\n\n" + PLANNER_PROMPT
     msgs = [{"role": "system", "content": sys}, {"role": "user", "content": goal}]
     model = model or default_model()
+    trace = RunTrace("plan", goal=goal, model=model)
     answer, think = _router_stream(msgs, model, lambda ch, t: publish(
         "plan.think", channel=ch, text=t))
+    trace.span("llm.plan", model=model)
+    trace.llm_call(msgs, answer + think)
     data = extract_json(answer)
     steps = []
     if isinstance(data, list):
@@ -344,7 +480,8 @@ def generate_plan(goal, model=None):
     plan = {"goal": goal, "steps": steps, "updated": round(time.time(), 3)}
     _write_json(_store_path("plan.json"), plan)
     publish("plan.update", goal=goal, steps=steps, generated=True)
-    return plan, answer, think
+    trace.finish("done")
+    return plan, answer, think, trace.id
 
 
 AGENT_ACTIONS = ("plan_step", "complete_plan_step", "add_task", "complete_task", "note", "finish")
@@ -398,19 +535,31 @@ def apply_agent_action(act):
     return "unknown action"
 
 
-def agent_run(goal, max_steps=6, model=None, on_event=None):
+def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
     """Sense-think-act loop. No shell, no filesystem writes except harness stores."""
     if on_event is None:
         on_event = lambda kind, **d: publish(kind, **d)
     on_event("agent.start", goal=goal, max_steps=max_steps)
     model = model or default_model()
-    trace = []
+    if trace is None:
+        trace = RunTrace("agent", goal=goal, model=model)
+        trace.span("agent.start", goal=goal, max_steps=max_steps)
+    trace_model = model
+    llm_log = []
+
+    def _llm(msgs, answer):
+        trace.span("llm.step", model=trace_model)
+        tin, tout = trace.llm_call(msgs, answer)
+        llm_log.append((tin, tout))
+
+    actions = []
     for i in range(max_steps):
         sys = SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT + "\n\nHarness state:\n" + context_summary()
         msgs = [{"role": "system", "content": sys},
                 {"role": "user", "content": "Goal: %s (iteration %d/%d)" % (goal, i + 1, max_steps)}]
         on_event("agent.iteration", i=i + 1, of=max_steps)
         answer, think = _router_stream(msgs, model, lambda ch, t: on_event("agent.think", channel=ch, text=t))
+        _llm(msgs, answer + think)
         act = extract_json(answer) or {}
         if not isinstance(act, dict) or not act.get("action"):
             act = {"thought": answer[:200], "action": "note", "detail": answer[:400]}
@@ -420,16 +569,154 @@ def agent_run(goal, max_steps=6, model=None, on_event=None):
         if action == "finish":
             summary = str(act.get("summary", ""))[:600]
             on_event("agent.finish", summary=summary)
-            trace.append({"i": i + 1, "thought": thought, "action": "finish", "summary": summary})
+            actions.append({"i": i + 1, "thought": thought, "action": "finish", "summary": summary})
             break
         obs = apply_agent_action(act)
+        trace.span("agent.action", i=i + 1, action=action, observation=obs)
         on_event("agent.observation", i=i + 1, observation=obs)
-        trace.append({"i": i + 1, "thought": thought, "action": action, "observation": obs})
+        actions.append({"i": i + 1, "thought": thought, "action": action, "observation": obs})
     else:
         summary = "stopped at max_steps=%d; see trace" % max_steps
         on_event("agent.finish", summary=summary)
-        trace.append({"action": "finish", "summary": summary})
-    return {"goal": goal, "model": model, "trace": trace}
+        actions.append({"action": "finish", "summary": summary})
+    trace.finish("done")
+    return {"goal": goal, "model": model, "trace": actions, "run_id": trace.id}
+
+
+# ---------------------------------------------------------- eval harness ----
+
+EVAL_DIR = os.path.join(REPO, "eval")
+GOLD_PATH = os.path.join(EVAL_DIR, "gold_tasks.json")
+EVAL_RESULTS_DIR = os.path.join(EVAL_DIR, "results")
+
+
+def eval_list_tasks():
+    try:
+        with open(GOLD_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data["tasks"] if isinstance(data, dict) else data
+    except FileNotFoundError:
+        return []
+
+
+def eval_score(result, task):
+    """Score one agent run against the gold task.
+
+    Returns dict with per-criterion pass/bool and total score in [0,1].
+    Criteria (pattern Winder.AI): action sequence contains the expected ones
+    in order, finish summary is non-empty, loop did not stall.
+    """
+    trace = result.get("trace") or []
+    got_actions = [t.get("action") for t in trace if t.get("action") != "finish"]
+    expected = task.get("expected_actions", [])
+    checks = {
+        "actions_present": all(a in got_actions for a in expected),
+        "actions_in_order": [a for a in got_actions if a in expected] == expected,
+        "finished": any(t.get("action") == "finish" for t in trace),
+        "summary_nonempty": bool((trace[-1].get("summary", "") if trace else "").strip()),
+        "no_stall": all((t.get("observation") or t.get("summary") or "")
+                        != "unknown action" for t in trace),
+    }
+    score = sum(1 for v in checks.values() if v) / len(checks)
+    return {"score": round(score, 3), "checks": checks,
+            "actions_seen": got_actions}
+
+
+def eval_run(model=None, max_steps=6, task_id=None, save=True):
+    """Run every gold task (or one) through the agent loop and score it."""
+    tasks = eval_list_tasks()
+    if task_id:
+        tasks = [t for t in tasks if t.get("id") == task_id]
+    if not tasks:
+        return {"error": "no eval tasks (missing %s)" % GOLD_PATH}
+    results = []
+    for t in tasks:
+        result = agent_run(t["goal"], max_steps, model)
+        sc = eval_score(result, t)
+        results.append({"task": t["id"], "goal": t["goal"], "run_id": result.get("run_id"),
+                        "score": sc["score"], "checks": sc["checks"],
+                        "actions_seen": sc["actions_seen"]})
+    summary = {"ts": round(time.time(), 3), "model": model or "default",
+               "mean_score": round(sum(r["score"] for r in results) / len(results), 3),
+               "per_task": results}
+    if save:
+        os.makedirs(EVAL_RESULTS_DIR, exist_ok=True)
+        path = os.path.join(EVAL_RESULTS_DIR, "eval-%d.json" % int(time.time()))
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+        summary["saved_to"] = path
+    publish("eval.done", mean_score=summary["mean_score"], n=len(results))
+    return summary
+
+
+# ------------------------------------------------------------------ voice ----
+
+WHISPER_BIN = os.environ.get("SPARKFORGE_WHISPER_BIN", "whisper-cli")
+WHISPER_MODEL = os.environ.get("SPARKFORGE_WHISPER_MODEL", "")
+SHERPA_TTS_MODEL = os.environ.get("SPARKFORGE_SHERPA_TTS_MODEL", "")
+
+
+def voice_status():
+    """Detect whisper.cpp and sherpa-onnx availability (evidence-based)."""
+    import shutil
+    stt = {"backend": "whisper.cpp", "bin": WHISPER_BIN,
+           "available": bool(shutil.which(WHISPER_BIN)) and bool(WHISPER_MODEL)}
+    tts = {"backend": "sherpa-onnx", "model": SHERPA_TTS_MODEL, "available": False}
+    if SHERPA_TTS_MODEL:
+        try:
+            import sherpa_onnx  # noqa: F401
+            tts["available"] = True
+        except ImportError:
+            try:
+                import subprocess as sp
+                sp.run(["python3", "-c", "import sherpa_onnx"], check=True, timeout=10)
+                tts["available"] = True
+            except Exception:
+                pass
+    return {"stt": stt, "tts": tts}
+
+
+def voice_stt(wav_path):
+    """Transcribe a wav with whisper.cpp. Returns {text} or {error}."""
+    if not wav_path or not os.path.isfile(wav_path):
+        return {"error": "wav path required"}
+    if not WHISPER_MODEL or not os.path.isfile(WHISPER_MODEL):
+        return {"error": "whisper model not configured (SPARKFORGE_WHISPER_MODEL)"}
+    import subprocess as sp
+    try:
+        out = sp.run([WHISPER_BIN, "-m", WHISPER_MODEL, "-nt", "-f", wav_path],
+                     capture_output=True, text=True, timeout=120)
+        text = out.stdout.strip()
+        publish("voice.stt", chars=len(text))
+        return {"text": text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def voice_tts(text):
+    """Synthesize speech with sherpa-onnx to a wav in data/. Returns {path} or {error}."""
+    if not text.strip():
+        return {"error": "text required"}
+    if not SHERPA_TTS_MODEL:
+        return {"error": "TTS model not configured (SPARKFORGE_SHERPA_TTS_MODEL)"}
+    try:
+        import sherpa_onnx
+        import soundfile as sf
+        sid = os.path.basename(SHERPA_TTS_MODEL)
+        cfg = sherpa_onnx.OfflineTtsConfig(
+            model=sherpa_onnx.OfflineTtsModelConfig(
+                vits=sherpa_onnx.OfflineTtsVitsModelConfig(SHERPA_TTS_MODEL),
+                num_threads=2),
+            rule_fsts="", max_num_sentences=0)
+        tts = sherpa_onnx.OfflineTts(cfg)
+        audio = tts.generate(text)
+        os.makedirs(DATA_DIR, exist_ok=True)
+        path = os.path.join(DATA_DIR, "tts-%s.wav" % uuid.uuid4().hex[:8])
+        sf.write(path, audio.samples, audio.sample_rate)
+        publish("voice.tts", chars=len(text), path=os.path.basename(path))
+        return {"path": path}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ------------------------------------------------------------------ HTTP ----
@@ -437,11 +724,14 @@ def agent_run(goal, max_steps=6, model=None, on_event=None):
 AUTH_TOKEN = None
 
 
-def check_auth(headers):
+def check_auth(headers, qs=None):
     if not AUTH_TOKEN:
         return True
     h = headers.get("Authorization") or ""
-    return h == "Bearer " + AUTH_TOKEN
+    if h == "Bearer " + AUTH_TOKEN:
+        return True
+    # EventSource cannot set headers: allow ?token= as fallback
+    return bool(qs) and qs.get("token") == AUTH_TOKEN
 
 
 def sse_response(handler, gen):
@@ -552,7 +842,26 @@ def telemetry_summary():
     return out
 
 
-import subprocess  # noqa: E402  (used by telemetry_summary)
+def status_payload():
+    plan, tasks = load_plan(), load_tasks()
+    probe = sandbox.probe()
+    return {
+        "service": "sparkforge", "version": "0.2.0", "ts": round(time.time()),
+        "router": ROUTER_BASE, "models": router_models(),
+        "default_model": default_model(),
+        "telemetry": telemetry_summary(),
+        "plan": {"goal": plan.get("goal", ""), "steps": len(plan.get("steps", []))},
+        "tasks": {"total": len(tasks.get("tasks", [])),
+                  "open": len([t for t in tasks.get("tasks", []) if t["status"] != "done"])},
+        "sandbox": {"backend": probe["backend"], "isolated": probe["isolated"],
+                    "requested": probe["requested"]},
+        "tools": {"registered": len(registry.catalog()),
+                  "enabled": len([t for t in registry.catalog() if t["enabled"]])},
+        "approvals": approvals.stats(),
+        "runs": {"active": len([r for r in api_v02.RUNS.values()
+                                if r.status in ("running", "paused", "aborting")]),
+                 "total": len(api_v02.RUNS)},
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -584,9 +893,11 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- GET ----
     def do_GET(self):
-        if not check_auth(self.headers):
-            return self._send(401, {"error": "unauthorized"})
         path, qs = self._query()
+        if not check_auth(self.headers, qs):
+            return self._send(401, {"error": "unauthorized"})
+        if api_v02.handle(self, "GET", path, qs, None):
+            return
 
         if path in ("/", "/index.html"):
             try:
@@ -595,17 +906,7 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 return self._send(404, {"error": "webui missing"})
         if path == "/api/status":
-            models = router_models()
-            return self._send(200, {
-                "service": "sparkforge", "ts": round(time.time()),
-                "router": ROUTER_BASE, "models": models,
-                "default_model": default_model(),
-                "telemetry": telemetry_summary(),
-                "plan": {"goal": load_plan().get("goal", ""),
-                         "steps": len(load_plan().get("steps", []))},
-                "tasks": {"total": len(load_tasks().get("tasks", [])),
-                          "open": len([t for t in load_tasks().get("tasks", []) if t["status"] != "done"])},
-            })
+            return self._send(200, status_payload())
         if path == "/api/models":
             return self._send(200, {"models": router_models()})
         if path == "/api/feed":
@@ -640,14 +941,29 @@ class Handler(BaseHTTPRequestHandler):
             if not goal:
                 return self._send(400, {"error": "goal required"})
             return sse_response(self, agent_stream_gen(goal, int(qs.get("max_steps", 6)), qs.get("model")))
+        if path.startswith("/api/runs/"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 4 and parts[2] == "trace":
+                t = get_run_trace(parts[3])
+                return self._send(200, t) if t else self._send(404, {"error": "run not found"})
+            return self._send(404, {"error": "not found"})
+        if path == "/api/runs":
+            return self._send(200, {"runs": runs_summary(int(qs.get("limit", 50)))})
+        if path == "/api/eval/tasks":
+            return self._send(200, eval_list_tasks())
+        if path == "/api/voice/status":
+            return self._send(200, voice_status())
         return self._send(404, {"error": "not found"})
 
     # ---- POST ----
     def do_POST(self):
-        if not check_auth(self.headers):
+        path, qs = self._query()
+        if not check_auth(self.headers, qs):
             return self._send(401, {"error": "unauthorized"})
-        path, _ = self._query()
+        path = path
         body = self._body()
+        if api_v02.handle(self, "POST", path, qs, body):
+            return
 
         if path == "/api/chat":
             message = body.get("message", "")
@@ -672,10 +988,10 @@ class Handler(BaseHTTPRequestHandler):
             if not goal:
                 return self._send(400, {"error": "goal required"})
             try:
-                plan, answer, think = generate_plan(goal, body.get("model"))
+                plan, answer, think, run_id = generate_plan(goal, body.get("model"))
             except Exception as e:
                 return self._send(502, {"error": "planner failed: %s" % e})
-            return self._send(200, {"plan": plan, "raw": answer[:800]})
+            return self._send(200, {"plan": plan, "raw": answer[:800], "run_id": run_id})
         if path == "/api/plan/toggle":
             sid = body.get("id")
             plan = load_plan()
@@ -701,14 +1017,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "goal required"})
             result = agent_run(goal, int(body.get("max_steps", 6)), body.get("model"))
             return self._send(200, result)
+        if path == "/api/eval/run":
+            return self._send(200, eval_run(body.get("model"), int(body.get("max_steps", 6)),
+                                            body.get("task_id"), body.get("save", True)))
+        if path == "/api/voice/stt":
+            return self._send(200, voice_stt(body.get("text") or body.get("path")))
+        if path == "/api/voice/tts":
+            return self._send(200, voice_tts(body.get("text", "")))
         return self._send(404, {"error": "not found"})
 
     # ---- PATCH ----
     def do_PATCH(self):
-        if not check_auth(self.headers):
+        path, qs = self._query()
+        if not check_auth(self.headers, qs):
             return self._send(401, {"error": "unauthorized"})
-        path, _ = self._query()
         body = self._body()
+        if api_v02.handle(self, "PATCH", path, qs, body):
+            return
         if path == "/api/tasks":
             tid, status = body.get("id"), body.get("status")
             tasks = load_tasks()

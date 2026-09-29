@@ -1,6 +1,6 @@
 # SparkForge Architecture
 
-*Version 0.1 — 2026-09-28*
+*Version 0.2 — 2026-09-29*
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -62,7 +62,77 @@ Same conventions as SparkPulse: JSON over HTTP on the Tailscale IP. New capabili
 - `GET /api/status` (roster + telemetry summary), `GET /api/sessions`, `GET /api/history?session=`
 
 ## Honest maturity statement (v0.1)
-
 Implemented and tested: chat (stream + one-shot), visible CoT, planner, tasks/plan stores, agent loop (safe actions only), SSE feed with backlog, WebUI, CLI, optional bearer auth, `--host` exposure.
 
 Not yet (roadmap in PLAN.md): shell/file tools with approval gates, MCP client, subagent delegation, speech I/O, WebUI auth flow for `--token` mode (server enforces it; UI does not prompt yet), persistent vector memory, eval harness.
+
+---
+
+# v0.2 — safe execution surface
+
+```
+        agent loop (thought → action → observation)
+                │  action = {"tool":"shell","args":{…}}
+                ▼
+   ┌──────────────────────────┐    registry.classify(tool,args)
+   │  registry.py             │──▶ auto │ required │ denied │ disabled
+   │  config/tools.yaml       │
+   └───────────┬──────────────┘
+               │ required
+               ▼
+   ┌──────────────────────────┐   pending  ┌──────────────────────────┐
+   │ approvals.py             │───────────▶│ /api/approvals  (HITL)   │
+   │ auto / pending / decided │◀───────────│ WebUI · phone · MCP · CLI│
+   └───────────┬──────────────┘  approve   └──────────────────────────┘
+               │ / deny / expire
+               ▼
+   ┌──────────────────────────┐   docker --network none --read-only
+   │ tools.py → sandbox.py    │──▶ bwrap --unshare-all (fallback)
+   │ shell / fs / git / http  │   nsjail (fallback)
+   └───────────┬──────────────┘   per-run /work scratch dir
+               ▼
+        observation  ──▶ run trace + feed (tool.call / tool.result)
+
+   api_v02.py  — owns the v0.2 HTTP surface; server.py delegates via
+                 `if api_v02.handle(self, method, path, qs, body): return`
+   mcp.py      — MCP JSON-RPC 2.0 logic (transport-agnostic)
+   mcp_server.py — stdio transport → HttpApi → running server
+   LocalApi    — in-process transport for `POST /mcp`
+```
+
+## Components (v0.2)
+
+- **`config/tools.yaml` + `registry.py`** — the declarative registry: per-tool JSON schema,
+  `enabled` (allowlist), `approval` (`auto|required|denied`), `auto_approve` regexes and hard
+  `deny` regexes. `classify()` is the single decision point; `resolve_path()` keeps `fs.*`
+  inside its allowed roots. Sandbox settings (backend, image, limits, network, workspace) live
+  here too.
+- **`approvals.py`** — durable approval queue (`data/approvals-v02.json`) with a
+  `threading.Event` wake-up so a blocked run resumes the instant a human decides. Auto-approved
+  actions are recorded too ("no decision" is never silent).
+- **`sandbox.py`** — probes `docker` → `bwrap` → `nsjail` once and caches the result; `run()`
+  executes a command with a timeout, a per-run scratch dir and no host network. `backend: none`
+  is opt-in only and reports `sandboxed: false`.
+- **`tools.py`** — the six tool implementations + `observation()` rendering. Policy is *not*
+  enforced here; it only runs already-permitted actions.
+- **`api_v02.py`** — HITL run registry (`pause`/`resume`/`abort` via checkpoints inside the loop
+  and inside `approvals.wait`), the tool-enabled agent loop (`agent_run_v2`, with a `script`
+  mode for reproducible runs), the MCP `LocalApi`, and the HTTP glue.
+- **`mcp.py` / `mcp_server.py`** — MCP server exposing `sparkforge_status`, `sparkforge_chat`,
+  `sparkforge_plan`, `sparkforge_tasks`, `sparkforge_agent_run`, `sparkforge_feed`,
+  `sparkforge_tools`, `sparkforge_approvals`. Registration snippet in the README.
+
+## Honest maturity statement (v0.2)
+
+Implemented and verified by `tests/v02_acceptance.py` (8/8, raw evidence in
+[docs/V02-EVIDENCE.md](V02-EVIDENCE.md)): Docker sandbox with blocked egress; registry +
+allowlist; hard-deny; an agent run that executes a real shell command in the sandbox with a
+recorded human approval and the output returned as observation; pause/resume/abort; MCP over
+stdio and HTTP.
+
+Known limits: `fs.*` and `git` run host-side inside declared roots (only `shell` is
+containerised); `http`/`browser` need the network so they are not containerised and are
+restricted to a host allowlist; `browser` is a lightweight HTML→text fetcher, not a headless
+browser, and ships disabled. `bubblewrap` cannot be used on this host because Ubuntu's
+`apparmor_restrict_unprivileged_userns=1` blocks unprivileged user namespaces (the probe
+reports this).

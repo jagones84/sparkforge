@@ -6,7 +6,10 @@ Usage:
   python3 forge.py agent "goal" [--max-steps N]
   python3 forge.py plan show | plan generate "goal" | plan toggle ID
   python3 forge.py tasks ls | tasks add "title" | tasks done ID | tasks set ID STATUS
-  python3 forge.py status | models | feed
+  python3 forge.py tools ls | tools call <tool> '<json-args>'
+  python3 forge.py approvals ls | approvals show ID | approvals approve ID | approvals deny ID
+  python3 forge.py runs ls | runs show RUN_ID | control pause|resume|abort RUN_ID
+  python3 forge.py status | models | feed | sandbox | mcp
 Environment:
   SPARKFORGE_URL (default http://127.0.0.1:8790)
   SPARKFORGE_TOKEN (bearer token, optional)
@@ -165,6 +168,67 @@ def cmd_status(_):
     print(json.dumps(req("GET", "/api/status"), indent=2))
 
 
+def cmd_sandbox(_):
+    print(json.dumps(req("GET", "/api/sandbox?force=1"), indent=2))
+
+
+def cmd_tools(args):
+    if args.action == "ls":
+        out = req("GET", "/api/tools")
+        for t in out.get("tools", []):
+            print(" %-9s enabled=%-5s approval=%-8s auto=%d :: %s"
+                  % (t["name"], t["enabled"], t["approval"], len(t.get("auto_approve") or []),
+                     (t.get("description") or "")[:70]))
+        print("\nsandbox: %s (isolated=%s)" % (out.get("sandbox", {}).get("backend"),
+                                               out.get("sandbox", {}).get("isolated")))
+    elif args.action == "call":
+        try:
+            tool_args = json.loads(args.value2) if args.value2 else {}
+        except json.JSONDecodeError as e:
+            print("bad json args:", e, file=sys.stderr)
+            sys.exit(2)
+        out = req("POST", "/api/tools/call", {"tool": args.value, "args": tool_args})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+def cmd_approvals(args):
+    if args.action == "ls":
+        out = req("GET", "/api/approvals")
+        print("stats:", json.dumps(out.get("stats", {})))
+        for a in out.get("approvals", []):
+            print(" [%-13s] %-9s %-10s %s" % (a["status"], a["tool"], a["id"], a["summary"][:70]))
+    elif args.action == "show":
+        print(json.dumps(req("GET", "/api/approvals/" + args.value), indent=2, ensure_ascii=False))
+    elif args.action in ("approve", "deny"):
+        out = req("POST", "/api/approvals/" + args.value,
+                  {"decision": args.action, "by": "cli"})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+def cmd_runs(args):
+    if args.action == "ls":
+        for r in req("GET", "/api/agent/runs").get("runs", []):
+            print(" [%-9s] %-16s steps=%-2s %s" % (r["status"], r["id"], r["steps"],
+                                                   (r.get("goal") or "")[:60]))
+    else:
+        print(json.dumps(req("GET", "/api/agent/runs/" + args.value), indent=2, ensure_ascii=False))
+
+
+def cmd_control(args):
+    out = req("POST", "/api/agent/control", {"runId": args.value2, "action": args.value})
+    print(json.dumps({k: out.get(k) for k in ("id", "status", "goal")}, indent=2))
+
+
+def cmd_mcp(_):
+    """Tiny MCP client: initialize a session over HTTP and list tools."""
+    init = req("POST", "/mcp", {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                                "params": {"protocolVersion": "2025-06-18"}})
+    print("server:", json.dumps(init.get("result", {}).get("serverInfo", {})))
+    tl = req("POST", "/mcp", {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    for t in tl.get("result", {}).get("tools", []):
+        print(" -", t["name"], "::", t["description"][:70])
+
+
 def cmd_models(_):
     out = req("GET", "/api/models")
     for m in out.get("models", []):
@@ -199,6 +263,17 @@ def main():
         p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_plan)
     p = sub.add_parser("tasks"); p.add_argument("action", choices=["ls", "add", "done", "set"]); \
         p.add_argument("value", nargs="?"); p.add_argument("--status"); p.set_defaults(fn=cmd_tasks)
+    p = sub.add_parser("tools"); p.add_argument("action", choices=["ls", "call"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); p.set_defaults(fn=cmd_tools)
+    p = sub.add_parser("approvals"); \
+        p.add_argument("action", choices=["ls", "show", "approve", "deny"]); \
+        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_approvals)
+    p = sub.add_parser("runs"); p.add_argument("action", choices=["ls", "show"]); \
+        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_runs)
+    p = sub.add_parser("control"); p.add_argument("action", choices=["pause", "resume", "abort"]); \
+        p.add_argument("run"); p.set_defaults(fn=cmd_control)
+    sub.add_parser("sandbox").set_defaults(fn=cmd_sandbox)
+    sub.add_parser("mcp").set_defaults(fn=cmd_mcp)
     sub.add_parser("status").set_defaults(fn=cmd_status)
     sub.add_parser("models").set_defaults(fn=cmd_models)
     sub.add_parser("feed").set_defaults(fn=cmd_feed)
@@ -206,6 +281,8 @@ def main():
     if args.cmd == "plan":
         args.goal = args.value if getattr(args, "action", None) == "generate" else None
         args.id = args.value if getattr(args, "action", None) == "toggle" else None
+    if args.cmd == "control":
+        args.value, args.value2 = args.action, args.run
     if args.cmd == "tasks":
         args.value = args.value
     args.fn(args)

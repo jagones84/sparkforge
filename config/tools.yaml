@@ -1,0 +1,109 @@
+# SparkForge tool registry — v0.2
+# Declarative allowlist + approval policy. Edit and POST /api/tools to reload
+# (or just restart the server). Nothing here is enabled for destructive use:
+# unknown tools are denied, and every mutating action needs an approval gate.
+version: "0.2"
+
+# ---- real sandbox (bubblewrap / nsjail / container) --------------------------
+sandbox:
+  # auto | docker | bwrap | nsjail | none
+  #   auto  -> first working backend of: docker, bwrap, nsjail
+  #   none  -> run on the host (NOT sandboxed; only for debugging, marked as such)
+  backend: auto
+  image: alpine:latest          # container image for the docker backend
+  timeout_secs: 25              # per-command wall clock
+  network: false                # no network by default (--network none)
+  memory_mb: 256
+  pids_limit: 128
+  cpus: "1.0"
+  workspace: data/sandbox       # per-run scratch dir bind-mounted as /work
+
+# ---- approvals ---------------------------------------------------------------
+approvals:
+  timeout_secs: 300             # how long a run waits for a human decision
+
+# ---- tool registry -----------------------------------------------------------
+tools:
+
+  # arbitrary command execution — always sandboxed, approval-gated
+  shell:
+    enabled: true
+    approval: required
+    # read-only / non-mutating commands are auto-approved (still recorded)
+    auto_approve:
+      - "^ls(\\s|$)"
+      - "^pwd$"
+      - "^whoami$"
+      - "^id(\\s|$)"
+      - "^date(\\s|$)"
+      - "^uname(\\s|$)"
+      - "^hostname$"
+      - "^cat(\\s|$)"
+      - "^head(\\s|$)"
+      - "^tail(\\s|$)"
+      - "^wc(\\s|$)"
+      - "^echo(\\s|$)"
+      - "^printf(\\s|$)"
+      - "^find(\\s|$)"
+      - "^rg(\\s|$)"
+      - "^grep(\\s|$)"
+      - "^env$"
+      - "^which(\\s|$)"
+    # hard blocks — never executed, even with approval
+    deny:
+      - "rm\\s+-rf\\s+/(\\s|$)"
+      - "\\bmkfs(\\s|$)"
+      - "\\bdd\\s+if=/dev/(zero|random)"
+      - ":\\s*\\(\\s*\\)\\s*\\{"
+      - "\\b(shutdown|reboot|poweroff)\\b"
+      - ">\\s*/dev/(sd|nvme|mmcblk)"
+
+  # read a file (host-side, constrained to allowed roots)
+  fs.read:
+    enabled: true
+    approval: auto
+    roots:
+      - "."
+
+  # write a file (host-side, constrained to the sandbox workspace by default)
+  fs.write:
+    enabled: true
+    approval: required
+    roots:
+      - "data/sandbox"
+
+  # git — read-only subcommands auto-approved, mutating ones need approval
+  git:
+    enabled: true
+    approval: required
+    roots:
+      - "."
+    auto_approve:
+      - "^status(\\s|$)"
+      - "^log(\\s|$)"
+      - "^diff(\\s|$)"
+      - "^show(\\s|$)"
+      - "^branch(\\s|$)"
+      - "^remote(\\s|$)"
+      - "^rev-parse(\\s|$)"
+      - "^describe(\\s|$)"
+      - "^ls-files(\\s|$)"
+      - "^tag(\\s|$)"
+    deny:
+      - "^push(\\s|$)"
+
+  # HTTP fetch from the harness process (needs net, so not inside the sandbox)
+  http:
+    enabled: true
+    approval: required
+    auto_approve: []
+    allow_hosts:
+      - "127.0.0.1"
+      - "localhost"
+
+  # lightweight page fetcher/HTML->text (NOT a headless browser); off by default
+  browser:
+    enabled: false
+    approval: required
+    auto_approve: []
+    allow_hosts: []

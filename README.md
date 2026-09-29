@@ -7,8 +7,13 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 💬 **Streaming chat** with visible **Chain-of-Thought** timeline (`reasoning_content` or `<think>` parsing)
 - 🧠 **PLAN** — model-generated strategy steps, tracked with progress
 - ✅ **TASKS** — execution units with status + remaining bullets
-- ⚡ **Agent loop** — a real sense-think-act loop (`thought → action → observation`) that mutates plan/tasks, safe by design (no shell)
-- 📡 **Loopback feed** — Server-Sent Events stream of every harness event (chat deltas, plan/task changes, agent iterations) for mobile + WebUI live views
+- ⚡ **Agent loop** — a real sense-think-act loop (`thought → action → observation`) that mutates plan/tasks **and calls real tools**
+- 🛠️ **Tool registry** — declarative `shell`, `fs.read`, `fs.write`, `git`, `http`, `browser` with a JSON-schema allowlist (`config/tools.yaml`)
+- 🔐 **Approval gates** — every world-touching action is recorded in `/api/approvals` (auto-approve for read-only patterns, hard-deny for destructive ones); a pending action pauses the run until a human decides
+- 🧱 **Real sandbox** — `docker` (or `bubblewrap` / `nsjail`) with `--network none`, read-only rootfs, dropped capabilities and a throwaway `/work` scratch dir; the agent never sees the host
+- ⏸️ **HITL** — pause / resume / abort a run mid-flight (`/api/agent/control`)
+- 🔌 **MCP server mode** — expose the harness to Paperclip (or any MCP client) over stdio or HTTP
+- 📡 **Loopback feed** — Server-Sent Events stream of every harness event (chat deltas, plan/task changes, agent iterations, tool calls, approvals) for mobile + WebUI live views
 - 🖥️ **Frontier WebUI** — dark glassmorphism, live thinking, plan/tasks sidebar, command bar
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
@@ -31,6 +36,39 @@ python3 forge.py tasks ls                         # task board + remaining bulle
 python3 forge.py models                           # router model roster/status
 ```
 
+### v0.2 — tools, sandbox, approvals, MCP
+
+```bash
+python3 forge.py sandbox                                  # probe the sandbox backend (evidence)
+python3 forge.py tools ls                                 # registry + allowlist + approval policy
+python3 forge.py tools call shell '{"command":"uname -m && echo hi"}'   # auto-approved (read-only)
+python3 forge.py approvals ls                             # the approval queue
+python3 forge.py approvals approve <id>                   # decide a pending action
+python3 forge.py runs ls                                  # agent runs + HITL status
+python3 forge.py control abort run_ab12cd34               # pause | resume | abort a live run
+python3 forge.py mcp                                      # open an MCP session and list tools
+python3 tests/v02_acceptance.py                           # end-to-end evidence (8 checks)
+```
+
+Agent runs accept a **script** for deterministic, reproducible runs:
+
+```bash
+curl -sX POST localhost:8790/api/agent/run -H 'content-type: application/json' -d '{
+  "goal": "prove the sandbox",
+  "script": [
+    {"thought":"run it","action":"tool","tool":"shell","args":{"command":"mkdir -p out && uname -a > out/u.txt && cat out/u.txt"}},
+    {"action":"finish","summary":"done"}]}'
+```
+
+Register SparkForge as an MCP server (stdio):
+
+```json
+{ "mcpServers": { "sparkforge": {
+    "command": "python3",
+    "args": ["/home/jagones/Repositories/sparkforge/mcp_server.py"],
+    "env": {"SPARKFORGE_URL": "http://127.0.0.1:8790"} } } }
+```
+
 ## API (mobile contract)
 
 | Method | Path | Purpose |
@@ -41,10 +79,26 @@ python3 forge.py models                           # router model roster/status
 | GET | `/api/feed` | SSE harness event feed (`?since=<id>` to resume) |
 | GET/POST | `/api/plan` | Read / set goal; `POST /api/plan/generate {goal}` |
 | GET/POST/PATCH | `/api/tasks` | Task board; `PATCH /api/tasks {id, status?}` |
-| POST | `/api/agent/run` | Agent loop `{goal, max_steps}` (also GET `/api/agent/run?goal=` for SSE) |
+| POST | `/api/agent/run` | Agent loop `{goal, max_steps, script?}` (also GET `/api/agent/run?goal=` for SSE) |
 | GET | `/api/sessions`, `/api/history?session=` | Chat session store |
+| GET/POST | `/api/tools` | Tool registry (allowlist); POST flips `enabled`/`approval` |
+| POST | `/api/tools/call` | Run one tool through the approval gate `{tool, args, wait?}` |
+| GET | `/api/approvals`, `/api/approvals/<id>` | Approval queue + stats / one record |
+| POST | `/api/approvals/<id>` | `{decision: approve\|deny, by}` |
+| POST | `/api/agent/control` | `{runId, action: pause\|resume\|abort}` |
+| GET | `/api/agent/runs`, `/api/agent/runs/<id>` | Live run status + thought/action/observation trace |
+| GET | `/api/sandbox`, `/api/feed/recent` | Sandbox backend probe / feed backlog as JSON |
+| POST | `/mcp` | MCP JSON-RPC 2.0 (`initialize`, `tools/list`, `tools/call`) |
 
 Optional auth: start with `--token <t>` and send `Authorization: Bearer <t>`.
+
+## Safety model (v0.2) — sandbox-first, nothing without evidence
+
+1. **Allowlist first.** A tool must be `enabled: true` in `config/tools.yaml`; everything else is denied. `browser` ships disabled.
+2. **Per-action approval gate.** `registry.classify(tool, args)` returns `auto | required | denied | disabled`. Read-only patterns (e.g. `^ls`, `^git status`, `fs.read`) are auto-approved *and still recorded*; anything else creates a `pending` approval that pauses the run until a human decides.
+3. **Hard denies.** Regexes like `rm -rf /`, `mkfs`, `dd if=/dev/zero`, `shutdown` and `git push` are blocked even with an approval.
+4. **Real sandbox.** `shell` runs on a fresh per-run scratch dir in `docker --network none --read-only --cap-drop ALL --user 65534` (falls back to `bwrap`/`nsjail`, and refuses to silently degrade to the host). Verified: network egress fails inside the container.
+5. **Observable.** Every decision and tool result is a feed event and lands in the run trace; `tests/v02_acceptance.py` proves each claim with command + output + numbers.
 
 ## Architecture
 
