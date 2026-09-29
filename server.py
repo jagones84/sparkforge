@@ -37,14 +37,16 @@ import taskgraph  # v0.6: per-run LLM task graph (write_todos, live, interactive
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(REPO, "data")
-SESSIONS_DIR = os.path.join(DATA_DIR, "sessions")
+# Session store. Overridable so tests/CI can run against a scratch directory
+# (`SPARKFORGE_SESSIONS_DIR`) without touching the live transcripts.
+SESSIONS_DIR = os.environ.get("SPARKFORGE_SESSIONS_DIR") or os.path.join(DATA_DIR, "sessions")
 WEBUI_DIR = os.path.join(REPO, "webui")
 
 ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
 STORE_LOCK = threading.RLock()
 
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 # Router resilience (v0.5.1): retry/backoff on 503 "model not loaded" plus the
 # warm-up path that loads a cold model before the first token.
 ROUTER_RETRIES = int(os.environ.get("SPARKFORGE_ROUTER_RETRIES", 5))
@@ -225,6 +227,41 @@ def append_message(sess, role, content, reasoning=None, meta=None):
     sess["messages"].append(msg)
     save_session(sess)
     return msg
+
+
+# --- JAG-51 session contract: no request without a persisted answer ---------
+ERROR_PREFIX = "⚠️ errore: "
+
+
+def session_mark(sess):
+    """Index (len of `messages`) to pass to `ensure_reply_persisted` as `since`.
+
+    Call it *before* appending the request's `user` message: it captures the
+    boundary of the request so the helper can tell whether that request
+    produced an assistant turn.
+    """
+    return len(sess.get("messages", []))
+
+
+def has_reply_since(sess, since):
+    """True iff an `assistant` message was persisted at index >= `since`."""
+    return any(m.get("role") == "assistant" for m in sess.get("messages", [])[since:])
+
+
+def ensure_reply_persisted(sess, since, error=None, model=None):
+    """JAG-51 invariant: a request never leaves an orphan `user` message.
+
+    Every request on a session must end with an `assistant` message — the model
+    reply, an explicit error turn, or both (reply + graph error are separate).
+    If nothing assistant-shaped was persisted since `since`, append the explicit
+    error record and return it; otherwise return None. Idempotent: calling it
+    twice (e.g. from `except` and `finally`) never doubles a message.
+    """
+    if has_reply_since(sess, since):
+        return None
+    detail = str(error) if error else "empty reply from the model"
+    return append_message(sess, "assistant", ERROR_PREFIX + detail,
+                          meta={"model": model, "error": True, "error_detail": detail})
 
 
 # ---------------------------------------------------------------- router ----
@@ -859,7 +896,16 @@ def graph_post(run_id, body):
 
 
 def chat_once(sess, message, model=None, on_delta=None, trace=None):
-    """Append the user message, run one streamed router call, store the reply."""
+    """Run one streamed router call and persist exactly one assistant message.
+
+    Contract (JAG-51): the caller appends the `user` message; this function is
+    the only place that persists the matching `assistant` turn. It returns
+    `(message, model_used)`. On success the message carries the reply; when the
+    model returns no answer at all the message is still persisted, flagged with
+    `error=True` / `error_detail` (see `ensure_reply_persisted`) so no request
+    can ever end as an orphan `user` turn. Raises only when the router call
+    itself fails — callers then persist the error turn (`ensure_reply_persisted`).
+    """
     if on_delta is None:
         on_delta = lambda channel, text: publish(
             "chat.delta", session=sess["id"], channel=channel, text=text)
@@ -886,10 +932,18 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None):
     if trace:
         trace.span("llm.chat", model=model, context=ctx_stats)
         trace.llm_call(msgs, answer + think)
-    reply = append_message(sess, "assistant", answer.strip(), reasoning=think.strip() or None,
-                           meta={"model": model})
+    meta = {"model": model}
+    content = answer.strip()
+    if not content:
+        # JAG-51: an empty answer is not a reply — record it explicitly instead
+        # of persisting a silent blank assistant turn.
+        meta = {"model": model, "error": True,
+                "error_detail": "empty reply from the model"}
+        content = ERROR_PREFIX + meta["error_detail"]
+    reply = append_message(sess, "assistant", content, reasoning=think.strip() or None,
+                           meta=meta)
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
-            model=model, think_chars=len(think))
+            model=model, think_chars=len(think), error=bool(meta.get("error")))
     return reply, model
 
 
@@ -1332,9 +1386,19 @@ def sse_pump(q, worker, open_comment=": stream open\n\n", terminal="done",
     yield "event: %s\ndata: {}\n\n" % terminal
 
 
-def chat_stream_gen(sess, message, model):
+def chat_stream_gen(sess, message, model, mark=None):
+    """SSE producer for one chat request on `sess`.
+
+    Contract (JAG-51): the caller has already appended the `user` message and
+    passes `mark = session_mark(sess)` (the index captured just before it). Every
+    exit path of this generator — reply, router error, warm-up error — leaves the
+    session with a matching `assistant` message: a failed stream persists an
+    explicit assistant error turn *and* emits the `error` SSE event, so a
+    streamed request can never leave an orphan `user` message behind.
+    """
     q = queue.Queue()
     done = {"flag": False}
+    since = mark if mark is not None else max(0, session_mark(sess) - 1)
 
     def on_delta(channel, text):
         q.put("event: chat.delta\ndata: %s\n\n" % json.dumps(
@@ -1342,6 +1406,8 @@ def chat_stream_gen(sess, message, model):
         publish("chat.delta", session=sess["id"], channel=channel, text=text)
 
     def worker():
+        target = model
+
         def _emit(kind, **d):
             # graph/model events go to BOTH this chat stream and the feed, so
             # the WebUI can render the task graph live either way.
@@ -1374,7 +1440,13 @@ def chat_stream_gen(sess, message, model):
                 trace.finish("error")
                 raise
         except Exception as e:
-            q.put("event: error\ndata: %s\n\n" % json.dumps({"error": str(e)}))
+            # JAG-51: a failed stream must still leave a trace in the session —
+            # persist the explicit assistant error turn, then tell the client.
+            ensure_reply_persisted(sess, since, error=e, model=target)
+            publish("chat.error", session=sess["id"], error=str(e))
+            q.put("event: error\ndata: %s\n\n" % json.dumps(
+                {"error": str(e), "session": sess["id"], "stored": True},
+                ensure_ascii=False))
         finally:
             done["flag"] = True
             q.put(None)
@@ -1383,7 +1455,14 @@ def chat_stream_gen(sess, message, model):
     t.start()
     # v0.6.1 (JAG-48): no keep-alive here — one `done`, then the generator is
     # exhausted and sse_response closes the connection.
-    yield from sse_pump(q, t, idle_timeout=CHAT_STREAM_IDLE or None)
+    try:
+        yield from sse_pump(q, t, idle_timeout=CHAT_STREAM_IDLE or None)
+    finally:
+        # JAG-51 safety net: if the producer is already gone without a reply
+        # (e.g. the pump gave up on silence), still leave an assistant trace.
+        # While the worker is alive it owns the persistence — never double-write.
+        if not t.is_alive():
+            ensure_reply_persisted(sess, since, error="stream ended without a reply")
 
 
 def agent_stream_gen(goal, max_steps, model):
@@ -1505,6 +1584,27 @@ def status_payload():
 
 
 class Handler(BaseHTTPRequestHandler):
+    """HTTP surface of the harness.
+
+    Chat session contract (v0.6.2, JAG-51) — `POST /api/chat` and
+    `GET|POST /api/chat/stream`:
+
+      `session` (optional, str): id of the transcript to talk to.
+        * omitted/empty  -> a NEW session is created (`uuid4().hex[:12]`) and its
+                            id is returned in the JSON body (`{"session": id}`)
+                            or in the SSE payloads (`chat.user`/`chat.delta`/`done`);
+        * unknown id     -> a new session is created with THAT exact id (an id
+                            supplied by the client is never silently replaced);
+        * existing id    -> the request is appended to that session's `messages`.
+
+      Every request persists exactly two messages on that session: one `user`
+      turn and one `assistant` turn — the reply, or an explicit error turn
+      (`error:true` + `error_detail`) when the router call failed or returned
+      nothing. After N requests the session holds exactly 2N messages and never
+      ends on an orphan `user` turn. See `ensure_reply_persisted` and README
+      § "session parameter contract".
+    """
+
     server_version = "SparkForge/" + VERSION
 
     def _send(self, code, obj, ctype="application/json"):
@@ -1586,14 +1686,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "session not found"})
             return self._send(200, sess)
         if path == "/api/chat/stream":
+            # SSE chat. Session contract: see the Handler docstring (JAG-51).
             sid = qs.get("session")
             message = qs.get("message", "")
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(sid)
+            mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
-            return sse_response(self, chat_stream_gen(sess, message, qs.get("model")))
+            return sse_response(self, chat_stream_gen(sess, message, qs.get("model"), mark))
         if path == "/api/agent/run":
             goal = qs.get("goal", "")
             if not goal:
@@ -1657,26 +1759,39 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/chat":
+            # One-shot chat. Session contract: see the Handler docstring (JAG-51).
             message = body.get("message", "")
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session"))
+            mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
-            trace = RunTrace("chat", goal=message[:120], model=body.get("model"))
-            trace.span("chat.once", session=sess["id"])
-            # v0.6 first action: model-generated write_todos → per-run graph
-            start_run_graph(trace.id, message, sess["id"], routing.pick("planner"))
+            trace = None
             try:
+                trace = RunTrace("chat", goal=message[:120], model=body.get("model"))
+                trace.span("chat.once", session=sess["id"])
+                # v0.6 first action: model-generated write_todos → per-run graph
+                start_run_graph(trace.id, message, sess["id"], routing.pick("planner"))
                 reply, model = chat_once(sess, message, body.get("model"), trace=trace)
-            except Exception as e:
-                trace.finish("error")
-                return self._send(502, {"error": "router call failed: %s" % e})
+            except Exception as e:  # noqa: BLE001
+                # JAG-51: persist an explicit assistant error turn *before* the
+                # 502 — the user message must never stay orphaned.
+                ensure_reply_persisted(sess, mark, error=e, model=body.get("model"))
+                publish("chat.error", session=sess["id"], error=str(e))
+                if trace:
+                    trace.finish("error")
+                return self._send(502, {"error": "router call failed: %s" % e,
+                                        "session": sess["id"],
+                                        "run_id": getattr(trace, "id", None),
+                                        "stored_error": True})
             finish_run_graph(trace.id, sess["id"], message)
             trace.model = model
             trace.finish("done")
             return self._send(200, {"session": sess["id"], "model": model, "run_id": trace.id,
-                                    "reply": reply["content"], "reasoning": reply.get("reasoning")})
+                                    "reply": reply["content"], "reasoning": reply.get("reasoning"),
+                                    "messages": len(sess["messages"]),
+                                    "error": bool(reply.get("error"))})
         if path == "/api/chat/stream":
             # v0.5.1: POST alias of GET /api/chat/stream (mobile clients prefer
             # a JSON body over query params). Same SSE contract.
@@ -1684,10 +1799,11 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session") or qs.get("session"))
+            mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
             return sse_response(self, chat_stream_gen(
-                sess, message, body.get("model") or qs.get("model")))
+                sess, message, body.get("model") or qs.get("model"), mark))
         if path == "/api/model/ensure":
             alias = body.get("model") or qs.get("model") or \
                 routing.pick("chat") or default_model()

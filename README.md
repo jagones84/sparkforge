@@ -18,6 +18,7 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - ✨ **UX harness moderna (v0.5)** — mobile tab bar (chat/sessions/tasks/context/feed), live CoT drawer, todo breakdown of every request onto the task board, token budget meter with one-tap compaction, session switch/create/delete, `self` tool for agent self-knowledge
 - 🧩 **LLM task graph (v0.6)** — every run's first action is a model-generated `write_todos` call that builds a **live, interactive graph of that run** (nodes, deps, evidence; `graph.node.*` over SSE; evidence required for `done`)
 - ⏹️ **Streams that actually end (v0.6.1)** — the chat/agent SSE terminates right after its terminal `done` and releases the socket, so the app leaves `busy` and the next message is never blocked; keep-alive stays a `/api/feed`-only tail
+- 🧾 **No request without an answer (v0.6.2)** — every request persists one `user` + one `assistant` turn (reply **or** explicit error turn), so a session never ends on an orphan user message; verified by `tests/v062_session_persistence.py`
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
 
@@ -186,6 +187,53 @@ python3 tests/v061_stream_close.py --live     # end-to-end evidence (8 checks, m
   `SPARKFORGE_ROUTER_IDLE_TIMEOUT` (default 120 s) keeping the partial answer,
   and the chat stream itself gives up after `SPARKFORGE_CHAT_STREAM_IDLE`
   (default 900 s) with `error` + `done` instead of staying ESTAB forever.
+
+### v0.6.2 — no request without an answer (session persistence)
+
+```bash
+python3 tests/v062_session_persistence.py       # end-to-end evidence (mock router)
+python3 tests/v062_session_persistence.py --live  # also against the live service
+```
+
+- **The invariant.** Every request on a session persists **exactly one `user`
+  message followed by exactly one `assistant` message** — either the reply or an
+  explicit error turn (`role:"assistant"`, `error:true`, `error_detail:"…"`).
+  A session can never end on an orphan `user` message (bug: `data/sessions/
+  dc65e66e9b3d.json` had 1 message, no answer).
+- **Failure paths covered.** A router error on `POST /api/chat` now stores the
+  error turn *before* returning `502 {session, run_id, stored_error:true}`; a
+  failure inside the SSE worker of `/api/chat/stream` stores it too, *and* emits
+  the `error` SSE event (`{error, session, stored:true}`). The in-process MCP
+  `chat` tool follows the same contract. A silent empty answer is stored as an
+  explicit error turn instead of a blank bubble.
+- **Helper.** `server.ensure_reply_persisted(sess, mark, error=…)` +
+  `server.session_mark(sess)` implement it; idempotent, so `except` + `finally`
+  paths never double-append.
+- **Evidence.** 3 sequential requests on the same session save **6 messages
+  (3 user + 3 assistant)** — over both the POST and the SSE path — and a
+  router-down session saves 3 user + 3 error assistant turns (counted from
+  `/api/history?session=…`).
+
+### session parameter contract — `POST /api/chat`, `GET|POST /api/chat/stream`
+
+| `session` | behaviour |
+|---|---|
+| omitted / empty / `null` | a **new** session is created with a generated id (`uuid4().hex[:12]`); the id is returned in the JSON body (`{"session": "<id>", …}`) or in the SSE `chat.user`/`chat.delta`/`chat.done` payloads |
+| unknown id | a new session is **created with that exact id** (no id is ever silently replaced) |
+| existing id | the request is **appended** to that session's `messages[]` |
+
+Per request, on that session (persisted to `data/sessions/<id>.json`):
+
+1. one `user` message — `{role:"user", content, ts}`;
+2. one `assistant` message — `{role:"assistant", content, ts, model, reasoning?}`
+   on success, or `{role:"assistant", content:"⚠️ errore: …", ts, model,
+   error:true, error_detail:"…"}` when the router call failed or returned
+   nothing.
+
+So after **N** requests a session holds **exactly 2N messages**; `GET
+/api/history?session=<id>` returns them. Streaming requests are asynchronous
+(the SSE body arrives before the answer), but the same 2-message rule holds once
+the stream ends — read the session back after the terminal `done`.
 
 ## API (mobile contract)
 

@@ -436,11 +436,18 @@ class LocalApi:
     def chat(self, message, session=None, model=None):
         srv = _srv()
         sess = srv.get_or_create_session(session)
+        mark = srv.session_mark(sess)  # JAG-51: boundary of this request
         srv.append_message(sess, "user", message)
         srv.publish("chat.user", session=sess["id"], text=message)
-        reply, mdl = srv.chat_once(sess, message, model)
+        try:
+            reply, mdl = srv.chat_once(sess, message, model)
+        except Exception as e:  # noqa: BLE001
+            # JAG-51: same contract as /api/chat — persist the error turn.
+            srv.ensure_reply_persisted(sess, mark, error=e, model=model)
+            return {"session": sess["id"], "model": model, "error": str(e),
+                    "stored_error": True}
         return {"session": sess["id"], "model": mdl, "reply": reply.get("content"),
-                "reasoning": reply.get("reasoning")}
+                "reasoning": reply.get("reasoning"), "error": bool(reply.get("error"))}
 
     def plan(self, goal=None):
         srv = _srv()
