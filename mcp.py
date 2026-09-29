@@ -10,7 +10,7 @@ Transport-agnostic: `handle(message, api)` takes a JSON-RPC 2.0 message and an
 MCP tools exposed: sparkforge_status, sparkforge_chat, sparkforge_plan,
 sparkforge_tasks, sparkforge_agent_run, sparkforge_feed, sparkforge_tools,
 sparkforge_approvals + Sperimentale tools (memory, subagent, meta, blackboard,
-acp, swarm).
+acp, swarm) + v0.3 tools (checkpoint, context, routing).
 """
 
 import json
@@ -144,6 +144,32 @@ MCP_TOOLS = [
             "max_steps": {"type": "integer"}},
             "required": ["goal"]},
     },
+    # ---- v0.3 tools ----
+    {
+        "name": "sparkforge_checkpoint",
+        "description": "Checkpoint / resume / rollback harness state (plan, tasks, session transcript) with idempotency.",
+        "inputSchema": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["create", "list", "get", "rollback"]},
+            "label": {"type": "string"}, "session": {"type": "string"},
+            "idempotency_key": {"type": "string"}, "id": {"type": "string"}},
+            "required": ["action"]},
+    },
+    {
+        "name": "sparkforge_context",
+        "description": "Context engineering preview: transcript compaction, token budget and memory retrieval stats for a session.",
+        "inputSchema": {"type": "object", "properties": {
+            "session": {"type": "string"}, "message": {"type": "string"},
+            "budget_tokens": {"type": "integer"}},
+            "required": ["session"]},
+    },
+    {
+        "name": "sparkforge_routing",
+        "description": "Multi-model routing: role-based model selection from the router roster with fallback chain (DeepSeek last).",
+        "inputSchema": {"type": "object", "properties": {
+            "roles": {"type": "object"},
+            "default_fallbacks": {"type": "array", "items": {"type": "string"}}},
+            "required": []},
+    },
 ]
 
 
@@ -190,7 +216,53 @@ def call_tool(name, args, api):
         return _acp_call(a)
     if name == "sparkforge_swarm":
         return _swarm_call(a)
+    # ---- v0.3 MCP tool dispatch ----
+    if name == "sparkforge_checkpoint":
+        return _checkpoint_call(a)
+    if name == "sparkforge_context":
+        return _context_call(a)
+    if name == "sparkforge_routing":
+        return _routing_call(a)
     return _error_text("unknown tool %r" % name)
+
+
+def _checkpoint_call(a):
+    action = a.get("action", "list")
+    try:
+        import checkpoints as ck
+        if action == "create":
+            return _text(ck.create(label=a.get("label"), session_id=a.get("session"),
+                                   idempotency_key=a.get("idempotency_key"),
+                                   by="mcp"))
+        if action == "rollback":
+            if not a.get("id"):
+                return _error_text("checkpoint id required")
+            return _text(ck.rollback(a["id"], by="mcp"))
+        if action == "get":
+            m = ck.get(a.get("id", ""))
+            return _text(m) if m else _error_text("checkpoint not found")
+        return _text({"checkpoints": ck.list_checkpoints()})
+    except Exception as e:
+        return _error_text("checkpoint error: %s" % e)
+
+
+def _context_call(a):
+    try:
+        import context_engine as ce
+        return _text(ce.preview(a.get("session", ""), a.get("message"),
+                                int(a.get("budget_tokens", ce.DEFAULT_BUDGET))))
+    except Exception as e:
+        return _error_text("context error: %s" % e)
+
+
+def _routing_call(a):
+    try:
+        import routing as rt
+        if a.get("roles") or "default_fallbacks" in a:
+            return _text(rt.update(a))
+        return _text(rt.status())
+    except Exception as e:
+        return _error_text("routing error: %s" % e)
 
 
 def _memory_call(a):

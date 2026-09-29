@@ -29,6 +29,7 @@ import api_v02  # v0.2 surface: tool registry, approvals, HITL control, MCP
 import approvals
 import otel_tracing  # v0.4: OpenTelemetry spans + fallback local spans
 import registry
+import routing  # v0.3: role-based model selection + fallback chain
 import sandbox
 
 REPO = os.path.dirname(os.path.abspath(__file__))
@@ -73,7 +74,12 @@ _sse_queues = set()  # each: queue.Queue of str chunks
 
 
 def publish(kind, **data):
-    """Record an event in the SQLite store + memory cache, fan out to SSE."""
+    """Record an event in the SQLite store + memory cache, fan out to SSE.
+
+    Payload keys never override the envelope: the event's own `id`/`ts` are
+    the monotonic feed coordinates, so payloads that carry a domain `id`
+    (checkpoints, approvals, ...) are stored under `<kind>_id` instead.
+    """
     global _feed_seq
     with _feed_lock:
         with _db_lock:
@@ -81,6 +87,9 @@ def publish(kind, **data):
                                (round(time.time(), 3), kind, json.dumps(data, ensure_ascii=False)))
             db().commit()
         _feed_seq = cur.lastrowid
+        for k in ("id", "ts"):
+            if k in data:
+                data[k + "_id"] = data.pop(k)
         event = {"id": _feed_seq, "ts": round(time.time(), 3), "kind": kind, **data}
         _feed.append(event)
         payload = "id: {id}\nevent: {kind}\ndata: {data}\n\n".format(
@@ -304,6 +313,34 @@ def _router_stream(messages, model, on_delta, timeout=300):
 
 # ----------------------------------------------------- tracing / cost ----
 
+
+def stream_with_fallback(messages, model, role, on_delta, timeout=300):
+    """v0.3 multi-model routing with fallback.
+
+    Tries `model` (or the role-selected one) first; on a router failure walks
+    the role's fallback chain (which always terminates on the DeepSeek alias
+    when it exists in the roster) before giving up. Returns (answer, think,
+    model_used).
+    """
+    primary = model or routing.pick(role)
+    if not primary:
+        primary = default_model()
+    chain = [primary] + [a for a in routing.fallback_chain(role) if a != primary]
+    last_err = None
+    for i, alias in enumerate(chain):
+        try:
+            answer, think = _router_stream(messages, alias, on_delta, timeout)
+            if i > 0:
+                publish("model.fallback", role=role, from_model=chain[0],
+                        to_model=alias)
+            return answer, think, alias
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            publish("model.failover", role=role, failed=alias,
+                    next_model=chain[i + 1] if i + 1 < len(chain) else None)
+    raise last_err if last_err else RuntimeError("no router model available")
+
+
 # Token pricing per 1M tokens (input, output) for known local model families.
 # Local models are free in $, but we still account tokens; cost is 0 unless a
 # price is configured via SPARKFORGE_PRICES (json: {"alias": [in, out]}).
@@ -480,13 +517,26 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None):
         on_delta = lambda channel, text: publish(
             "chat.delta", session=sess["id"], channel=channel, text=text)
     sys = SYSTEM_PROMPT + "\n\nCurrent harness state:\n" + context_summary()
-    msgs = [{"role": "system", "content": sys}]
-    msgs += [{"role": m["role"], "content": m["content"]} for m in sess["messages"][-20:]]
-    msgs.append({"role": "user", "content": message})
+    # v0.3 context engineering: compaction + token budget + memory retrieval
+    try:
+        import context_engine
+        msgs, ctx_stats = context_engine.build(
+            sys, sess["messages"], message,
+            budget_tokens=int(os.environ.get("SPARKFORGE_CONTEXT_BUDGET",
+                                             context_engine.DEFAULT_BUDGET)))
+        publish("context.built", session=sess["id"], **{
+            k: v for k, v in ctx_stats.items() if k in (
+                "budget_tokens", "retrieved_memories", "final_messages",
+                "final_tokens")})
+    except Exception:
+        msgs = [{"role": "system", "content": sys}]
+        msgs += [{"role": m["role"], "content": m["content"]} for m in sess["messages"][-20:]]
+        msgs.append({"role": "user", "content": message})
+        ctx_stats = None
     model = model or default_model()
-    answer, think = _router_stream(msgs, model, on_delta)
+    answer, think, model = stream_with_fallback(msgs, model, "chat", on_delta)
     if trace:
-        trace.span("llm.chat", model=model)
+        trace.span("llm.chat", model=model, context=ctx_stats)
         trace.llm_call(msgs, answer + think)
     reply = append_message(sess, "assistant", answer.strip(), reasoning=think.strip() or None,
                            meta={"model": model})
@@ -499,7 +549,7 @@ def generate_plan(goal, model=None):
     sess = {"id": "planner", "title": "planner", "created": time.time(), "messages": []}  # ephemeral
     sys = SYSTEM_PROMPT + "\n\n" + PLANNER_PROMPT
     msgs = [{"role": "system", "content": sys}, {"role": "user", "content": goal}]
-    model = model or default_model()
+    model = model or routing.pick("planner") or default_model()
     trace = RunTrace("plan", goal=goal, model=model)
     answer, think = _router_stream(msgs, model, lambda ch, t: publish(
         "plan.think", channel=ch, text=t))

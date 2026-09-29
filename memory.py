@@ -118,9 +118,16 @@ def query(term=None, kind=None, limit=20):
 
 def _match(text, term):
     try:
-        return bool(re.search(term, text, re.I))
+        if re.search(term, text, re.I):
+            return True
     except re.error:
-        return term.lower() in text.lower()
+        pass
+    if term.lower() in text.lower():
+        return True
+    # fall back to AND-of-words: every whitespace-separated term must appear
+    words = [w for w in re.split(r"\W+", term.lower()) if len(w) > 2]
+    low = text.lower()
+    return bool(words) and all(w in low for w in words)
 
 
 def _parse_md_file(path):
@@ -198,15 +205,29 @@ def _rebuild_index():
         if not records:
             continue
         texts = [r.get("content", "")[:2000] for r in records]
-        vecs = _embed_batch(texts)
+        vocab = _build_vocab(texts)
+        vecs = _embed_batch(texts, vocab)
         if vecs is not None and len(vecs) == len(records):
-            db[kind] = {"vectors": vecs, "records": records, "dim": len(vecs[0])}
+            db[kind] = {"vectors": vecs, "records": records,
+                        "dim": len(vecs[0]), "vocab": vocab}
     _vector_db = db
     _writes_since_index = 0
 
 
-def _embed_batch(texts):
-    """Return a list of numpy vectors, or None if no embedding backend works."""
+def _build_vocab(texts):
+    """Sorted vocabulary shared by index and query bag-of-words vectors."""
+    vocab = set()
+    for t in texts:
+        vocab.update(t.lower().split())
+    return sorted(vocab)
+
+
+def _embed_batch(texts, vocab=None):
+    """Return a list of numpy vectors, or None if no embedding backend works.
+
+    `vocab` pins the bag-of-words dimensionality: the query vector must use
+    the exact vocab the index was built with or the cosine product misaligns.
+    """
     # Priority: sentence-transformers (GPU-friendly) > local endpoint > bag-of-words
     try:
         from sentence_transformers import SentenceTransformer
@@ -230,13 +251,11 @@ def _embed_batch(texts):
         pass
     try:
         import numpy as np
-        # bag-of-words fallback
-        vocab = set()
-        for t in texts:
-            vocab.update(t.lower().split())
-        word_list = sorted(vocab)
-        w2i = {w: i for i, w in enumerate(word_list)}
-        vecs = np.zeros((len(texts), len(word_list)), dtype=np.float32)
+        # bag-of-words fallback over the shared vocab
+        if vocab is None:
+            vocab = _build_vocab(texts)
+        w2i = {w: i for i, w in enumerate(vocab)}
+        vecs = np.zeros((len(texts), len(vocab)), dtype=np.float32)
         for i, t in enumerate(texts):
             for w in t.lower().split():
                 if w in w2i:
@@ -262,12 +281,15 @@ def semantic_query(query_text, kind=None, limit=10, min_score=0.15):
         import numpy as np
     except ImportError:
         return [(1.0, r) for r in query(query_text, kind, limit)]
-    vec = _embed_batch([query_text])
-    if vec is None:
-        return [(1.0, r) for r in query(query_text, kind, limit)]
     results = []
     for k, db in _vector_db.items():
         if kind and k != kind:
+            continue
+        # embed the query with this kind's own vocab (bag-of-words dims must
+        # match the index exactly); sentence-transformer embeddings are
+        # backend-wide so this is a no-op there
+        vec = _embed_batch([query_text], db.get("vocab"))
+        if vec is None or db["vectors"].shape[1] != vec.shape[1]:
             continue
         scores = np.dot(db["vectors"], vec[0])
         for i, score in enumerate(scores):

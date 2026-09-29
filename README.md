@@ -78,6 +78,24 @@ Register SparkForge as an MCP server (stdio):
     "env": {"SPARKFORGE_URL": "http://127.0.0.1:8790"} } } }
 ```
 
+### v0.3 — checkpoints, context engineering, multi-model routing
+
+```bash
+python3 tests/v03_acceptance.py                # end-to-end evidence (7 checks, live service)
+# checkpoints: snapshot plan+tasks+transcript, idempotent, rollback-able
+curl -sX POST localhost:8790/api/checkpoints -d '{"label":"before risky run","idempotency_key":"run-42"}'
+curl -s localhost:8790/api/checkpoints         # list
+curl -sX POST localhost:8790/api/checkpoints/cp_xxx/rollback   # restore state
+# context engineering: compaction + token budget + memory retrieval
+curl -sX POST localhost:8790/api/context/preview -d '{"session":"<sid>","message":"...","budget_tokens":2000}'
+# multi-model routing: role selection from the router roster, DeepSeek fallback
+curl -s localhost:8790/api/routing
+```
+
+- **Auto-checkpoint on every agent run** (`agent-run:<run_id>`): plan/tasks/transcript survive and can be rolled back after a bad run.
+- **Chat context**: transcript is compacted under a token budget and relevant memories from previous sessions are injected (`context.built` events in the feed show the stats).
+- **Fallback chain**: if the primary role model fails on a call, the harness walks the role chain down to the DeepSeek alias automatically (`model.failover` events).
+
 ### v0.4 — ops, tracing, voice, eval
 
 ```bash

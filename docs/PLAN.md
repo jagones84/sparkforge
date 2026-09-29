@@ -97,11 +97,45 @@ Verified by `tests/v04_acceptance.py` — raw report in `data/v04-acceptance.jso
   + approvals queue + `run_id` events on chat streams, so the phone can stream
   live (SparkPulse app-side SSE consumption tracked separately, see Remaining)
 
-## Remaining (v0.3 leftovers / polish)
+## Done — v0.3 "capacità agente + memoria" (2026-09-29)
+
+Deliverable from `docs/specs/2026-09-29-frontier-harness-design.md` §3 (v0.3).
+Verified by `tests/v03_acceptance.py` (7/7 checks) — raw report in
+`data/v03-acceptance.json`; the v0.2 suite still passes 8/8 on the same build
+(regression evidence).
+
+- ✅ **MCP client** (`mcp_client.py`): connessione stdio o HTTP a server MCP esterni,
+  discovery tool via tools/list, namespace collision-free (`clientname__toolname`).
+  Config: `config/mcp_clients.yaml`. Endpoint: `GET /api/mcp/clients`. (shipped with the
+  Sperimentale wave, re-verified by the v0.2 stdio MCP acceptance check)
+- ✅ **Subagent delegation** (`subagent.py`): spawn `agent_run_v2` in background thread,
+  raccogli risultato con `collect()`. Azione agent: `{"action":"subagent","goal":"..."}`.
+  Endpoint: `POST /api/subagent/spawn`, `POST /api/subagent/collect`. (idem)
+- ✅ **Checkpoint / resume / rollback** (`checkpoints.py`): snapshot atomico di
+  plan + tasks + transcript di sessione in `data/checkpoints/`; idempotenza via
+  `idempotency_key` (stessa chiave → stesso checkpoint, nessun duplicato) e
+  rollback ripetibile che converge allo stesso stato; ogni run agente crea un
+  auto-checkpoint (`agent-run:<run_id>`). API: `GET/POST /api/checkpoints`,
+  `POST /api/checkpoints/<id>/rollback`. MCP: `sparkforge_checkpoint`.
+  Fix di robustizia incluso: `publish()` non lascia più che un payload con `id`
+  sovrascriva l'id numerico del feed (crash di replay risolto).
+- ✅ **Context engineering** (`context_engine.py`): compazione estrattiva del
+  transcript, budget di token (`SPARKFORGE_CONTEXT_BUDGET`, default 6000),
+  retrieval dalla memoria (semantica + keyword fallback) iniettata nel prompt di
+  chat; `context.built` events nel feed come evidenza. Endpoint:
+  `POST /api/context/preview`. MCP: `sparkforge_context`.
+- ✅ **Multi-model routing + fallback** (`routing.py`): selezione per ruolo
+  (chat/planner/agent/subagent/summarizer) sul roster live del router `:8080`
+  (`config/routing.yaml`), catena di fallback che termina sull'alias DeepSeek;
+  failover a runtime via `stream_with_fallback` (event `model.failover` /
+  `model.fallback`). API: `GET/POST /api/routing`. MCP: `sparkforge_routing`.
+- ✅ **Memory write-rules fix** (`memory.py`): l'indice bag-of-words ora condivide
+  il vocabolario tra indice e query (prima le dimensioni disallineate crashavano
+  la ricerca semantica) e `_match` degrada a AND-of-words.
+
+## Remaining (v0.4 leftovers / polish)
 
 - [ ] **SparkPulse app-side streaming** (native SSE): consume `/api/chat/stream` + `/api/feed?since=` in the Forge tab instead of one-shot REST, Command tab with live plan/tasks/approvals — server-side contract is live and authed
-- [ ] **v0.3 — Checkpoint / resume / rollback** of plan, tasks and transcript with idempotency
-- [ ] **v0.3 — Context engineering**: transcript compaction, token budget, retrieval
 
 ## Remaining bullets (machine-readable)
 

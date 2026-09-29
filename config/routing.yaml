@@ -1,0 +1,36 @@
+roles:
+  chat:
+    pattern: nex
+    fallbacks:
+    - qwen
+    - glm
+    - deepseek
+  planner:
+    pattern: qwen
+    fallbacks:
+    - nex
+    - glm
+    - deepseek
+  agent:
+    pattern: nex
+    fallbacks:
+    - qwen
+    - glm
+    - deepseek
+  subagent:
+    pattern: glm
+    fallbacks:
+    - nex
+    - qwen
+    - deepseek
+  summarizer:
+    pattern: glm
+    fallbacks:
+    - nex
+    - qwen
+    - deepseek
+default_fallbacks:
+- nex
+- qwen
+- glm
+- deepseek

@@ -30,6 +30,7 @@ Routes owned here:
 
 import json
 import queue
+import sys
 import threading
 import time
 import uuid
@@ -282,7 +283,25 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
         st = new_run(goal, model, max_steps, script)
     st.goal, st.max_steps, st.script = goal, max_steps, script
     model = model or srv.default_model()
+    # v0.3 multi-model routing: role-based selection keeps the explicit model
+    # request intact and otherwise picks the agent-role alias from the roster.
+    if not model:
+        try:
+            import routing
+            model = routing.pick("agent") or srv.default_model()
+        except Exception:
+            model = srv.default_model()
     st.model = model
+    # v0.3 checkpoint at run start (idempotent per run) so plan/tasks/transcript
+    # survive a restart and can be rolled back after a bad run.
+    try:
+        import checkpoints
+        _CHECKPOINTS_START = checkpoints.create(
+            label="agent run %s" % st.id, idempotency_key="agent-run:" + st.id,
+            by="agent-loop")
+        on_event("checkpoint.created", run=st.id, id=_CHECKPOINTS_START.get("id"))
+    except Exception:
+        _CHECKPOINTS_START = None
     probe = sandbox.probe()
     on_event("agent.start", run=st.id, goal=goal, max_steps=max_steps,
              scripted=script is not None, sandbox=probe["backend"], isolated=probe["isolated"])
@@ -469,6 +488,29 @@ class LocalApi:
         return {"approvals": approvals.list_all(a.get("status"), 100), "stats": approvals.stats()}
 
 
+# ---------------------------------------------- lazy Sperimentale modules ----
+# Sperimentale/v0.3 routes import optional feature modules on first use so a
+# broken optional dep can never take down the core harness.
+
+_LAZY_MODS = {"memory": "_MEMORY", "mcp_client": "_MCP_CLIENT", "subagent": "_SUBAGENT",
+              "meta": "_META", "swarm": "_SWARM", "acp": "_ACP",
+              "checkpoints": "_CHECKPOINTS", "context_engine": "_CONTEXT",
+              "routing": "_ROUTING"}
+
+
+def _lazy(name):
+    import importlib
+    attr = _LAZY_MODS.get(name)
+    if attr is None:
+        raise ValueError("unknown lazy module %r" % name)
+    if getattr(sys.modules[__name__], attr, None) is None:
+        setattr(sys.modules[__name__], attr, importlib.import_module(name))
+
+
+import checkpoints  # noqa: E402  (v0.3)
+import context_engine  # noqa: E402  (v0.3)
+
+
 # --------------------------------------------------------------- HTTP glue --
 
 def _r(handler, code, obj):
@@ -563,6 +605,21 @@ def handle(handler, method, path, qs, body):
             _lazy('swarm')
             since = int(qs.get("since", 0))
             return _sse(handler, _SWARM.watch_gen(since))
+
+        if path == "/api/checkpoints":
+            _lazy('checkpoints')
+            return _r(handler, 200, {"checkpoints": _CHECKPOINTS.list_checkpoints(
+                int(qs.get("limit", 50)))})
+        if path.startswith("/api/checkpoints/"):
+            _lazy('checkpoints')
+            cp_id = path.rsplit("/", 1)[-1]
+            manifest = _CHECKPOINTS.get(cp_id)
+            return _r(handler, 200, manifest) if manifest else \
+                _r(handler, 404, {"error": "checkpoint not found"})
+
+        if path == "/api/routing":
+            _lazy('routing')
+            return _r(handler, 200, _ROUTING.status())
 
         return False
 
@@ -679,6 +736,29 @@ def handle(handler, method, path, qs, body):
             coord = _SWARM.Coordinator()
             report = coord.run_swarm(goal, n_workers, max_steps, body.get("model"))
             return _r(handler, 200, report)
+
+        # --- v0.3 POST routes: checkpoints / context / routing ---
+        if path == "/api/checkpoints":
+            _lazy('checkpoints')
+            manifest = _CHECKPOINTS.create(
+                label=body.get("label"), session_id=body.get("session"),
+                idempotency_key=body.get("idempotency_key"),
+                by=body.get("by", "api"))
+            return _r(handler, 200 if "error" not in manifest else 400, manifest)
+        if path.startswith("/api/checkpoints/") and path.endswith("/rollback"):
+            _lazy('checkpoints')
+            cp_id = path[len("/api/checkpoints/"):-len("/rollback")]
+            res = _CHECKPOINTS.rollback(cp_id, by=body.get("by", "api"))
+            return _r(handler, 200 if res.get("ok") else 404, res)
+        if path == "/api/context/preview":
+            _lazy('context_engine')
+            res = _CONTEXT.preview(body.get("session"), body.get("message"),
+                                   int(body.get("budget_tokens",
+                                                _CONTEXT.DEFAULT_BUDGET)))
+            return _r(handler, 200 if "error" not in res else 404, res)
+        if path == "/api/routing":
+            _lazy('routing')
+            return _r(handler, 200, _ROUTING.update(body))
 
         return False
     return False
