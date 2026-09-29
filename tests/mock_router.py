@@ -23,6 +23,38 @@ STATE = {"loaded": False, "load_start": None, "fail_503": 0, "warm_seconds": 2}
 ALIAS = "mock-alpha"
 LOCK = threading.Lock()
 
+# v0.6: when the system prompt asks for a `write_todos` tool call, answer with a
+# stream-friendly NDJSON task graph instead of the generic "pong".
+MULTI_STEP = (
+    '{"tool":"write_todos"}\n'
+    '{"label":"Raccogliere il testo della richiesta","status":"todo","deps":[]}\n'
+    '{"label":"Estrarre i requisiti e i vincoli","status":"todo","deps":[0]}\n'
+    '{"label":"Produrre il piano finale verificato","status":"todo","deps":[1]}\n'
+)
+TODOS_TEXT = MULTI_STEP
+# a re-plan asks only for the steps still missing → return distinct new steps
+REPLAN_TEXT = (
+    '{"tool":"write_todos"}\n'
+    '{"label":"Registrare l esito della verifica","status":"todo","deps":[]}\n'
+    '{"label":"Notificare il risultato finale","status":"todo","deps":[0]}\n'
+)
+
+
+def _is_todo_call(body):
+    for m in body.get("messages") or []:
+        c = m.get("content") or ""
+        if "write_todos" in c:
+            return True
+    return False
+
+
+def _todo_answer(body):
+    """NDJSON answer for a write_todos request (re-plan gets the 'missing' steps)."""
+    text = "\n".join((m.get("content") or "") for m in (body.get("messages") or []))
+    if "already contains" in text or "already has these nodes" in text:
+        return REPLAN_TEXT
+    return TODOS_TEXT
+
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
@@ -71,14 +103,17 @@ class H(BaseHTTPRequestHandler):
                 if STATE["fail_503"] > 0:
                     STATE["fail_503"] -= 1
                     return self._json(503, {"error": {"message": "model not loaded"}})
+            text = _todo_answer(body) if _is_todo_call(body) else "pong"
             stream = body.get("stream")
             if not stream:
                 return self._json(200, {"choices": [{"message": {
-                    "role": "assistant", "content": "pong"}}]})
+                    "role": "assistant", "content": text}}]})
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
-            for tok in ("po", "ng"):
+            # stream in small chunks so downstream incremental parsing is exercised
+            toks = [text[i:i + 7] for i in range(0, len(text), 7)] or [""]
+            for tok in toks:
                 chunk = {"choices": [{"delta": {"content": tok}}]}
                 self.wfile.write(("data: %s\n\n" % json.dumps(chunk)).encode())
                 self.wfile.flush()
@@ -89,13 +124,18 @@ class H(BaseHTTPRequestHandler):
 
 
 def main():
+    global TODOS_TEXT
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8099)
     ap.add_argument("--warm-seconds", type=float, default=2.0)
     ap.add_argument("--fail-503", type=int, default=0)
+    ap.add_argument("--todos", default=None,
+                    help="NDJSON write_todos answer (default: 3-step MULTI_STEP)")
     a = ap.parse_args()
     STATE["warm_seconds"] = a.warm_seconds
     STATE["fail_503"] = a.fail_503
+    if a.todos is not None:
+        TODOS_TEXT = a.todos.replace("\\n", "\n")
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), H)
     print("mock router on %d (warm=%ss, fail503=%d)" % (a.port, a.warm_seconds, a.fail_503),
           flush=True)

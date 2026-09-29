@@ -187,6 +187,41 @@ Verified live by `tests/v051_acceptance.py` (9/9) — report in `data/v051-accep
   (`SPARKFORGE_ROUTER_RETRIES`=5, base 0.75 s → max 8 s) and emit `model.retry` feed
   events before giving up.
 
+## Done — v0.6 "task graph generato dall'LLM (live, legato al run, interattivo)" (2026-09-29, JAG-45)
+
+Deliverable from the Piano v2 on JAG-33. Problem: the TASKS panel was a *global* list
+disconnected from the chat and not interactive; modern harnesses (Claude Code Agent SDK
+todo-tracking, Deep Agents `write_todos`, plan/act/check with visible state) keep a live,
+per-run graph the model itself produces. Verified by `tests/v06_taskgraph.py`
+(**15/15** — 5 module checks, 8 mock-router end-to-end checks, 2 live-model checks) —
+raw report in `data/v06-acceptance.json`, raw command+output in
+[docs/V06-EVIDENCE.md](V06-EVIDENCE.md).
+
+- ✅ **`plan_graph` per run** (`taskgraph.py`): one graph per run in `data/graphs/<run_id>.json`,
+  bound to `session_id` + `run_id`; nodes `{id, label, status todo|doing|done|blocked|cancelled,
+  deps[], evidence[]}`; `GET /api/runs/<id>/graph` serves it.
+- ✅ **First action = model-generated `write_todos`** (no static template): the run streams
+  the tool call and parses it incrementally (NDJSON one todo per line, or nested
+  `{"todos":[…]}`), so nodes appear live. Measured with the mock router: **3 todo nodes in
+  0.085 s**; live model (`nex-n25-mini-uncensored-q8`): 3 request-specific nodes.
+- ✅ **Existing actions mapped** onto the graph: `plan_step` / `complete_plan_step` /
+  `add_task` / `complete_task` (both the v0.1 loop and the v0.2 tool loop) now add/complete
+  graph nodes; a `write_todos` action is also accepted inside the agent loop prompts.
+- ✅ **Live SSE** `graph.node.added` / `graph.node.updated` (on the chat/agent stream *and*
+  the durable feed); `graph.generated` / `graph.finalized` summary events.
+- ✅ **Evidence mandatory on `done`**: a node cannot become `done` without a non-empty
+  evidence entry (`ValueError` → HTTP 400), and at run end every open node is closed with
+  evidence — acceptance "a fine run tutti done con evidenza".
+- ✅ **`POST /api/runs/<id>/graph/nodes`**: add / update / cancel / complete a node and
+  **incremental re-plan** (`{action:"replan"}` asks the model only for the still-missing
+  steps; the mock proves duplicates are dropped).
+- ✅ **WebUI**: the **TASKS** panel is now the current run's graph — live status badges,
+  `⤷` deps, `📎` evidence count, tap a node for its evidence and one-tap
+  done/doing/blocked/cancel, plus a `+` add-node and a `↻ replan` action.
+- ✅ **SparkPulse app v1.6**: new 🧩 GRAFO panel — same live graph, **tap a node for detail**
+  (deps + evidence), run id in the header; parsers covered by `ForgeGraphTest` (38/38
+  unit tests green, debug APK assembles).
+
 ## Remaining (v0.4 leftovers / polish)
 
 - [ ] **SparkPulse app-side streaming** (native SSE): consume `/api/chat/stream` + `/api/feed?since=` in the Forge tab instead of one-shot REST, Command tab with live plan/tasks/approvals — server-side contract is live and authed

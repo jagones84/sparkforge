@@ -32,6 +32,7 @@ import otel_tracing  # v0.4: OpenTelemetry spans + fallback local spans
 import registry
 import routing  # v0.3: role-based model selection + fallback chain
 import sandbox
+import taskgraph  # v0.6: per-run LLM task graph (write_todos, live, interactive)
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(REPO, "data")
@@ -42,7 +43,7 @@ ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
 STORE_LOCK = threading.RLock()
 
-VERSION = "0.5.1"
+VERSION = "0.6"
 # Router resilience (v0.5.1): retry/backoff on 503 "model not loaded" plus the
 # warm-up path that loads a cold model before the first token.
 ROUTER_RETRIES = int(os.environ.get("SPARKFORGE_ROUTER_RETRIES", 5))
@@ -644,7 +645,7 @@ BREAKDOWN_PROMPT = (
 def self_summary():
     """Compact self-knowledge block injected into the system prompt (v0.5)."""
     return (
-        "Self-knowledge: you are SparkForge v0.5, a local agent harness installed "
+        "Self-knowledge: you are SparkForge v0.6, a local agent harness installed "
         "at the repo path %s on this DGX Spark. Data dir: %s. Tool policy: "
         "config/tools.yaml; model routing: config/routing.yaml; external MCP "
         "servers: config/mcp_clients.yaml (add a stdio command or HTTP url entry, "
@@ -759,6 +760,73 @@ def extract_json(text):
     return None
 
 
+def start_run_graph(run_id, goal, session_id=None, model=None, on_event=None):
+    """v0.6 — first action of a run: model-generated write_todos → live graph.
+
+    The graph is bound to run_id + session_id and every node lands on the feed as
+    a `graph.node.added` event the moment the model emits it.
+    """
+    try:
+        return taskgraph.generate_from_model(run_id, goal, session_id=session_id,
+                                             model=model, on_event=on_event)
+    except Exception as e:  # noqa: BLE001 — graph must never break the run
+        publish("graph.error", run=run_id, error=str(e))
+        return taskgraph.ensure(run_id, session_id, goal), []
+
+
+def finish_run_graph(run_id, session_id, goal, on_event=None):
+    """Run end — close every still-open node with evidence (acceptance: all done)."""
+    try:
+        g = taskgraph.load(run_id)
+        if not g or not g.get("nodes"):
+            return None
+        closed = taskgraph.finalize(g, "run %s completed: %s" % (run_id, str(goal)[:200]))
+        payload = {"run": run_id, "session": session_id,
+                   "nodes": len(g.get("nodes", [])), "closed": len(closed)}
+        (on_event or publish)("graph.finalized", **payload)
+        return g
+    except Exception as e:  # noqa: BLE001
+        publish("graph.error", run=run_id, error=str(e))
+        return None
+
+
+def graph_post(run_id, body):
+    """POST /api/runs/<id>/graph/nodes — add / cancel / update / complete / replan.
+
+    Returns (payload, error, code). Evidence is mandatory to move a node to done.
+    """
+    action = str(body.get("action") or "add").lower()
+    source = body.get("source", "operator")
+    g = taskgraph.load(run_id)
+    if g is None:
+        return None, {"error": "graph not found for run %s" % run_id}, 404
+    try:
+        if action in ("add", "node"):
+            node = taskgraph.add_node(g, body.get("label") or body.get("title"),
+                                      deps=body.get("deps"), status=body.get("status", "todo"),
+                                      evidence=body.get("evidence"), source=source)
+            return node, None, 200
+        if action in ("cancel", "remove", "delete"):
+            return taskgraph.cancel_node(g, body.get("id")), None, 200
+        if action == "complete" or action == "done":
+            return taskgraph.complete_node(g, body.get("id"), body.get("label"),
+                                           evidence=body.get("evidence"), source=source), None, 200
+        if action == "update":
+            return taskgraph.update_node(g, body.get("id"), status=body.get("status"),
+                                         label=body.get("label"), deps=body.get("deps"),
+                                         evidence=body.get("evidence"), source=source), None, 200
+        if action == "replan":
+            added = taskgraph.replan_from_model(g, body.get("note") or body.get("goal"),
+                                                body.get("model"))
+            return {"added": [n["id"] for n in added], "added_labels": [n["label"] for n in added],
+                    "nodes": len(g.get("nodes", []))}, None, 200
+    except ValueError as e:
+        return None, {"error": str(e)}, 400
+    except KeyError as e:
+        return None, {"error": str(e).strip("'\"")}, 404
+    return None, {"error": "unknown action %r" % action}, 400
+
+
 def chat_once(sess, message, model=None, on_delta=None, trace=None):
     """Append the user message, run one streamed router call, store the reply."""
     if on_delta is None:
@@ -821,20 +889,27 @@ def generate_plan(goal, model=None):
     return plan, answer, think, trace.id
 
 
-AGENT_ACTIONS = ("plan_step", "complete_plan_step", "add_task", "complete_task", "note", "finish")
+AGENT_ACTIONS = ("write_todos", "plan_step", "complete_plan_step", "add_task",
+                 "complete_task", "note", "finish")
 
 AGENT_PROMPT = (
     "You are the agent loop of the SparkForge harness. Given the goal and the "
     "current harness state, decide ONE next action. Respond with ONLY a JSON "
-    'object: {"thought": "<brief reasoning>", "action": "plan_step|'
-    'complete_plan_step|add_task|complete_task|note|finish", "title": "<for '
-    'plan_step/add_task>", "id": "<for complete_plan_step/complete_task>", '
-    '"detail": "<optional>", "summary": "<required for finish>"}.'
+    'object: {"thought": "<brief reasoning>", "action": "write_todos|'
+    'plan_step|complete_plan_step|add_task|complete_task|note|finish", '
+    '"todos": [{"label": "...", "deps": []}] (for write_todos), '
+    '"title": "<for plan_step/add_task>", "id": "<for '
+    'complete_plan_step/complete_task>", "detail": "<optional>", '
+    '"summary": "<required for finish>"}.'
 )
 
 
-def apply_agent_action(act):
-    """Apply a parsed agent action; returns observation text."""
+def apply_agent_action(act, run_id=None, session=None):
+    """Apply a parsed agent action; returns observation text.
+
+    v0.6: when a run_id is given, the action is mirrored onto the run's task
+    graph (plan_step/complete_plan_step/add_task/complete_task → nodes).
+    """
     action = act.get("action")
     plan, tasks = load_plan(), load_tasks()
     if action == "plan_step":
@@ -844,32 +919,46 @@ def apply_agent_action(act):
                 "detail": str(act.get("detail", ""))[:300], "done": False}
         plan.setdefault("steps", []).append(step)
         save_plan(plan)
-        return "plan step added: %s (%s)" % (step["title"], step["id"])
+        return _mirror_graph(run_id, act, "plan step added: %s (%s)" % (step["title"], step["id"]),
+                             session)
     if action == "complete_plan_step":
         for s in plan.get("steps", []):
             if s.get("id") == act.get("id") or s.get("title") == act.get("title"):
                 s["done"] = True
                 save_plan(plan)
-                return "plan step completed: %s" % s["title"]
+                return _mirror_graph(run_id, act,
+                                     "plan step completed: %s" % s["title"], session)
         return "plan step not found"
     if action == "add_task":
         t = {"id": uuid.uuid4().hex[:6], "title": str(act.get("title", "task"))[:120],
              "status": "todo", "created": round(time.time(), 3)}
         tasks.setdefault("tasks", []).append(t)
         save_tasks(tasks)
-        return "task added: %s (%s)" % (t["title"], t["id"])
+        return _mirror_graph(run_id, act, "task added: %s (%s)" % (t["title"], t["id"]), session)
     if action == "complete_task":
         for t in tasks.get("tasks", []):
             if t.get("id") == act.get("id") or t.get("title") == act.get("title"):
                 t["status"] = "done"
                 t["done_ts"] = round(time.time(), 3)
                 save_tasks(tasks)
-                return "task completed: %s" % t["title"]
+                return _mirror_graph(run_id, act, "task completed: %s" % t["title"], session)
         return "task not found"
+    if action == "write_todos":
+        return _mirror_graph(run_id, act, "write_todos: graph updated", session)
     if action == "note":
         publish("agent.note", text=str(act.get("detail") or act.get("title") or "")[:400])
         return "noted"
     return "unknown action"
+
+
+def _mirror_graph(run_id, act, observation, session=None):
+    """Mirror an applied action onto the run graph, with the observation as evidence."""
+    if run_id:
+        try:
+            taskgraph.map_action(run_id, act, observation=observation, session_id=session)
+        except Exception as e:  # noqa: BLE001 — mapping must never break a run
+            publish("graph.error", run=run_id, error=str(e))
+    return observation
 
 
 def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
@@ -888,6 +977,13 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
         trace.span("llm.step", model=trace_model)
         tin, tout = trace.llm_call(msgs, answer)
         llm_log.append((tin, tout))
+
+    # v0.6: the run's FIRST action is a model-generated write_todos call, which
+    # seeds the per-run task graph that the agent loop then advances.
+    try:
+        start_run_graph(trace.id, goal, None, model, on_event=on_event)
+    except Exception as e:  # noqa: BLE001
+        publish("graph.error", run=trace.id, error=str(e))
 
     actions = []
     for i in range(max_steps):
@@ -908,7 +1004,7 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
             on_event("agent.finish", summary=summary)
             actions.append({"i": i + 1, "thought": thought, "action": "finish", "summary": summary})
             break
-        obs = apply_agent_action(act)
+        obs = apply_agent_action(act, run_id=trace.id)
         trace.span("agent.action", i=i + 1, action=action, observation=obs)
         on_event("agent.observation", i=i + 1, observation=obs)
         actions.append({"i": i + 1, "thought": thought, "action": action, "observation": obs})
@@ -916,6 +1012,7 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
         summary = "stopped at max_steps=%d; see trace" % max_steps
         on_event("agent.finish", summary=summary)
         actions.append({"action": "finish", "summary": summary})
+    finish_run_graph(trace.id, None, goal, on_event=on_event)
     trace.finish("done")
     return {"goal": goal, "model": model, "trace": actions, "run_id": trace.id}
 
@@ -1147,6 +1244,12 @@ def chat_stream_gen(sess, message, model):
         publish("chat.delta", session=sess["id"], channel=channel, text=text)
 
     def worker():
+        def _emit(kind, **d):
+            # graph/model events go to BOTH this chat stream and the feed, so
+            # the WebUI can render the task graph live either way.
+            q.put("event: %s\ndata: %s\n\n" % (kind, json.dumps(d, ensure_ascii=False)))
+            publish(kind, **d)
+
         try:
             # v0.5.1 warm-up: resolve the target alias and, if it is cold, emit
             # `model.loading` and load it *before* the first token instead of
@@ -1158,12 +1261,16 @@ def chat_stream_gen(sess, message, model):
             try:
                 loaded, _m = model_loaded(target) if target else (True, None)
                 if target and not loaded:
-                    def _emit(kind, **d):
-                        publish(kind, **d)
-                        q.put("event: %s\ndata: %s\n\n" % (
-                            kind, json.dumps(d, ensure_ascii=False)))
                     ensure_model(target, on_event=_emit)
+                # v0.6: the FIRST action of the run is a model-generated
+                # write_todos call → the per-run task graph is populated live.
+                try:
+                    taskgraph.generate_from_model(trace.id, message, session_id=sess["id"],
+                                                  model=target, on_event=_emit)
+                except Exception as e:  # graph must never break the chat
+                    publish("graph.error", run=trace.id, error=str(e))
                 chat_once(sess, message, target, on_delta, trace=trace)
+                finish_run_graph(trace.id, sess["id"], message, on_event=_emit)
                 trace.finish("done")
             except Exception as e:
                 trace.finish("error")
@@ -1405,6 +1512,11 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 4 and parts[3] == "trace":
                 t = get_run_trace(parts[2])
                 return self._send(200, t) if t else self._send(404, {"error": "run not found"})
+            if len(parts) == 4 and parts[3] == "graph":
+                # v0.6: the run's task graph (linked to run_id + session_id)
+                g = taskgraph.load(parts[2])
+                return self._send(200, taskgraph.public(g)) if g else \
+                    self._send(404, {"error": "graph not found for run"})
             return self._send(404, {"error": "not found"})
         if path == "/api/runs":
             return self._send(200, {"runs": runs_summary(int(qs.get("limit", 50)))})
@@ -1461,11 +1573,14 @@ class Handler(BaseHTTPRequestHandler):
             publish("chat.user", session=sess["id"], text=message)
             trace = RunTrace("chat", goal=message[:120], model=body.get("model"))
             trace.span("chat.once", session=sess["id"])
+            # v0.6 first action: model-generated write_todos → per-run graph
+            start_run_graph(trace.id, message, sess["id"], routing.pick("planner"))
             try:
                 reply, model = chat_once(sess, message, body.get("model"), trace=trace)
             except Exception as e:
                 trace.finish("error")
                 return self._send(502, {"error": "router call failed: %s" % e})
+            finish_run_graph(trace.id, sess["id"], message)
             trace.model = model
             trace.finish("done")
             return self._send(200, {"session": sess["id"], "model": model, "run_id": trace.id,
@@ -1527,6 +1642,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "goal required"})
             result = agent_run(goal, int(body.get("max_steps", 6)), body.get("model"))
             return self._send(200, result)
+        if path.startswith("/api/runs/") and path.endswith("/graph/nodes"):
+            # v0.6: add/cancel node + incremental re-plan on a run's graph
+            run_id = path[len("/api/runs/"):-len("/graph/nodes")].strip("/")
+            payload, err, code = graph_post(run_id, body)
+            return self._send(code, err if err else payload)
         if path == "/api/context/compact":
             res = compact_session(body.get("session"), body.get("budget_tokens"))
             return self._send(200 if "error" not in res else 404, res)

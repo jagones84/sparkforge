@@ -6,7 +6,7 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 
 - 💬 **Streaming chat** with visible **Chain-of-Thought** timeline (`reasoning_content` or `<think>` parsing)
 - 🧠 **PLAN** — model-generated strategy steps, tracked with progress
-- ✅ **TASKS** — execution units with status + remaining bullets
+- ✅ **TASKS** — from v0.6 the panel *is* the current run's **LLM-generated task graph** (`write_todos`), streamed live over SSE and interactive
 - ⚡ **Agent loop** — a real sense-think-act loop (`thought → action → observation`) that mutates plan/tasks **and calls real tools**
 - 🛠️ **Tool registry** — declarative `shell`, `fs.read`, `fs.write`, `git`, `http`, `browser` with a JSON-schema allowlist (`config/tools.yaml`)
 - 🔐 **Approval gates** — every world-touching action is recorded in `/api/approvals` (auto-approve for read-only patterns, hard-deny for destructive ones); a pending action pauses the run until a human decides
@@ -16,6 +16,7 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 📡 **Loopback feed** — Server-Sent Events stream of every harness event (chat deltas, plan/task changes, agent iterations, tool calls, approvals) for mobile + WebUI live views
 - 🖥️ **Frontier WebUI** — dark glassmorphism, live thinking, plan/tasks sidebar, command bar
 - ✨ **UX harness moderna (v0.5)** — mobile tab bar (chat/sessions/tasks/context/feed), live CoT drawer, todo breakdown of every request onto the task board, token budget meter with one-tap compaction, session switch/create/delete, `self` tool for agent self-knowledge
+- 🧩 **LLM task graph (v0.6)** — every run's first action is a model-generated `write_todos` call that builds a **live, interactive graph of that run** (nodes, deps, evidence; `graph.node.*` over SSE; evidence required for `done`)
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
 
@@ -137,6 +138,37 @@ curl -sN localhost:8790/api/chat/stream -d '{"message":"ciao"}'  # POST alias of
 - **Router resilience**: transient `503 model not loaded` is retried with exponential
   backoff (`model.retry` feed events) before any fallback.
 
+### v0.6 — LLM task graph (live, bound to the run, interactive)
+
+```bash
+python3 tests/v06_taskgraph.py                       # end-to-end evidence (15 checks)
+curl -sN localhost:8790/api/chat/stream -d '{"message":"analizza il README in 3 step"}'  # live graph over SSE
+curl -s  localhost:8790/api/runs/<run_id>/graph      # persisted graph of that run
+curl -sX POST localhost:8790/api/runs/<run_id>/graph/nodes \
+     -d '{"action":"add","label":"Verifica manuale"}'                    # add a node
+curl -sX POST localhost:8790/api/runs/<run_id>/graph/nodes \
+     -d '{"action":"replan","note":"aggiungi la verifica finale"}'       # incremental re-plan
+```
+
+- **Per-run graph, not a global list.** `taskgraph.py` keeps one graph per run in
+  `data/graphs/<run_id>.json`, bound to `run_id` + `session_id`; nodes carry
+  `id, label, status (todo|doing|done|blocked|cancelled), deps[], evidence[]`.
+- **First action = `write_todos`.** Every run asks the model (planner role) for a
+  `write_todos` tool call — never a static template. The reply is consumed
+  incrementally (NDJSON one todo per line, or a nested `{"todos":[…]}` object), so
+  each `graph.node.added` lands on the SSE stream the moment the model emits it
+  (measured: 3 todo nodes in **0.08 s** with the mock router).
+- **Legacy actions mapped.** `plan_step`, `complete_plan_step`, `add_task`,
+  `complete_task` (both agent loops) now also mutate the run graph.
+- **Evidence is mandatory for `done`.** A node can only move to `done` with a
+  non-empty evidence entry (command + output); runs finalize by closing every open
+  node with evidence, so a finished run shows all nodes `done` with proof.
+- **Interactive.** `POST /api/runs/<id>/graph/nodes` adds/cancels/updates a node and
+  re-plans incrementally (`{action:"replan"}` asks the model only for the missing steps).
+- **UI.** The WebUI **TASKS** panel *is* the current run's graph (live badges, `⤷` deps,
+  `📎` evidence count, tap a node for its evidence + one-tap done/cancel/replan);
+  the SparkPulse app (v1.6) has the same graph as a **tap-to-detail** panel.
+
 ## API (mobile contract)
 
 | Method | Path | Purpose |
@@ -158,6 +190,8 @@ curl -sN localhost:8790/api/chat/stream -d '{"message":"ciao"}'  # POST alias of
 | GET | `/api/context?session=` | Token usage vs context budget (UI indicator) |
 | POST | `/api/context/compact` | Compact a session transcript in place `{session, budget_tokens?}` |
 | GET | `/api/runs`, `/api/runs/<id>/trace` | Run trace + token/cost accounting |
+| GET | `/api/runs/<id>/graph` | **v0.6** — the run's LLM task graph (nodes, deps, evidence, counts) |
+| POST | `/api/runs/<id>/graph/nodes` | **v0.6** — `{action: add\|update\|cancel\|complete\|replan, …}` (evidence required for `done`) |
 | GET | `/api/eval/tasks`, `/api/eval/run` | Eval harness (gold tasks + scoring) |
 | GET/POST | `/api/voice/status`, `/api/voice/stt`, `/api/voice/tts` | Speech I/O (whisper.cpp + sherpa-onnx) |
 | GET/POST | `/api/memory` | Persistent memory store (keyword + semantic search) |

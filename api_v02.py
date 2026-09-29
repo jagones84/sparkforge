@@ -250,6 +250,7 @@ AGENT_PROMPT_V2 = (
     "You are the agent loop of the SparkForge harness. Given the goal and the "
     "current harness state, decide ONE next action. Respond with ONLY one JSON "
     'object, always with a "thought" field. Actions:\n'
+    '  {"action":"write_todos","todos":[{"label":"...","deps":[]}]}\n'
     '  {"action":"tool","tool":"<name>","args":{...}}   run a registered tool\n'
     '  {"action":"plan_step","title":"...","detail":"..."}\n'
     '  {"action":"complete_plan_step","id":"..."}\n'
@@ -305,6 +306,13 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
     probe = sandbox.probe()
     on_event("agent.start", run=st.id, goal=goal, max_steps=max_steps,
              scripted=script is not None, sandbox=probe["backend"], isolated=probe["isolated"])
+    # v0.6: the FIRST action of every (non-scripted) run is a model-generated
+    # write_todos call → the per-run task graph, streamed live as nodes land.
+    if script is None:
+        try:
+            srv.start_run_graph(st.id, goal, None, model, on_event=on_event)
+        except Exception as e:  # noqa: BLE001 — graph must never break the run
+            _publish("graph.error", run=st.id, error=str(e))
     try:
         for i in range(max_steps):
             checkpoint(st)
@@ -353,7 +361,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                 entry["observation"] = obs
                 entry["tool_result"] = meta
             else:
-                obs = srv.apply_agent_action(act)
+                obs = srv.apply_agent_action(act, run_id=st.id)
                 entry = {"i": i + 1, "thought": thought, "action": action,
                          "observation": obs}
 
@@ -381,6 +389,11 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
 def _result(st, goal, model):
     if st.status in ("running", "paused", "aborting"):
         st.status = "done"
+    # v0.6: run end — close every still-open graph node with evidence.
+    try:
+        _srv().finish_run_graph(st.id, None, goal)
+    except Exception:  # noqa: BLE001
+        pass
     return {"run_id": st.id, "goal": goal, "model": model, "status": st.status,
             "summary": st.summary, "trace": st.trace}
 

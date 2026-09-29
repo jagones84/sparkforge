@@ -47,6 +47,11 @@
   .task .st { font-size: 9px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); flex-shrink: 0; }
   .task .st.doing { color: var(--warn); border-color: rgba(251,191,36,.4); }
   .task .st.done { color: var(--ok); border-color: rgba(74,222,128,.4); }
+  .task .st.blocked { color: var(--err); border-color: rgba(248,113,113,.4); }
+  .task .st.cancelled { color: var(--dim); text-decoration: line-through; }
+  .task .dep { font-size: 9px; color: var(--dim); }
+  .task .ev { font-size: 9px; color: var(--ok); }
+  .graphrow { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
   .task.fresh { animation: pop .5s ease; border: 1px dashed rgba(181,108,255,.4); }
   @keyframes pop { from { transform: scale(.96); opacity: .3; } }
   .remaining { color: var(--dim); font-size: 11px; }
@@ -175,11 +180,14 @@
     <section>
       <h2>Tasks <span id="taskCount" class="remaining"></span></h2>
       <div class="card">
+        <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
         <div id="tasks"></div>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="taskInp" class="inp" placeholder="new task…" style="flex:1;padding:6px 10px;font-size:12px">
-          <button class="ghost" onclick="addTask()">+</button>
+          <input id="taskInp" class="inp" placeholder="add a graph node…" style="flex:1;padding:6px 10px;font-size:12px">
+          <button class="ghost" onclick="addTask()" title="POST /graph/nodes {action:add}">+</button>
+          <button class="ghost" onclick="replanGraph()" title="incremental re-plan">↻ replan</button>
         </div>
+        <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
         <div id="remaining" class="remaining" style="margin-top:8px"></div>
       </div>
     </section>
@@ -284,6 +292,9 @@ function send(text) {
   inp.value = ""; who("user", msg); curThink = curAns = null; cotText = "";
   const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + (authQS() ? "&" + authQS() : "");
   const es = new EventSource(url);
+  es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); setRun(d.run_id); });
+  es.addEventListener("graph.node.added", e => applyGraphEvent(JSON.parse(e.data)));
+  es.addEventListener("graph.node.updated", e => applyGraphEvent(JSON.parse(e.data)));
   es.addEventListener("chat.delta", e => {
     const d = JSON.parse(e.data);
     if (!sessionId) { sessionId = d.session; localStorage.setItem("sf_session", sessionId); }
@@ -291,7 +302,7 @@ function send(text) {
     else { ensureAnswer().textContent += d.text; }
     scroll();
   });
-  es.addEventListener("done", () => { es.close(); endStream(); loadPlan(); loadTasks(); loadCtx(); });
+  es.addEventListener("done", () => { es.close(); endStream(); loadPlan(); loadGraph(); loadCtx(); });
   es.addEventListener("error", () => { es.close(); endStream(); });
 }
 
@@ -401,30 +412,105 @@ async function genPlan() {
     const l = document.createElement("div"); l.className = "agentline";
     l.textContent = "👁 " + d.observation; $("log").appendChild(l); scroll(); });
   es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
-    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadTasks(); });
+    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadGraph(); });
   es.addEventListener("error", () => es.close());
 }
-async function loadTasks() {
-  const t = await api("GET", "/api/tasks");
-  $("tasks").innerHTML = ""; $("remaining").innerHTML = "";
-  const open = (t.tasks || []).filter(x => x.status !== "done").length;
-  $("taskCount").textContent = open ? `(${open} open)` : "";
-  (t.tasks || []).slice(-40).forEach(x => {
+/* ---- run task graph (v0.6: LLM-generated, live, interactive) ---- */
+let curRunId = localStorage.getItem("sf_run") || null;
+let graph = null;        // {run_id, session_id, goal, nodes:[], counts, node_count}
+let graphFresh = null;   // node id to highlight on the next render
+
+function countNodes(nodes) {
+  const c = { todo: 0, doing: 0, done: 0, blocked: 0, cancelled: 0 };
+  (nodes || []).forEach(n => c[n.status] = (c[n.status] || 0) + 1);
+  return c;
+}
+function setRun(id) {
+  if (!id || id === curRunId) return;
+  curRunId = id; localStorage.setItem("sf_run", id); graph = null; loadGraph();
+}
+async function loadGraph() {
+  if (!curRunId) { renderGraph(); return; }
+  try {
+    const g = await api("GET", "/api/runs/" + curRunId + "/graph");
+    if (g && !g.error) { graph = g; renderGraph(); }
+  } catch {}
+}
+function applyGraphEvent(d) {
+  if (!d || !d.run) return;
+  if (!curRunId || curRunId !== d.run) { setRun(d.run); return; }
+  if (!graph) { loadGraph(); return; }
+  graphFresh = d.node.id;
+  const i = (graph.nodes || []).findIndex(n => n.id === d.node.id);
+  if (i >= 0) graph.nodes[i] = d.node; else graph.nodes.push(d.node);
+  graph.node_count = graph.nodes.length; graph.counts = countNodes(graph.nodes);
+  renderGraph();
+}
+function renderGraph() {
+  const box = $("tasks"); box.innerHTML = ""; $("taskDetail").innerHTML = "";
+  if (!graph) {
+    box.innerHTML = '<div class="remaining">no run graph yet — send a request</div>';
+    $("graphHead").textContent = "run graph: —"; $("taskCount").textContent = "";
+    return;
+  }
+  const c = graph.counts || countNodes(graph.nodes); graph.counts = c;
+  $("graphHead").textContent = "run " + (graph.run_id || "").slice(0, 8) + " · " +
+    (graph.node_count || 0) + " nodes · " + (c.done || 0) + " done" +
+    (graph.goal ? " · " + graph.goal.slice(0, 40) : "");
+  $("taskCount").textContent = (c.done || 0) + "/" + (graph.node_count || 0);
+  (graph.nodes || []).forEach(n => {
     const d = document.createElement("div"); d.className = "task";
-    if (x.fresh) d.classList.add("fresh");
-    d.innerHTML = `<span class="st ${x.status}">${x.status}</span><span>${x.title}</span>`;
-    const next = x.status === "todo" ? "doing" : x.status === "doing" ? "done" : "todo";
-    d.onclick = () => api("PATCH", "/api/tasks", { id: x.id, status: next }).then(loadTasks);
-    $("tasks").appendChild(d);
+    if (n.id === graphFresh) d.classList.add("fresh");
+    const deps = (n.deps || []).length ? ` <span class="dep">⤷ ${n.deps.join(", ")}</span>` : "";
+    const ev = (n.evidence || []).length ? ` <span class="ev">📎 ${n.evidence.length}</span>` : "";
+    d.innerHTML = `<span class="st ${n.status}">${n.status}</span><span>${n.label}</span>${deps}${ev}`;
+    d.onclick = () => showNodeDetail(n);
+    box.appendChild(d);
   });
-  (t.remaining || []).forEach(r => {
-    const d = document.createElement("div"); d.textContent = "▢ " + r.replace(/^[a-z]+: /, "");
-    $("remaining").appendChild(d);
-  });
+  $("remaining").innerHTML = "";
+}
+function showNodeDetail(n) {
+  const ev = (n.evidence || []).map(e => "• " + (e.text || "")).join("\n") || "(no evidence yet)";
+  $("taskDetail").innerHTML =
+    `<div style="color:var(--txt)">${n.id} · ${n.status}` +
+    ((n.deps || []).length ? " · deps " + n.deps.join(", ") : "") + `</div>` +
+    `<div style="white-space:pre-wrap;margin:4px 0">${ev}</div>` +
+    `<div class="graphrow">` +
+    `<button class="ghost" data-a="done">✓ done</button>` +
+    `<button class="ghost" data-a="doing">▶ doing</button>` +
+    `<button class="ghost" data-a="blocked">⛔ blocked</button>` +
+    `<button class="ghost" data-a="cancel">✕ cancel</button></div>`;
+  $("taskDetail").querySelectorAll("button").forEach(b =>
+    b.onclick = () => graphNodeAction(n.id, b.dataset.a));
+}
+async function graphNodeAction(id, a) {
+  let body = { id };
+  if (a === "cancel") { body.action = "cancel"; }
+  else if (a === "done") {
+    const ev = prompt("evidence for '" + id + "' (command + output + number):",
+                      "cmd=... output=... exit=0");
+    if (ev === null || !ev.trim()) return;
+    body.action = "update"; body.status = "done"; body.evidence = ev;
+  } else { body.action = "update"; body.status = a; }
+  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", body);
+  if (r && r.error) { who("ai", "⚠ graph: " + r.error); return; }
+  if (r && r.id) applyGraphEvent({ run: curRunId, node: r });
 }
 async function addTask() {
   const v = $("taskInp").value.trim(); if (!v) return;
-  $("taskInp").value = ""; await api("POST", "/api/tasks", { title: v }); loadTasks();
+  $("taskInp").value = "";
+  if (!curRunId) { await api("POST", "/api/tasks", { title: v }); return; }
+  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", { action: "add", label: v });
+  if (r && r.id) applyGraphEvent({ run: curRunId, node: r });
+}
+async function replanGraph() {
+  if (!curRunId) { who("ai", "no run graph to re-plan yet"); return; }
+  const note = prompt("re-plan: what changed / what is still missing?", "");
+  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", { action: "replan", note: note || "" });
+  if (r && r.error) { who("ai", "⚠ replan: " + r.error); return; }
+  who("ai", "↻ re-plan: +" + ((r.added || []).length) + " nodes" +
+      ((r.added_labels || []).length ? " — " + r.added_labels.join("; ") : ""));
+  loadGraph();
 }
 async function loadStatus() {
   try {
@@ -490,7 +576,7 @@ function runAgent(goal) {
   es.addEventListener("agent.aborted", e => { const d = JSON.parse(e.data);
     who("ai", "⛔ aborted: " + (d.summary || "")); });
   es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
-    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadTasks(); loadCtx(); });
+    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadGraph(); loadCtx(); });
   es.addEventListener("error", () => es.close());
 }
 
@@ -510,12 +596,14 @@ function connectFeed() {
   });
   es.addEventListener("chat.user", e => { const d = JSON.parse(e.data); push("💬 user: " + (d.text || "").slice(0, 60)); });
   es.addEventListener("chat.done", () => { push("💬 chat done"); loadCtx(); });
+  es.addEventListener("graph.node.added", e => applyGraphEvent(JSON.parse(e.data)));
+  es.addEventListener("graph.node.updated", e => applyGraphEvent(JSON.parse(e.data)));
+  es.addEventListener("graph.generated", e => { const d = JSON.parse(e.data);
+    push("🧩 task graph: " + (d.nodes || 0) + " nodes (" + (d.model || "") + ")"); loadGraph(); });
+  es.addEventListener("graph.finalized", e => { const d = JSON.parse(e.data);
+    push("🏁 graph finalized: " + (d.closed || 0) + " node(s) closed with evidence"); loadGraph(); });
   es.addEventListener("tasks.breakdown", e => { const d = JSON.parse(e.data);
-    push("✅ todo breakdown: " + (d.tasks || []).length + " tasks");
-    (d.tasks || []).forEach(t => { const x = document.createElement("div");
-      x.className = "task fresh"; x.innerHTML = `<span class="st todo">todo</span><span>${t}</span>`;
-      $("tasks").appendChild(x); });
-    loadTasksSoon(); });
+    push("✅ todo breakdown: " + (d.tasks || []).length + " tasks"); loadGraphSoon(); });
   es.addEventListener("context.compact", e => { const d = JSON.parse(e.data);
     push(`🗜 compact: ${d.compacted} msgs compacted, ${d.tokens_after} tok`); loadCtx(); });
   es.addEventListener("context.built", e => { const d = JSON.parse(e.data);
@@ -523,7 +611,7 @@ function connectFeed() {
   es.addEventListener("session.created", e => { const d = JSON.parse(e.data); push("🗂 session created"); loadSessions(); });
   es.addEventListener("session.deleted", e => { const d = JSON.parse(e.data); push("🗂 session deleted"); loadSessions(); });
   es.addEventListener("plan.update", () => { push("🗺 plan updated"); loadPlan(); });
-  es.addEventListener("tasks.update", () => { push("✅ tasks updated"); loadTasksSoon(); });
+  es.addEventListener("tasks.update", () => push("✅ legacy tasks board updated"));
   es.addEventListener("agent.start", e => { const d = JSON.parse(e.data || "{}"); push("⚡ agent: " + (d.goal || "").slice(0, 60)); });
   es.addEventListener("agent.finish", () => push("🏁 agent finished"));
   es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); push("🔐 approval needed: " + (d.tool || "") + " " + (d.summary || "").slice(0, 40)); loadApprovals(); });
@@ -535,7 +623,7 @@ function connectFeed() {
   es.addEventListener("agent.control", e => { const d = JSON.parse(e.data); push("🎛 " + d.action + " → " + d.status); });
 }
 let _tasksT, _ctxT;
-function loadTasksSoon() { clearTimeout(_tasksT); _tasksT = setTimeout(loadTasks, 300); }
+function loadGraphSoon() { clearTimeout(_tasksT); _tasksT = setTimeout(loadGraph, 300); }
 function loadCtxSoon() { clearTimeout(_ctxT); _ctxT = setTimeout(loadCtx, 300); }
 
 /* ---- mobile tabs / drawer ---- */
@@ -554,7 +642,7 @@ $("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progres
 $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
-  loadSessions(); loadPlan(); loadTasks(); loadStatus(); loadApprovals(); loadCtx(); loadHistory(); connectFeed();
+  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadApprovals(); loadCtx(); loadHistory(); connectFeed();
 });
 setInterval(loadStatus, 5000);
 setInterval(loadApprovals, 4000);
