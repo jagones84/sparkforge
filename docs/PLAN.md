@@ -162,6 +162,31 @@ moderna. Wave UX, verificata in live (chat reale via router, modello
   tab bar mobile (chat/sessions/tasks/context/feed), drawer CoT live, meter
   contesto, pulsante compact, badge approvazioni.
 
+## Done — v0.5.1 "chat/LLM server hardening" (2026-09-29, JAG-43)
+
+Follow-up server wave from JAG-33 §A. Live diagnosis before the change:
+`POST /api/chat` → 200 (reply ok, 6.69 s); `GET /api/chat/stream?message=` → 200 SSE
+(first byte 0.02 s); **`POST /api/chat/stream` → 404**; no auth → 401.
+Verified live by `tests/v051_acceptance.py` (9/9) — report in `data/v051-acceptance.json`.
+
+- ✅ **`POST /api/chat/stream`** is now an alias of the GET SSE endpoint (JSON body
+  `{message, session?, model?}`), so it answers `200 text/event-stream` instead of 404.
+- ✅ **Warm-up before the first token**: the chat stream resolves the target alias and,
+  if the model is cold, emits an SSE **`model.loading`** event (alias + `< 2 s` first byte)
+  and drives an explicit `POST /models/load` before streaming — no more silent stall on
+  the router's autoload. **`POST /api/model/ensure`** exposes the same warm-up as JSON
+  (`{model?, action: already_loaded|loaded|timeout|unknown_model, seconds}`), and
+  `ensure_model()` re-checks the roster after loading (`model.ready` /
+  `model.load_failed` events).
+- ✅ **`GET /api/selfcheck`** → 200 JSON: `version`, `model_requested`, `model_loaded`
+  (+`model_loaded_alias` + full roster), `router_reachable` + `router_latency_ms`,
+  `token_configured` (bool), `host`/`port`, and measured **`llm_latency_ms`** (1-token
+  completion, `?llm=0` to skip); overall `status: ok|degraded`.
+- ✅ **Router retry/backoff on 503 "model not loaded"** (`_open_with_retry`): the
+  streaming *and* non-streaming chat calls retry with exponential backoff
+  (`SPARKFORGE_ROUTER_RETRIES`=5, base 0.75 s → max 8 s) and emit `model.retry` feed
+  events before giving up.
+
 ## Remaining (v0.4 leftovers / polish)
 
 - [ ] **SparkPulse app-side streaming** (native SSE): consume `/api/chat/stream` + `/api/feed?since=` in the Forge tab instead of one-shot REST, Command tab with live plan/tasks/approvals — server-side contract is live and authed

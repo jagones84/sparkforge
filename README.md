@@ -120,6 +120,23 @@ journalctl --user -u sparkforge.service -f
 - **Durable events**: the SSE feed replays from SQLite — reconnect with `/api/feed?since=<id>`, or read the backlog as JSON via `/api/feed/recent`.
 - **Tracing**: runs carry genuine OpenTelemetry spans (trace_id, hierarchy, ns timestamps) when the OTel SDK is installed; token/cost accounting is recorded for every run.
 
+### v0.5.1 — chat/LLM server hardening
+
+```bash
+python3 tests/v051_acceptance.py               # end-to-end evidence (9 checks)
+curl -s localhost:8790/api/selfcheck           # version, model, router, token, LLM latency
+curl -sX POST localhost:8790/api/model/ensure -d '{}'          # warm the chat model
+curl -sN localhost:8790/api/chat/stream -d '{"message":"ciao"}'  # POST alias of the GET SSE stream
+```
+
+- **Cold-model warm-up**: the chat stream emits `model.loading` (< 2 s first byte) and loads
+  the model before the first token — no silent stall on the router's autoload.
+- **`GET /api/selfcheck`**: `{version, model_requested, model_loaded, router_reachable,
+  router_latency_ms, llm_latency_ms, token_configured, host, port}` (status `ok|degraded`).
+- **`POST /api/model/ensure`**: idempotent warm-up (`already_loaded` / `loaded` / `timeout`).
+- **Router resilience**: transient `503 model not loaded` is retried with exponential
+  backoff (`model.retry` feed events) before any fallback.
+
 ## API (mobile contract)
 
 | Method | Path | Purpose |
@@ -127,6 +144,9 @@ journalctl --user -u sparkforge.service -f
 | GET | `/api/status` | Router roster + DGX telemetry summary |
 | POST | `/api/chat` | One-shot chat `{session?, message, model?}` |
 | GET | `/api/chat/stream?session&message&model` | SSE chat stream (tokens + thinking) |
+| POST | `/api/chat/stream` | SSE chat stream — alias of the GET (`{message, session?, model?}`) |
+| GET | `/api/selfcheck` | Health/version/model/router/token + LLM latency |
+| POST | `/api/model/ensure` | Warm the chat model (or `{model}`) before chatting |
 | GET | `/api/feed` | SSE harness event feed (`?since=<id>` to resume) |
 | GET/POST | `/api/plan` | Read / set goal; `POST /api/plan/generate {goal}` |
 | GET/POST/PATCH | `/api/tasks` | Task board; `PATCH /api/tasks {id, status?}` |

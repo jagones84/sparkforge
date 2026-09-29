@@ -20,6 +20,7 @@ import re
 import sqlite3
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 from collections import deque
@@ -40,6 +41,14 @@ WEBUI_DIR = os.path.join(REPO, "webui")
 ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
 STORE_LOCK = threading.RLock()
+
+VERSION = "0.5.1"
+# Router resilience (v0.5.1): retry/backoff on 503 "model not loaded" plus the
+# warm-up path that loads a cold model before the first token.
+ROUTER_RETRIES = int(os.environ.get("SPARKFORGE_ROUTER_RETRIES", 5))
+ROUTER_BACKOFF = float(os.environ.get("SPARKFORGE_ROUTER_BACKOFF", 0.75))
+ROUTER_BACKOFF_MAX = float(os.environ.get("SPARKFORGE_ROUTER_BACKOFF_MAX", 8.0))
+MODEL_LOAD_TIMEOUT = int(os.environ.get("SPARKFORGE_MODEL_LOAD_TIMEOUT", 900))
 
 # --------------------------------------------------------------- sqlite ----
 
@@ -231,12 +240,158 @@ def default_model():
     return models[0]["alias"] if models else None
 
 
+def model_loaded(alias):
+    """(loaded_bool, model_dict_or_None) for one alias from the live roster."""
+    for m in router_models():
+        if m.get("alias") == alias:
+            return bool(m.get("loaded")), m
+    return False, None
+
+
+def router_ping(timeout=3):
+    """GET the router /health; returns {reachable, latency_ms, status}."""
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(ROUTER_BASE + "/health", timeout=timeout) as r:
+            body = json.loads(r.read().decode("utf-8") or "{}")
+        return {"reachable": True,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "status": body.get("status", "ok")}
+    except Exception as e:  # noqa: BLE001
+        return {"reachable": False,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "error": str(e)}
+
+
+def _router_load(alias, timeout=MODEL_LOAD_TIMEOUT):
+    """POST /models/load {"model": alias} on the llama.cpp router."""
+    body = json.dumps({"model": alias}).encode("utf-8")
+    req = urllib.request.Request(ROUTER_BASE + "/models/load", data=body,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8") or "{}")
+
+
+def _fire(on_event, kind, **data):
+    """Forward a model-lifecycle event to the caller hook, else to the feed."""
+    if on_event:
+        on_event(kind, **data)
+    else:
+        publish(kind, **data)
+
+
+def ensure_model(alias, timeout=None, on_event=None):
+    """Load `alias` on the router if it is cold; return an evidence dict.
+
+    Emits a `model.loading` event (SSE + feed) the moment a cold model is
+    detected, so a client can render progress before the first token. The
+    router has `models_autoload` on, but we drive the explicit load so the
+    wait is observable and bounded instead of a silent stall.
+    """
+    timeout = timeout or MODEL_LOAD_TIMEOUT
+    t0 = time.time()
+    loaded, m = model_loaded(alias)
+    if loaded:
+        return {"model": alias, "loaded": True, "action": "already_loaded",
+                "seconds": 0.0}
+    if m is None:
+        return {"model": alias, "loaded": False, "action": "unknown_model",
+                "seconds": round(time.time() - t0, 2),
+                "error": "alias not present in router roster"}
+    _fire(on_event, "model.loading", model=alias,
+          detail="loading cold model before first token")
+    err = None
+    try:
+        _router_load(alias, timeout=timeout)
+    except Exception as e:  # noqa: BLE001
+        err = str(e)
+    # Poll until loaded (the load call may return before the weights are up).
+    while time.time() - t0 < timeout:
+        if model_loaded(alias)[0]:
+            secs = round(time.time() - t0, 2)
+            _fire(on_event, "model.ready", model=alias, seconds=secs)
+            return {"model": alias, "loaded": True, "action": "loaded",
+                    "seconds": secs}
+        time.sleep(1.0)
+    secs = round(time.time() - t0, 2)
+    _fire(on_event, "model.load_failed", model=alias, seconds=secs, error=err)
+    return {"model": alias, "loaded": False, "action": "timeout",
+            "seconds": secs, "error": err or "timed out waiting for load"}
+
+
+def measure_llm_latency(alias, timeout=60):
+    """Round-trip latency (ms) of a 1-token completion on `alias`; None on error."""
+    if not alias:
+        return None
+    body = json.dumps({"model": alias, "max_tokens": 1, "stream": False,
+                       "messages": [{"role": "user", "content": "ping"}]}).encode("utf-8")
+    req = urllib.request.Request(ROUTER_BASE + "/v1/chat/completions", data=body,
+                                 headers={"Content-Type": "application/json"})
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            r.read()
+        return round((time.time() - t0) * 1000, 1)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def selfcheck_payload(host="127.0.0.1", port=8790, llm_probe=True):
+    """GET /api/selfcheck — one JSON object proving the chat path is healthy."""
+    t0 = time.time()
+    roster = router_models()
+    ping = router_ping()
+    requested = routing.pick("chat") or default_model()
+    loaded_alias = next((m["alias"] for m in roster if m.get("loaded")), None)
+    req_loaded = bool(requested and any(
+        m["alias"] == requested and m["loaded"] for m in roster))
+    llm_ms = measure_llm_latency(loaded_alias or requested) if (llm_probe and ping["reachable"]) else None
+    return {
+        "service": "sparkforge", "version": VERSION,
+        "ts": round(time.time(), 3),
+        "status": "ok" if (ping["reachable"] and llm_ms is not None) else "degraded",
+        "model_requested": requested,
+        "model_loaded": req_loaded,
+        "model_loaded_alias": loaded_alias,
+        "models": [{"alias": m["alias"], "loaded": m["loaded"]} for m in roster],
+        "router": ROUTER_BASE,
+        "router_reachable": ping["reachable"],
+        "router_latency_ms": ping["latency_ms"],
+        "router_status": ping.get("status"),
+        "llm_latency_ms": llm_ms,
+        "token_configured": bool(AUTH_TOKEN),
+        "auth_required": bool(AUTH_TOKEN),
+        "host": host, "port": port,
+        "check_seconds": round(time.time() - t0, 2),
+    }
+
+
 def strip_think(text):
     """Split optional <think>...</think> out of content."""
     m = re.search(r"<think>(.*?)</think>", text, re.S)
     if m:
         return text[: m.start()] + text[m.end():], m.group(1)
     return text, None
+
+
+def _open_with_retry(req, timeout):
+    """urlopen with exponential backoff on 503 (router: model not loaded).
+
+    The llama.cpp router returns 503 while a cold model is still warming up;
+    we retry a few times instead of surfacing a hard failure to the client.
+    """
+    delay = ROUTER_BACKOFF
+    for attempt in range(ROUTER_RETRIES + 1):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 503 and attempt < ROUTER_RETRIES:
+                publish("model.retry", attempt=attempt + 1, delay=delay,
+                        status=503, reason="model not loaded")
+                time.sleep(delay)
+                delay = min(delay * 2, ROUTER_BACKOFF_MAX)
+                continue
+            raise
 
 
 def _router_stream(messages, model, on_delta, timeout=300):
@@ -257,7 +412,7 @@ def _router_stream(messages, model, on_delta, timeout=300):
     )
     answer, think = [], []
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _open_with_retry(req, timeout) as resp:
             for raw in resp:
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
@@ -294,7 +449,7 @@ def _router_stream(messages, model, on_delta, timeout=300):
             ROUTER_BASE + "/v1/chat/completions", data=body,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _open_with_retry(req, timeout) as resp:
             data = json.loads(resp.read().decode("utf-8") or "{}")
         msg = (data.get("choices") or [{}])[0].get("message") or {}
         rc = msg.get("reasoning_content") or ""
@@ -505,7 +660,7 @@ def self_knowledge():
     """Full self report: paths, config, docs, service state, extension recipe."""
     import subprocess as sp
     info = {
-        "name": "SparkForge", "version": "0.5.0",
+        "name": "SparkForge", "version": VERSION,
         "repo_path": REPO, "data_dir": DATA_DIR, "sessions_dir": SESSIONS_DIR,
         "webui": WEBUI_DIR,
         "entrypoint": os.path.join(REPO, "server.py"), "port": 8790,
@@ -993,11 +1148,22 @@ def chat_stream_gen(sess, message, model):
 
     def worker():
         try:
-            trace = RunTrace("chat", goal=message[:120], model=model)
+            # v0.5.1 warm-up: resolve the target alias and, if it is cold, emit
+            # `model.loading` and load it *before* the first token instead of
+            # letting the client stall silently on the router's autoload.
+            target = model or routing.pick("chat") or default_model()
+            trace = RunTrace("chat", goal=message[:120], model=target)
             trace.span("chat.stream", session=sess["id"])
             q.put("event: chat.run\ndata: %s\n\n" % json.dumps({"run_id": trace.id}))
             try:
-                chat_once(sess, message, model, on_delta, trace=trace)
+                loaded, _m = model_loaded(target) if target else (True, None)
+                if target and not loaded:
+                    def _emit(kind, **d):
+                        publish(kind, **d)
+                        q.put("event: %s\ndata: %s\n\n" % (
+                            kind, json.dumps(d, ensure_ascii=False)))
+                    ensure_model(target, on_event=_emit)
+                chat_once(sess, message, target, on_delta, trace=trace)
                 trace.finish("done")
             except Exception as e:
                 trace.finish("error")
@@ -1122,7 +1288,7 @@ def status_payload():
     plan, tasks = load_plan(), load_tasks()
     probe = sandbox.probe()
     return {
-        "service": "sparkforge", "version": "0.5.0", "ts": round(time.time()),
+        "service": "sparkforge", "version": VERSION, "ts": round(time.time()),
         "router": ROUTER_BASE, "models": router_models(),
         "default_model": default_model(),
         "telemetry": telemetry_summary(),
@@ -1141,7 +1307,7 @@ def status_payload():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SparkForge/0.5"
+    server_version = "SparkForge/" + VERSION
 
     def _send(self, code, obj, ctype="application/json"):
         if isinstance(obj, (dict, list)):
@@ -1193,6 +1359,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, status_payload())
         if path == "/api/models":
             return self._send(200, {"models": router_models()})
+        if path == "/api/selfcheck":
+            llm = qs.get("llm", "1").lower() not in ("0", "false", "no")
+            return self._send(200, selfcheck_payload(
+                host=getattr(self.server, "host", "127.0.0.1"),
+                port=getattr(self.server, "port", 8790), llm_probe=llm))
         if path == "/api/feed":
             since = int(qs.get("since", 0))
             return sse_response(self, feed_gen(since))
@@ -1299,6 +1470,24 @@ class Handler(BaseHTTPRequestHandler):
             trace.finish("done")
             return self._send(200, {"session": sess["id"], "model": model, "run_id": trace.id,
                                     "reply": reply["content"], "reasoning": reply.get("reasoning")})
+        if path == "/api/chat/stream":
+            # v0.5.1: POST alias of GET /api/chat/stream (mobile clients prefer
+            # a JSON body over query params). Same SSE contract.
+            message = body.get("message") or qs.get("message", "")
+            if not message:
+                return self._send(400, {"error": "message required"})
+            sess = get_or_create_session(body.get("session") or qs.get("session"))
+            append_message(sess, "user", message)
+            publish("chat.user", session=sess["id"], text=message)
+            return sse_response(self, chat_stream_gen(
+                sess, message, body.get("model") or qs.get("model")))
+        if path == "/api/model/ensure":
+            alias = body.get("model") or qs.get("model") or \
+                routing.pick("chat") or default_model()
+            if not alias:
+                return self._send(503, {"error": "no router model available"})
+            res = ensure_model(alias, on_event=lambda k, **d: publish(k, **d))
+            return self._send(200 if res.get("loaded") else 502, res)
         if path == "/api/plan":
             goal = body.get("goal", "")
             plan = {"goal": goal, "steps": body.get("steps", load_plan().get("steps", []))}
@@ -1411,7 +1600,9 @@ def main():
     _ensure_dirs()
     publish("service.start", host=args.host, port=args.port, router=ROUTER_BASE)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print("SparkForge on http://%s:%d  (router: %s)" % (args.host, args.port, ROUTER_BASE))
+    server.host, server.port = args.host, args.port
+    print("SparkForge v%s on http://%s:%d  (router: %s)" % (
+        VERSION, args.host, args.port, ROUTER_BASE))
     server.serve_forever()
 
 
