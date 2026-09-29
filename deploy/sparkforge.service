@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/Repositories/sparkforge
-ExecStart=/usr/bin/python3 %h/Repositories/sparkforge/server.py --host 127.0.0.1 --port 8790 --token ${SPARKFORGE_TOKEN}
+ExecStart=/usr/bin/python3 %h/Repositories/sparkforge/server.py --host 0.0.0.0 --port 8790 --token ${SPARKFORGE_TOKEN}
 EnvironmentFile=-%h/.config/sparkforge/env
 Restart=always
 RestartSec=3
