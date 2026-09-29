@@ -19,7 +19,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-STATE = {"loaded": False, "load_start": None, "fail_503": 0, "warm_seconds": 2}
+STATE = {"loaded": False, "load_start": None, "fail_503": 0, "warm_seconds": 2,
+         "stall_after": None, "stall_seconds": 0.0}
 ALIAS = "mock-alpha"
 LOCK = threading.Lock()
 
@@ -113,7 +114,13 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             # stream in small chunks so downstream incremental parsing is exercised
             toks = [text[i:i + 7] for i in range(0, len(text), 7)] or [""]
-            for tok in toks:
+            # --stall-after N: emit N deltas, then hold the response open (no
+            # [DONE], no close) — the JAG-48 "upstream stalls mid-stream" case.
+            stall = STATE["stall_after"]
+            for i, tok in enumerate(toks):
+                if stall is not None and i >= stall:
+                    time.sleep(STATE["stall_seconds"] or 600)
+                    return
                 chunk = {"choices": [{"delta": {"content": tok}}]}
                 self.wfile.write(("data: %s\n\n" % json.dumps(chunk)).encode())
                 self.wfile.flush()
@@ -131,9 +138,15 @@ def main():
     ap.add_argument("--fail-503", type=int, default=0)
     ap.add_argument("--todos", default=None,
                     help="NDJSON write_todos answer (default: 3-step MULTI_STEP)")
+    ap.add_argument("--stall-after", type=int, default=None,
+                    help="emit N deltas then hold the stream open, no [DONE] (JAG-48)")
+    ap.add_argument("--stall-seconds", type=float, default=0.0,
+                    help="how long the stalled stream is held (0 = forever)")
     a = ap.parse_args()
     STATE["warm_seconds"] = a.warm_seconds
     STATE["fail_503"] = a.fail_503
+    STATE["stall_after"] = a.stall_after
+    STATE["stall_seconds"] = a.stall_seconds
     if a.todos is not None:
         TODOS_TEXT = a.todos.replace("\\n", "\n")
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), H)

@@ -17,6 +17,7 @@ import json
 import os
 import queue
 import re
+import socket
 import sqlite3
 import threading
 import time
@@ -43,13 +44,23 @@ ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
 STORE_LOCK = threading.RLock()
 
-VERSION = "0.6"
+VERSION = "0.6.1"
 # Router resilience (v0.5.1): retry/backoff on 503 "model not loaded" plus the
 # warm-up path that loads a cold model before the first token.
 ROUTER_RETRIES = int(os.environ.get("SPARKFORGE_ROUTER_RETRIES", 5))
 ROUTER_BACKOFF = float(os.environ.get("SPARKFORGE_ROUTER_BACKOFF", 0.75))
 ROUTER_BACKOFF_MAX = float(os.environ.get("SPARKFORGE_ROUTER_BACKOFF_MAX", 8.0))
 MODEL_LOAD_TIMEOUT = int(os.environ.get("SPARKFORGE_MODEL_LOAD_TIMEOUT", 900))
+
+# SSE termination (v0.6.1, JAG-48). A chat stream must end — and the socket must
+# close — shortly after its terminal `done`; it must never outlive it.
+#   ROUTER_IDLE_TIMEOUT: max silence tolerated from the router mid-stream. When
+#                        it fires the partial answer is kept and the run ends
+#                        normally (so `done` is still emitted).
+#   CHAT_STREAM_IDLE:    max silence on a chat SSE stream before the server
+#                        finishes the stream itself (error + done) and closes.
+ROUTER_IDLE_TIMEOUT = float(os.environ.get("SPARKFORGE_ROUTER_IDLE_TIMEOUT", 120.0))
+CHAT_STREAM_IDLE = float(os.environ.get("SPARKFORGE_CHAT_STREAM_IDLE", 900.0))
 
 # --------------------------------------------------------------- sqlite ----
 
@@ -395,6 +406,23 @@ def _open_with_retry(req, timeout):
             raise
 
 
+def _set_read_idle(resp, seconds):
+    """Bound the silence of an in-flight router stream (JAG-48).
+
+    A stalled upstream stream used to hold the chat SSE open forever (events
+    already emitted, no `done`, socket ESTAB) — the phone app waits for EOF and
+    stayed on `busy`. With an idle read timeout the partial answer is kept and
+    the normal `done` path is taken instead.
+    """
+    for getter in (lambda r: r.fp.raw._sock, lambda r: r.fp.raw, lambda r: r.fp):
+        try:
+            getter(resp).settimeout(seconds)
+            return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
 def _router_stream(messages, model, on_delta, timeout=300):
     """POST /v1/chat/completions with stream=true; feed deltas to on_delta.
 
@@ -414,6 +442,9 @@ def _router_stream(messages, model, on_delta, timeout=300):
     answer, think = [], []
     try:
         with _open_with_retry(req, timeout) as resp:
+            if ROUTER_IDLE_TIMEOUT > 0:
+                # v0.6.1 (JAG-48): mid-stream silence must not hang the run.
+                _set_read_idle(resp, ROUTER_IDLE_TIMEOUT)
             for raw in resp:
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
@@ -1220,18 +1251,85 @@ def check_auth(headers, qs=None):
     return bool(qs) and qs.get("token") == AUTH_TOKEN
 
 
-def sse_response(handler, gen):
+def sse_close(handler):
+    """v0.6.1 (JAG-48): end an SSE response for good.
+
+    The HTTP/1.0 shutdown was not enough: the generator (and with it the
+    socket) stayed open whenever the upstream model call stalled, so clients
+    that wait for EOF (`curl -N`, the mobile app's HttpURLConnection with
+    readTimeout=0) froze on `busy` and could not send the next message.
+    Flush, mark the connection non-reusable and send the EOF explicitly.
+    """
+    try:
+        handler.wfile.flush()
+    except Exception:  # noqa: BLE001 — client already gone
+        pass
+    handler.close_connection = True
+    try:
+        handler.connection.shutdown(socket.SHUT_WR)  # FIN → client sees EOF now
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def sse_response(handler, gen, keepalive=False):
+    """Write an SSE stream and close it when the generator ends.
+
+    `keepalive=True` is reserved for `/api/feed` (and the blackboard watcher):
+    those streams are loopback tails that stay open on purpose, so the socket
+    gets SO_KEEPALIVE. Every other stream (`/api/chat/stream`,
+    `/api/agent/run`) is terminal: after its `done` event the generator is
+    exhausted and the connection is closed immediately.
+    """
     handler.send_response(200)
     handler.send_header("Content-Type", "text/event-stream")
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("Connection", "close")
     handler.end_headers()
+    if keepalive:
+        try:
+            handler.connection.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        except Exception:  # noqa: BLE001
+            pass
     try:
         for chunk in gen:
             handler.wfile.write(chunk.encode("utf-8"))
             handler.wfile.flush()
     except (BrokenPipeError, ConnectionResetError):
         pass
+    finally:
+        sse_close(handler)
+
+
+def sse_pump(q, worker, open_comment=": stream open\n\n", terminal="done",
+             idle_timeout=None):
+    """Drain a producer queue into SSE frames, then stop for good.
+
+    v0.6.1 (JAG-48): the chat stream is *not* keep-alive — no `: ping` filler.
+    It ends with exactly one terminal `done` and the caller closes the socket.
+    Two guards make that unconditional, so the connection can never linger:
+      * the producer thread dying without its sentinel ends the stream, and
+      * `idle_timeout` seconds without a single event ends the stream with an
+        `error` + `done` instead of waiting on a stalled upstream forever.
+    """
+    yield open_comment  # first bytes out immediately → the client sees 200
+    deadline = time.time() + idle_timeout if idle_timeout else None
+    while True:
+        try:
+            item = q.get(timeout=1.0)
+        except queue.Empty:
+            if deadline is not None and time.time() > deadline:
+                yield "event: error\ndata: %s\n\n" % json.dumps(
+                    {"error": "chat stream timed out after %.0fs of silence" % idle_timeout})
+                break
+            if not worker.is_alive():
+                break  # producer gone without a sentinel: never hang the client
+            continue
+        if item is None:
+            break
+        if deadline is not None:
+            deadline = time.time() + idle_timeout
+        yield item
+    yield "event: %s\ndata: {}\n\n" % terminal
 
 
 def chat_stream_gen(sess, message, model):
@@ -1281,14 +1379,11 @@ def chat_stream_gen(sess, message, model):
             done["flag"] = True
             q.put(None)
 
-    threading.Thread(target=worker, daemon=True).start()
-    yield ": stream open\n\n"
-    while True:
-        item = q.get()
-        if item is None:
-            break
-        yield item
-    yield "event: done\ndata: {}\n\n"
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    # v0.6.1 (JAG-48): no keep-alive here — one `done`, then the generator is
+    # exhausted and sse_response closes the connection.
+    yield from sse_pump(q, t, idle_timeout=CHAT_STREAM_IDLE or None)
 
 
 def agent_stream_gen(goal, max_steps, model):
@@ -1307,14 +1402,10 @@ def agent_stream_gen(goal, max_steps, model):
         finally:
             q.put(None)
 
-    threading.Thread(target=worker, daemon=True).start()
-    yield ": agent stream open\n\n"
-    while True:
-        item = q.get()
-        if item is None:
-            break
-        yield item
-    yield "event: done\ndata: {}\n\n"
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    yield from sse_pump(q, t, open_comment=": agent stream open\n\n",
+                        idle_timeout=CHAT_STREAM_IDLE or None)
 
 
 def feed_gen(since=0):
@@ -1473,7 +1564,8 @@ class Handler(BaseHTTPRequestHandler):
                 port=getattr(self.server, "port", 8790), llm_probe=llm))
         if path == "/api/feed":
             since = int(qs.get("since", 0))
-            return sse_response(self, feed_gen(since))
+            # keep-alive is a /api/feed-only privilege (v0.6.1, JAG-48)
+            return sse_response(self, feed_gen(since), keepalive=True)
         if path == "/api/plan":
             return self._send(200, load_plan())
         if path == "/api/tasks":

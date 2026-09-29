@@ -617,7 +617,8 @@ def handle(handler, method, path, qs, body):
         if path == "/api/blackboard/watch":
             _lazy('swarm')
             since = int(qs.get("since", 0))
-            return _sse(handler, _SWARM.watch_gen(since))
+            # blackboard watcher = loopback tail, kept open on purpose (JAG-48)
+            return _sse(handler, _SWARM.watch_gen(since), keepalive=True)
 
         if path == "/api/checkpoints":
             _lazy('checkpoints')
@@ -777,8 +778,8 @@ def handle(handler, method, path, qs, body):
     return False
 
 
-def _sse(handler, gen):
-    return _srv().sse_response(handler, gen) or True
+def _sse(handler, gen, keepalive=False):
+    return _srv().sse_response(handler, gen, keepalive=keepalive) or True
 
 
 def _mcp_message(body):

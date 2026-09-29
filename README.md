@@ -17,6 +17,7 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 🖥️ **Frontier WebUI** — dark glassmorphism, live thinking, plan/tasks sidebar, command bar
 - ✨ **UX harness moderna (v0.5)** — mobile tab bar (chat/sessions/tasks/context/feed), live CoT drawer, todo breakdown of every request onto the task board, token budget meter with one-tap compaction, session switch/create/delete, `self` tool for agent self-knowledge
 - 🧩 **LLM task graph (v0.6)** — every run's first action is a model-generated `write_todos` call that builds a **live, interactive graph of that run** (nodes, deps, evidence; `graph.node.*` over SSE; evidence required for `done`)
+- ⏹️ **Streams that actually end (v0.6.1)** — the chat/agent SSE terminates right after its terminal `done` and releases the socket, so the app leaves `busy` and the next message is never blocked; keep-alive stays a `/api/feed`-only tail
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
 
@@ -169,17 +170,34 @@ curl -sX POST localhost:8790/api/runs/<run_id>/graph/nodes \
   `📎` evidence count, tap a node for its evidence + one-tap done/cancel/replan);
   the SparkPulse app (v1.6) has the same graph as a **tap-to-detail** panel.
 
+### v0.6.1 — chat SSE closes after `done`
+
+```bash
+python3 tests/v061_stream_close.py --live     # end-to-end evidence (8 checks, mock + live)
+```
+
+- **Terminal `done` ends the stream.** `GET|POST /api/chat/stream` (and
+  `/api/agent/run`) emit exactly one `done`, the generator is exhausted and the
+  socket is closed (flush + `SHUT_WR`) — clients that wait for EOF are released
+  immediately, so the next message is never blocked.
+- **Keep-alive is `/api/feed`-only.** Chat streams carry no `: ping` filler;
+  `/api/feed` and `/api/blackboard/watch` keep their keep-alive tail.
+- **Stalled upstream can't hang the run.** A silent router stream ends after
+  `SPARKFORGE_ROUTER_IDLE_TIMEOUT` (default 120 s) keeping the partial answer,
+  and the chat stream itself gives up after `SPARKFORGE_CHAT_STREAM_IDLE`
+  (default 900 s) with `error` + `done` instead of staying ESTAB forever.
+
 ## API (mobile contract)
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/status` | Router roster + DGX telemetry summary |
 | POST | `/api/chat` | One-shot chat `{session?, message, model?}` |
-| GET | `/api/chat/stream?session&message&model` | SSE chat stream (tokens + thinking) |
-| POST | `/api/chat/stream` | SSE chat stream — alias of the GET (`{message, session?, model?}`) |
+| GET | `/api/chat/stream?session&message&model` | SSE chat stream (tokens + thinking), closes after `done` |
+| POST | `/api/chat/stream` | SSE chat stream — alias of the GET (`{message, session?, model?}`), closes after `done` |
 | GET | `/api/selfcheck` | Health/version/model/router/token + LLM latency |
 | POST | `/api/model/ensure` | Warm the chat model (or `{model}`) before chatting |
-| GET | `/api/feed` | SSE harness event feed (`?since=<id>` to resume) |
+| GET | `/api/feed` | SSE harness event feed (`?since=<id>` to resume) — **keep-alive** tail |
 | GET/POST | `/api/plan` | Read / set goal; `POST /api/plan/generate {goal}` |
 | GET/POST/PATCH | `/api/tasks` | Task board; `PATCH /api/tasks {id, status?}` |
 | POST | `/api/agent/run` | Agent loop `{goal, max_steps, script?}` (also GET `/api/agent/run?goal=` for SSE) |
