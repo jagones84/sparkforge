@@ -1,0 +1,61 @@
+{
+  "ts": 1790668824.983,
+  "model": "default",
+  "mean_score": 0.6,
+  "per_task": [
+    {
+      "task": "plan-hello",
+      "goal": "Create a plan with one step titled 'say hello' and then finish.",
+      "run_id": "25906ceefc72",
+      "score": 0.6,
+      "checks": {
+        "actions_present": false,
+        "actions_in_order": false,
+        "finished": true,
+        "summary_nonempty": true,
+        "no_stall": true
+      },
+      "actions_seen": [
+        "plan_step",
+        "plan_step",
+        "complete_plan_step"
+      ]
+    },
+    {
+      "task": "task-triage",
+      "goal": "Add a task called 'water the plants', then mark the current plan progress in a note, then finish.",
+      "run_id": "01b4f725085e",
+      "score": 0.6,
+      "checks": {
+        "actions_present": false,
+        "actions_in_order": false,
+        "finished": true,
+        "summary_nonempty": true,
+        "no_stall": true
+      },
+      "actions_seen": [
+        "add_task",
+        "note",
+        "complete_task"
+      ]
+    },
+    {
+      "task": "status-check",
+      "goal": "Check the harness state, add a plan step 'review tasks', and finish with a summary of open work.",
+      "run_id": "32d7a21ad5f2",
+      "score": 0.6,
+      "checks": {
+        "actions_present": false,
+        "actions_in_order": false,
+        "finished": true,
+        "summary_nonempty": true,
+        "no_stall": true
+      },
+      "actions_seen": [
+        "plan_step",
+        "plan_step",
+        "add_task"
+      ]
+    }
+  ]
+}
