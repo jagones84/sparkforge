@@ -72,6 +72,14 @@ tools:
     roots:
       - "data/sandbox"
 
+  # surgical edit: exact search/replace inside a file (safer than rewriting
+  # the whole file with fs.write); same roots as fs.write
+  fs.edit:
+    enabled: true
+    approval: required
+    roots:
+      - "data/sandbox"
+
   # git — read-only subcommands auto-approved, mutating ones need approval
   git:
     enabled: true
@@ -110,5 +118,18 @@ tools:
 
   # self-knowledge: repo/config paths, skill/MCP install recipe, systemd state
   self:
+    enabled: true
+    approval: auto
+
+  # external MCP tools appear as <client>__<tool> (config/mcp_clients.yaml);
+  # default policy is approval=required. Read-only pmcp gateway probes are
+  # auto-approved so the agent can observe real MCP output.
+  pmcp__gateway.health:
+    enabled: true
+    approval: auto
+  pmcp__gateway.config_status:
+    enabled: true
+    approval: auto
+  pmcp__gateway.tasks_list:
     enabled: true
     approval: auto

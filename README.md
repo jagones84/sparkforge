@@ -19,6 +19,8 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 🧩 **LLM task graph (v0.6)** — every run's first action is a model-generated `write_todos` call that builds a **live, interactive graph of that run** (nodes, deps, evidence; `graph.node.*` over SSE; evidence required for `done`)
 - ⏹️ **Streams that actually end (v0.6.1)** — the chat/agent SSE terminates right after its terminal `done` and releases the socket, so the app leaves `busy` and the next message is never blocked; keep-alive stays a `/api/feed`-only tail
 - 🧾 **No request without an answer (v0.6.2)** — every request persists one `user` + one `assistant` turn (reply **or** explicit error turn), so a session never ends on an orphan user message; verified by `tests/v062_session_persistence.py`
+- 🔌 **Real MCP clients (v0.7)** — `config/mcp_clients.yaml` connects the agent to real MCP servers (e.g. `pmcp` on `:3344`, bearer auth via `${VAR}` headers + env_files); their tools appear as `<client>__<tool>` in the registry and the agent loop calls them through the approval gate, with the MCP output as observation; verified by `tests/v07_mcp_fsedit.py`
+- ✂️ **`fs.edit` (v0.7)** — surgical search/replace file edit (single or `replace_all`, refuses missing/ambiguous matches) instead of rewriting whole files with `fs.write`
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
 

@@ -1,0 +1,12 @@
+# SparkForge external MCP clients — v0.7
+# Each entry: command+args (stdio) OR url (HTTP streamable). Optional headers
+# support ${VAR} expansion; env_files are loaded before expansion (KEY=VALUE).
+env_files:
+  - ~/.hermes/.env
+
+clients:
+  pmcp:
+    url: http://127.0.0.1:3344/mcp
+    enabled: true
+    headers:
+      Authorization: Bearer ${PMCP_AUTH_TOKEN}

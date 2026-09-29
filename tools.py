@@ -89,6 +89,36 @@ def _fs_write(args, run_id):
             "backend": "host", "sandboxed": False, "exit_code": 0}
 
 
+def _fs_edit(args, run_id):
+    """Surgical edit: replace exact search text with replacement text."""
+    spec = registry.tool_spec("fs.edit")
+    path, err = registry.resolve_path(str(args.get("path", "")), spec["roots"])
+    if err:
+        return {"ok": False, "error": err}
+    if not os.path.isfile(path):
+        return {"ok": False, "error": "no such file: %s" % path}
+    search = str(args.get("search", ""))
+    replace = str(args.get("replace", ""))
+    if not search:
+        return {"ok": False, "error": "empty search string"}
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        content = f.read()
+    count = content.count(search)
+    if count == 0:
+        return {"ok": False, "error": "search text not found in %s" % path}
+    if count > 1 and not args.get("replace_all"):
+        return {"ok": False, "error": ("search text matches %d times in %s; "
+                                        "pass replace_all=true or use a more "
+                                        "specific search") % (count, path)}
+    n = count if args.get("replace_all") else 1
+    new = content.replace(search, replace, n)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new)
+    return {"ok": True, "path": path, "replacements": n, "bytes_before": len(content),
+            "bytes_after": len(new), "backend": "host", "sandboxed": False,
+            "exit_code": 0}
+
+
 # ------------------------------------------------------------------ git ------
 
 def _git(args, run_id):
@@ -203,12 +233,23 @@ def _self(args, run_id):
 
 
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
+             "fs.edit": _fs_edit,
              "git": _git, "http": _http, "browser": _browser, "self": _self}
 
 
 def execute(tool, args, run_id=None):
     fn = _DISPATCH.get(tool)
     if fn is None:
+        # external MCP tools (<client>__<tool>) route through the MCP client
+        if "__" in tool:
+            try:
+                import mcp_client
+                res = mcp_client.call_tool(tool, args, run_id=run_id)
+                res["duration_ms"] = res.get("duration_ms", 0)
+                return res
+            except Exception as e:  # noqa: BLE001
+                return {"ok": False, "error": "external MCP call failed: %s" % e,
+                        "tool": tool}
         return {"ok": False, "error": "no implementation for tool %r" % tool, "tool": tool}
     args = args or {}
     try:

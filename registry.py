@@ -64,6 +64,19 @@ TOOL_SCHEMAS = {
         "required": ["path", "content"],
         "subject": "path",
     },
+    "fs.edit": {
+        "description": ("Surgical file edit: replace a search string with a replacement "
+                        "(default: first occurrence; replace_all=true for every "
+                        "occurrence). Fails if the search string is not found or is "
+                        "ambiguous (multiple matches with replace_all=false)."),
+        "type": "object",
+        "properties": {"path": {"type": "string"},
+                       "search": {"type": "string", "description": "exact text to find"},
+                       "replace": {"type": "string", "description": "replacement text"},
+                       "replace_all": {"type": "boolean", "default": False}},
+        "required": ["path", "search", "replace"],
+        "subject": "path",
+    },
     "git": {
         "description": "Run a git subcommand in a repository (read-only ones are auto-approved; push is denied).",
         "type": "object",
@@ -157,21 +170,43 @@ def workspace_dir():
 
 # ------------------------------------------------------------------ tools ----
 
+def _external_tools():
+    """External MCP tools (mcp_client), lazily; empty on any failure."""
+    try:
+        import mcp_client
+        if not mcp_client.get_manager().sessions:
+            mcp_client.get_manager().start_all()
+        return {t["name"]: t for t in mcp_client.list_tools()}
+    except Exception:
+        return {}
+
+
 def tool_names():
-    """All known tools: registry entries from config ∪ shipped schemas."""
-    return sorted(set(load_config()["tools"]) | set(TOOL_SCHEMAS))
+    """All known tools: registry entries from config ∪ shipped schemas ∪ external MCP."""
+    return sorted(set(load_config()["tools"]) | set(TOOL_SCHEMAS) | set(_external_tools()))
 
 
 def tool_spec(name):
     """Merged {name, enabled, approval, ...policy, schema} or None if unknown."""
     schema = TOOL_SCHEMAS.get(name)
+    ext = None
+    if schema is None:
+        ext = _external_tools().get(name)
+        if ext:
+            ins = ext.get("inputSchema") or {}
+            schema = {"description": ext.get("description", ""),
+                      "type": ins.get("type", "object"),
+                      "properties": ins.get("properties", {}),
+                      "required": ins.get("required", [])}
     entry = load_config()["tools"].get(name)
     if schema is None and not entry:
         return None
+    if entry is None and ext:
+        entry = {}  # external MCP default policy below
     entry = entry or {}
     return {
         "name": name,
-        "enabled": bool(entry.get("enabled", False)),
+        "enabled": bool(entry.get("enabled", True if ext else False)),
         "approval": entry.get("approval", "required"),
         "auto_approve": list(entry.get("auto_approve") or []),
         "deny": list(entry.get("deny") or []),

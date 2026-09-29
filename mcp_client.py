@@ -56,9 +56,13 @@ SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 _log_lock = threading.Lock()
 
 
-def log(*a, **kw):
+def log(fmt, *a):
     with _log_lock:
-        print("[mcp-client]", *a, file=sys.stderr, flush=True, **kw)
+        try:
+            msg = fmt % a if a else fmt
+        except TypeError:
+            msg = " ".join(str(x) for x in (fmt,) + a)
+        print("[mcp-client]", msg, file=sys.stderr, flush=True)
 
 
 # --------------------------------------------------------------- session ---
@@ -79,6 +83,8 @@ class MCPSession:
         self._connected = False
         self._connect_time = None
         self._http_base = None    # HTTP transport base URL
+        self._http_headers = {}   # extra HTTP headers (e.g. Authorization)
+        self._http_session_id = None  # MCP streamable-HTTP session id
 
     @property
     def connected(self):
@@ -121,14 +127,19 @@ class MCPSession:
     def _send_raw(self, obj, timeout=20):
         mid = self._next_id()
         q = queue.Queue()
+        is_notification = str(obj.get("method", "")).startswith("notifications/")
         with self._lock:
             self._pending[mid] = q
-            req = {**obj, "id": mid}
+            req = {"jsonrpc": "2.0", **obj}
+            if not is_notification:
+                req["id"] = mid
             if self.proc and self.proc.stdin:
                 self.proc.stdin.write(json.dumps(req, ensure_ascii=False) + "\n")
                 self.proc.stdin.flush()
             elif self._http_base:
-                return self._http_call(obj, timeout)
+                resp = self._http_call(req, timeout)
+                self._pending.pop(mid, None)
+                return resp
             else:
                 self._pending.pop(mid, None)
                 return None
@@ -146,25 +157,58 @@ class MCPSession:
 
     # ---- HTTP transport ----
 
-    def _connect_http(self, url):
+    def _connect_http(self, url, headers=None):
         if not url.startswith("http"):
             url = "http://" + url
         self._http_base = url.rstrip("/")
+        self._http_headers = {
+            "Accept": "application/json, text/event-stream",
+        }
+        for k, v in (headers or {}).items():
+            self._http_headers[k] = os.path.expandvars(str(v))
         log("%s: HTTP base = %s", self.name, self._http_base)
         return True
+
+    @staticmethod
+    def _parse_http_body(body, content_type):
+        """Parse a streamable-HTTP response body (JSON or SSE data: lines)."""
+        text = (body or "").strip()
+        if not text:
+            return None
+        if "text/event-stream" in (content_type or ""):
+            last = None
+            for line in text.splitlines():
+                if line.startswith("data:"):
+                    try:
+                        last = json.loads(line[5:].strip())
+                    except json.JSONDecodeError:
+                        continue
+            return last
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return None
 
     def _http_call(self, obj, timeout=20):
         import urllib.request as ureq
         import urllib.error as uerr
         data = json.dumps(obj).encode("utf-8")
-        req = ureq.Request(self._http_base, data=data,
-                           headers={"Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json", **self._http_headers}
+        if self._http_session_id:
+            headers["Mcp-Session-Id"] = self._http_session_id
+        req = ureq.Request(self._http_base, data=data, headers=headers)
         try:
             with ureq.urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read().decode("utf-8") or "{}")
+                self._http_session_id = self._http_session_id or \
+                    r.headers.get("Mcp-Session-Id")
+                return self._parse_http_body(r.read().decode("utf-8"),
+                                             r.headers.get("Content-Type")) \
+                    or {}
         except uerr.HTTPError as e:
             try:
-                return json.loads(e.read().decode())
+                return self._parse_http_body(e.read().decode(),
+                                             e.headers.get("Content-Type")) \
+                    or {"error": {"code": e.code, "message": str(e)}}
             except Exception:
                 return {"error": {"code": e.code, "message": str(e)}}
         except Exception as e:
@@ -243,6 +287,27 @@ class MCPSession:
 
 # ------------------------------------------------------------- manager ----
 
+def _load_env_files(paths):
+    """Load KEY=VALUE lines from env files into os.environ (for ${VAR} refs)."""
+    for path in paths or []:
+        path = os.path.expanduser(str(path))
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, val = line.partition("=")
+                    key, val = key.strip(), val.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+            log("loaded env file %s", path)
+        except Exception as e:
+            log("env file %s: %s", path, e)
+
+
 def _load_config():
     """Load client config from yaml or json."""
     if os.path.exists(CONFIG_PATH):
@@ -250,6 +315,7 @@ def _load_config():
             import yaml  # noqa: F811
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
+            _load_env_files(data.get("env_files"))
             return data.get("clients") or {}
         except ImportError:
             log("PyYAML not installed but %s exists", CONFIG_PATH)
@@ -260,6 +326,7 @@ def _load_config():
     if os.path.exists(CONFIG_JSON_PATH):
         with open(CONFIG_JSON_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
+        _load_env_files(data.get("env_files"))
         return data.get("clients") or {}
     return {}
 
@@ -317,7 +384,7 @@ class MCPClientManager:
                             cfg["command"], list(cfg.get("args", [])),
                             cfg.get("env", {}))
                     elif cfg.get("url"):
-                        ok = session._connect_http(cfg["url"])
+                        ok = session._connect_http(cfg["url"], cfg.get("headers"))
                     if ok:
                         init_ok = session.initialize()
                         if init_ok:
