@@ -64,20 +64,44 @@ See evidence in `tests/v02_acceptance.py` (meta, acp, swarm are tested through M
   Endpoint: `POST /api/subagent/spawn`, `POST /api/subagent/collect`.
   MCP: `sparkforge_subagent`.
 
-## Remaining (v0.3 / v0.4 / polish)
+## Done — v0.4 "ops + mobile + eval" (2026-09-29)
 
-- [ ] **v0.2 — SparkPulse bridge**: "Command" tab in the SparkPulse Android app hitting `/api/chat/stream` + `/api/feed`; `POST /api/commands` adapter in sparkpulse-server
-- [ ] **v0.2 — WebUI auth flow** for `--token` mode (token prompt + `?token=` on EventSource) — *present in the tree, not covered by this task's acceptance run*
-- [ ] **v0.3 — MCP client**: connect the existing MCP servers (Filesystem, Playwright, memory) as native tools (Goose pattern)
-- [ ] **v0.3 — Subagent delegation** (deepagents pattern): spawn child agent runs from the loop
+Deliverable from `docs/specs/2026-09-29-frontier-harness-design.md` §3 (v0.4).
+Verified by `tests/v04_acceptance.py` — raw report in `data/v04-acceptance.json`
+(generated against the live systemd service on `127.0.0.1:8790`).
+
+- ✅ **Durable event store (SQLite)** — every harness event lands in `data/events.db`
+  (`events` table, monotonic ids); the in-memory buffer is only a cache, so
+  backlog replay works after restart; SSE feed reconnects with `?since=<id>`
+  and replays every event after it
+- ✅ **OpenTelemetry tracing** — `otel_tracing.py`: when the OTel SDK is installed,
+  each run records genuine spans (shared `trace_id`, span hierarchy, nanosecond
+  timestamps) exported synchronously into the `runs` table; without the SDK a
+  local span list is kept. `GET /api/runs/<id>/trace` serves spans + token/cost
+- ✅ **Token/cost accounting** — every chat/agent run tracks tokens in/out and
+  estimated USD cost (local models price 0 by default; `MODEL_PRICES` table)
+- ✅ **systemd always-on** — `deploy/sparkforge.service` (user unit, `Restart=always`,
+  token via `~/.config/sparkforge/env` EnvironmentFile); API refuses
+  unauthenticated requests (401) when started with `--token`
+- ✅ **WebUI auth flow** — token prompt persisted to `localStorage`, `?token=` on
+  every EventSource/API call
+- ✅ **Voice** — `POST /api/voice/stt` (raw `audio/wav` upload or path) via whisper
+  (whisper.cpp or openai-whisper CLI auto-detected), `POST /api/voice/tts` via
+  sherpa-onnx VITS (+ `tokens.txt`/`espeak-ng-data` config), `GET /api/voice/audio/<file>`
+  serves the wav back, `GET /api/voice/status` reports backend availability
+- ✅ **Eval harness** — `eval/gold_tasks.json` gold set; `POST /api/eval/run` runs
+  the agent loop per task and scores it (expected actions present + in order as a
+  subsequence, finished, summary non-empty, no stall → score in [0,1]); results
+  persisted under `eval/results/eval-<ts>.json`
+- ✅ **SparkForge-side mobile contract** — SSE endpoints (`/api/chat/stream`, `/api/feed?since=`)
+  + approvals queue + `run_id` events on chat streams, so the phone can stream
+  live (SparkPulse app-side SSE consumption tracked separately, see Remaining)
+
+## Remaining (v0.3 leftovers / polish)
+
+- [ ] **SparkPulse app-side streaming** (native SSE): consume `/api/chat/stream` + `/api/feed?since=` in the Forge tab instead of one-shot REST, Command tab with live plan/tasks/approvals — server-side contract is live and authed
 - [ ] **v0.3 — Checkpoint / resume / rollback** of plan, tasks and transcript with idempotency
-- [ ] **v0.3 — Persistent memory store** with write rules (markdown + optional vector index)
 - [ ] **v0.3 — Context engineering**: transcript compaction, token budget, retrieval
-- [ ] **v0.4 — Durable event store (SQLite) + replay**, OTel tracing + token/cost accounting per run
-- [ ] **v0.4 — systemd unit** for always-on service (loopback feed alive for the phone 24/7) + API auth token
-- [ ] **v0.4 — Mobile streaming** in SparkPulse (SSE) + Command tab with live approvals
-- [ ] **v0.4 — Voice**: whisper.cpp STT + sherpa-onnx TTS
-- [ ] **v0.4 — Eval harness**: gold task set + scoring of loop quality (Winder.AI pattern)
 
 ## Remaining bullets (machine-readable)
 

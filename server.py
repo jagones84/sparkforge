@@ -27,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import api_v02  # v0.2 surface: tool registry, approvals, HITL control, MCP
 import approvals
+import otel_tracing  # v0.4: OpenTelemetry spans + fallback local spans
 import registry
 import sandbox
 
@@ -94,12 +95,11 @@ def publish(kind, **data):
 
 
 def events_since(last_id):
-    """Replay events after last_id: memory cache first, SQLite as source of truth."""
+    """Replay events after last_id: memory cache first, SQLite as source of truth.
+    An empty in-memory buffer must NOT short-circuit replay — the store is durable."""
     with _feed_lock:
         if _feed and _feed[0]["id"] <= last_id + 1:
             return [e for e in _feed if e["id"] > last_id]
-        if not _feed and last_id == 0:
-            return []
     with _db_lock:
         rows = db().execute(
             "SELECT id, ts, kind, data FROM events WHERE id > ? ORDER BY id", (last_id,)
@@ -319,7 +319,11 @@ def count_tokens(text):
 
 
 class RunTrace:
-    """Records spans + token/cost accounting for one run (chat, plan, agent)."""
+    """Records spans + token/cost accounting for one run (chat, plan, agent).
+
+    Spans go through OpenTelemetry when the SDK is installed (see
+    otel_tracing.py); otherwise a lightweight local span list is kept.
+    """
 
     def __init__(self, kind, goal=None, model=None):
         self.id = uuid.uuid4().hex[:12]
@@ -336,10 +340,31 @@ class RunTrace:
                 "INSERT INTO runs(id, kind, goal, model, ts) VALUES(?,?,?,?,?)",
                 (self.id, kind, self.goal, model, self.ts))
             db().commit()
+        self.otel = otel_tracing.init_provider()
+        self._otel_root = None
+        self._otel_ctx = None
+        if self.otel:
+            from opentelemetry.trace import set_span_in_context
+            attrs = {"sparkforge.run_id": self.id, "sparkforge.kind": kind}
+            if self.goal:
+                attrs["sparkforge.goal"] = self.goal
+            if self.model:
+                attrs["sparkforge.model"] = self.model
+            self._otel_root = otel_tracing.get_tracer().start_span("sparkforge.run", attributes=attrs)
+            self._otel_ctx = set_span_in_context(self._otel_root)
 
     def span(self, name, **attrs):
         s = {"name": name, "ts": round(time.time(), 3), **attrs}
         self.spans.append(s)
+        if self.otel and self._otel_root is not None:
+            otel_attrs = {"sparkforge.run_id": self.id}
+            otel_attrs.update({k: v for k, v in attrs.items() if v is not None})
+            try:
+                child = otel_tracing.get_tracer().start_span(
+                    name, context=self._otel_ctx, attributes=otel_attrs)
+                child.end()
+            except Exception:
+                pass
         return s
 
     def llm_call(self, messages, answer):
@@ -353,11 +378,21 @@ class RunTrace:
         self.status = status
         price = MODEL_PRICES.get(self.model or "", [0.0, 0.0])
         cost = (self.tokens_in / 1e6) * price[0] + (self.tokens_out / 1e6) * price[1]
+        spans = self.spans
+        if self.otel and self._otel_root is not None:
+            try:
+                self._otel_root.set_attribute("sparkforge.status", status)
+                self._otel_root.end()
+            except Exception:
+                pass
+            otel_spans = otel_tracing.take_spans(self.id)
+            if otel_spans:
+                spans = otel_spans
         with _db_lock:
             db().execute(
-                "UPDATE runs SET tokens_in=?, tokens_out=?, cost_usd=?, status=?, spans=? WHERE id=?",
+                "UPDATE runs SET tokens_in=?, tokens_out=?, cost_usd=?, status=?, model=?, spans=? WHERE id=?",
                 (self.tokens_in, self.tokens_out, round(cost, 6), status,
-                 json.dumps(self.spans, ensure_ascii=False), self.id))
+                 self.model, json.dumps(spans, ensure_ascii=False), self.id))
             db().commit()
 
     def summary(self):
@@ -374,9 +409,12 @@ def get_run_trace(run_id):
             " FROM runs WHERE id=?", (run_id,)).fetchone()
     if not row:
         return None
+    spans = json.loads(row[9])
+    trace_id = next((s.get("trace_id") for s in spans if s.get("trace_id")), None)
     return {"run_id": row[0], "kind": row[1], "goal": row[2], "model": row[3],
             "ts": row[4], "tokens_in": row[5], "tokens_out": row[6],
-            "cost_usd": row[7], "status": row[8], "spans": json.loads(row[9])}
+            "cost_usd": row[7], "status": row[8], "spans": spans,
+            "otel": bool(trace_id), "trace_id": trace_id}
 
 
 def runs_summary(limit=50):
@@ -510,7 +548,7 @@ def apply_agent_action(act):
         return "plan step added: %s (%s)" % (step["title"], step["id"])
     if action == "complete_plan_step":
         for s in plan.get("steps", []):
-            if s["id"] == act.get("id") or s["title"] == act.get("title"):
+            if s.get("id") == act.get("id") or s.get("title") == act.get("title"):
                 s["done"] = True
                 save_plan(plan)
                 return "plan step completed: %s" % s["title"]
@@ -523,7 +561,7 @@ def apply_agent_action(act):
         return "task added: %s (%s)" % (t["title"], t["id"])
     if action == "complete_task":
         for t in tasks.get("tasks", []):
-            if t["id"] == act.get("id") or t["title"] == act.get("title"):
+            if t.get("id") == act.get("id") or t.get("title") == act.get("title"):
                 t["status"] = "done"
                 t["done_ts"] = round(time.time(), 3)
                 save_tasks(tasks)
@@ -599,19 +637,26 @@ def eval_list_tasks():
         return []
 
 
+def _is_subsequence(needle, haystack):
+    it = iter(haystack)
+    return all(any(x == n for x in it) for n in needle)
+
+
 def eval_score(result, task):
     """Score one agent run against the gold task.
 
     Returns dict with per-criterion pass/bool and total score in [0,1].
-    Criteria (pattern Winder.AI): action sequence contains the expected ones
-    in order, finish summary is non-empty, loop did not stall.
+    Criteria (pattern Winder.AI): every expected action appears, the expected
+    ones appear in order (as a subsequence — extra legitimate actions don't
+    penalize), finish summary is non-empty, loop did not stall.
     """
     trace = result.get("trace") or []
-    got_actions = [t.get("action") for t in trace if t.get("action") != "finish"]
+    # finish is a real action and gold sets list it in expected_actions
+    got_actions = [t.get("action") for t in trace if t.get("action")]
     expected = task.get("expected_actions", [])
     checks = {
         "actions_present": all(a in got_actions for a in expected),
-        "actions_in_order": [a for a in got_actions if a in expected] == expected,
+        "actions_in_order": _is_subsequence(expected, got_actions),
         "finished": any(t.get("action") == "finish" for t in trace),
         "summary_nonempty": bool((trace[-1].get("summary", "") if trace else "").strip()),
         "no_stall": all((t.get("observation") or t.get("summary") or "")
@@ -656,37 +701,76 @@ WHISPER_MODEL = os.environ.get("SPARKFORGE_WHISPER_MODEL", "")
 SHERPA_TTS_MODEL = os.environ.get("SPARKFORGE_SHERPA_TTS_MODEL", "")
 
 
+def _whisper_model_arg():
+    """Model argument for the STT CLI: a real file path when configured as one,
+    otherwise the bare name (openai-whisper resolves names from its cache)."""
+    if WHISPER_MODEL and os.path.isfile(WHISPER_MODEL):
+        return WHISPER_MODEL
+    return WHISPER_MODEL
+
+
+_whisper_style_cache = {}
+
+
+def _whisper_style(bin_path):
+    """'openai' if the CLI speaks openai-whisper flags (--output_format), else
+    'cpp' for whisper.cpp-style CLIs (-m/-nt/-f). Detected once per process."""
+    if bin_path in _whisper_style_cache:
+        return _whisper_style_cache[bin_path]
+    style = "cpp"
+    import subprocess as sp
+    try:
+        out = sp.run([bin_path, "--help"], capture_output=True, text=True, timeout=15)
+        blob = (out.stdout or "") + (out.stderr or "")
+        style = "openai" if "output_format" in blob else "cpp"
+    except Exception:
+        pass
+    _whisper_style_cache[bin_path] = style
+    return style
+
+
 def voice_status():
-    """Detect whisper.cpp and sherpa-onnx availability (evidence-based)."""
+    """Detect whisper.cpp / openai-whisper and sherpa-onnx availability (evidence-based)."""
     import shutil
-    stt = {"backend": "whisper.cpp", "bin": WHISPER_BIN,
-           "available": bool(shutil.which(WHISPER_BIN)) and bool(WHISPER_MODEL)}
+    bin_found = bool(shutil.which(WHISPER_BIN) or os.path.isfile(WHISPER_BIN))
+    stt = {"backend": "whisper", "bin": WHISPER_BIN,
+           "style": _whisper_style(WHISPER_BIN) if bin_found else None,
+           "model": WHISPER_MODEL,
+           "available": bin_found and bool(WHISPER_MODEL)}
     tts = {"backend": "sherpa-onnx", "model": SHERPA_TTS_MODEL, "available": False}
     if SHERPA_TTS_MODEL:
         try:
             import sherpa_onnx  # noqa: F401
             tts["available"] = True
         except ImportError:
-            try:
-                import subprocess as sp
-                sp.run(["python3", "-c", "import sherpa_onnx"], check=True, timeout=10)
-                tts["available"] = True
-            except Exception:
-                pass
+            pass
     return {"stt": stt, "tts": tts}
 
 
 def voice_stt(wav_path):
-    """Transcribe a wav with whisper.cpp. Returns {text} or {error}."""
+    """Transcribe a wav with the configured whisper CLI (openai-whisper or
+    whisper.cpp style, auto-detected). Returns {text} or {error}."""
     if not wav_path or not os.path.isfile(wav_path):
         return {"error": "wav path required"}
-    if not WHISPER_MODEL or not os.path.isfile(WHISPER_MODEL):
+    if not WHISPER_MODEL:
         return {"error": "whisper model not configured (SPARKFORGE_WHISPER_MODEL)"}
     import subprocess as sp
+    import tempfile
     try:
-        out = sp.run([WHISPER_BIN, "-m", WHISPER_MODEL, "-nt", "-f", wav_path],
-                     capture_output=True, text=True, timeout=120)
-        text = out.stdout.strip()
+        if _whisper_style(WHISPER_BIN) == "openai":
+            with tempfile.TemporaryDirectory() as outdir:
+                out = sp.run([WHISPER_BIN, "--model", _whisper_model_arg(),
+                              "--output_format", "txt", "--output_dir", outdir,
+                              wav_path],
+                             capture_output=True, text=True, timeout=300)
+                stem = os.path.splitext(os.path.basename(wav_path))[0] + ".txt"
+                txt = os.path.join(outdir, stem)
+                text = open(txt, encoding="utf-8").read().strip() \
+                    if os.path.isfile(txt) else (out.stdout or "").strip()
+        else:
+            out = sp.run([WHISPER_BIN, "-m", WHISPER_MODEL, "-nt", "-f", wav_path],
+                         capture_output=True, text=True, timeout=120)
+            text = out.stdout.strip()
         publish("voice.stt", chars=len(text))
         return {"text": text}
     except Exception as e:
@@ -694,27 +778,33 @@ def voice_stt(wav_path):
 
 
 def voice_tts(text):
-    """Synthesize speech with sherpa-onnx to a wav in data/. Returns {path} or {error}."""
+    """Synthesize speech with sherpa-onnx (VITS/piper) to a wav in data/.
+    Returns {path, file, seconds} or {error}."""
     if not text.strip():
         return {"error": "text required"}
-    if not SHERPA_TTS_MODEL:
+    if not SHERPA_TTS_MODEL or not os.path.isfile(SHERPA_TTS_MODEL):
         return {"error": "TTS model not configured (SPARKFORGE_SHERPA_TTS_MODEL)"}
     try:
         import sherpa_onnx
         import soundfile as sf
-        sid = os.path.basename(SHERPA_TTS_MODEL)
+        mdir = os.path.dirname(SHERPA_TTS_MODEL)
+        tokens = os.path.join(mdir, "tokens.txt")
+        espeak = os.path.join(mdir, "espeak-ng-data")
+        vits = sherpa_onnx.OfflineTtsVitsModelConfig(
+            model=SHERPA_TTS_MODEL, tokens=tokens,
+            data_dir=espeak if os.path.isdir(espeak) else "")
         cfg = sherpa_onnx.OfflineTtsConfig(
-            model=sherpa_onnx.OfflineTtsModelConfig(
-                vits=sherpa_onnx.OfflineTtsVitsModelConfig(SHERPA_TTS_MODEL),
-                num_threads=2),
+            model=sherpa_onnx.OfflineTtsModelConfig(vits=vits, num_threads=2),
             rule_fsts="", max_num_sentences=0)
         tts = sherpa_onnx.OfflineTts(cfg)
         audio = tts.generate(text)
         os.makedirs(DATA_DIR, exist_ok=True)
-        path = os.path.join(DATA_DIR, "tts-%s.wav" % uuid.uuid4().hex[:8])
+        fname = "tts-%s.wav" % uuid.uuid4().hex[:8]
+        path = os.path.join(DATA_DIR, fname)
         sf.write(path, audio.samples, audio.sample_rate)
-        publish("voice.tts", chars=len(text), path=os.path.basename(path))
-        return {"path": path}
+        publish("voice.tts", chars=len(text), path=fname)
+        return {"path": path, "file": fname,
+                "seconds": round(len(audio.samples) / max(audio.sample_rate, 1), 2)}
     except Exception as e:
         return {"error": str(e)}
 
@@ -759,7 +849,15 @@ def chat_stream_gen(sess, message, model):
 
     def worker():
         try:
-            chat_once(sess, message, model, on_delta)
+            trace = RunTrace("chat", goal=message[:120], model=model)
+            trace.span("chat.stream", session=sess["id"])
+            q.put("event: chat.run\ndata: %s\n\n" % json.dumps({"run_id": trace.id}))
+            try:
+                chat_once(sess, message, model, on_delta, trace=trace)
+                trace.finish("done")
+            except Exception as e:
+                trace.finish("error")
+                raise
         except Exception as e:
             q.put("event: error\ndata: %s\n\n" % json.dumps({"error": str(e)}))
         finally:
@@ -846,7 +944,7 @@ def status_payload():
     plan, tasks = load_plan(), load_tasks()
     probe = sandbox.probe()
     return {
-        "service": "sparkforge", "version": "0.2.0", "ts": round(time.time()),
+        "service": "sparkforge", "version": "0.4.0", "ts": round(time.time()),
         "router": ROUTER_BASE, "models": router_models(),
         "default_model": default_model(),
         "telemetry": telemetry_summary(),
@@ -868,8 +966,12 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "SparkForge/0.1"
 
     def _send(self, code, obj, ctype="application/json"):
-        body = (json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
-                if isinstance(obj, (dict, list)) else obj.encode("utf-8"))
+        if isinstance(obj, (dict, list)):
+            body = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
+        elif isinstance(obj, bytes):
+            body = obj
+        else:
+            body = obj.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -943,8 +1045,8 @@ class Handler(BaseHTTPRequestHandler):
             return sse_response(self, agent_stream_gen(goal, int(qs.get("max_steps", 6)), qs.get("model")))
         if path.startswith("/api/runs/"):
             parts = path.strip("/").split("/")
-            if len(parts) == 4 and parts[2] == "trace":
-                t = get_run_trace(parts[3])
+            if len(parts) == 4 and parts[3] == "trace":
+                t = get_run_trace(parts[2])
                 return self._send(200, t) if t else self._send(404, {"error": "run not found"})
             return self._send(404, {"error": "not found"})
         if path == "/api/runs":
@@ -953,6 +1055,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, eval_list_tasks())
         if path == "/api/voice/status":
             return self._send(200, voice_status())
+        if path.startswith("/api/voice/audio/"):
+            fname = path.split("/")[-1]
+            if not fname.startswith("tts-") or not fname.endswith(".wav") \
+                    or "/" in fname or ".." in fname:
+                return self._send(404, {"error": "not found"})
+            fpath = os.path.join(DATA_DIR, fname)
+            if not os.path.isfile(fpath):
+                return self._send(404, {"error": "not found"})
+            with open(fpath, "rb") as f:
+                return self._send(200, f.read(), ctype="audio/wav")
         return self._send(404, {"error": "not found"})
 
     # ---- POST ----
@@ -961,6 +1073,24 @@ class Handler(BaseHTTPRequestHandler):
         if not check_auth(self.headers, qs):
             return self._send(401, {"error": "unauthorized"})
         path = path
+        # Raw audio upload (phone records a wav and POSTs it directly)
+        ctype = (self.headers.get("Content-Type") or "")
+        if path == "/api/voice/stt" and ctype.startswith("audio/"):
+            n = int(self.headers.get("Content-Length") or 0)
+            if not n:
+                return self._send(400, {"error": "audio body required"})
+            import tempfile
+            ext = ".wav"
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
+                f.write(self.rfile.read(n))
+                tmp = f.name
+            try:
+                return self._send(200, voice_stt(tmp))
+            finally:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
         body = self._body()
         if api_v02.handle(self, "POST", path, qs, body):
             return
@@ -972,11 +1102,16 @@ class Handler(BaseHTTPRequestHandler):
             sess = get_or_create_session(body.get("session"))
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
+            trace = RunTrace("chat", goal=message[:120], model=body.get("model"))
+            trace.span("chat.once", session=sess["id"])
             try:
-                reply, model = chat_once(sess, message, body.get("model"))
+                reply, model = chat_once(sess, message, body.get("model"), trace=trace)
             except Exception as e:
+                trace.finish("error")
                 return self._send(502, {"error": "router call failed: %s" % e})
-            return self._send(200, {"session": sess["id"], "model": model,
+            trace.model = model
+            trace.finish("done")
+            return self._send(200, {"session": sess["id"], "model": model, "run_id": trace.id,
                                     "reply": reply["content"], "reasoning": reply.get("reasoning")})
         if path == "/api/plan":
             goal = body.get("goal", "")

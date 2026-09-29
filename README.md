@@ -78,6 +78,29 @@ Register SparkForge as an MCP server (stdio):
     "env": {"SPARKFORGE_URL": "http://127.0.0.1:8790"} } } }
 ```
 
+### v0.4 — ops, tracing, voice, eval
+
+```bash
+python3 tests/v04_acceptance.py                # end-to-end evidence (17 checks, live service)
+curl -s http://127.0.0.1:8790/api/eval/tasks   # gold task set
+curl -sX POST http://127.0.0.1:8790/api/eval/run -d '{"task_id":"plan-hello"}'  # score a run
+curl -s http://127.0.0.1:8790/api/runs/<id>/trace   # OTel spans + token/cost per run
+curl -s http://127.0.0.1:8790/api/voice/status      # STT/TTS backend availability
+# STT: POST the recorded wav as audio/wav; TTS: {"text":"..."} -> wav served from
+# /api/voice/audio/<file> — both power phone voice commands over Tailscale.
+```
+
+Always-on service (user unit, auto-restart, token via `~/.config/sparkforge/env`):
+
+```bash
+cp deploy/sparkforge.service ~/.config/systemd/user/ && systemctl --user daemon-reload
+systemctl --user enable --now sparkforge.service
+journalctl --user -u sparkforge.service -f
+```
+
+- **Durable events**: the SSE feed replays from SQLite — reconnect with `/api/feed?since=<id>`, or read the backlog as JSON via `/api/feed/recent`.
+- **Tracing**: runs carry genuine OpenTelemetry spans (trace_id, hierarchy, ns timestamps) when the OTel SDK is installed; token/cost accounting is recorded for every run.
+
 ## API (mobile contract)
 
 | Method | Path | Purpose |
