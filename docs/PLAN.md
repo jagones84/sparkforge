@@ -23,6 +23,10 @@ A state-of-the-art, mobile-commandable agent harness on the DGX Spark: local LLM
 Deliverable from `docs/specs/2026-09-29-frontier-harness-design.md` §3 (v0.2).
 Everything below is verified by `tests/v02_acceptance.py` (8/8 checks) — see
 [docs/V02-EVIDENCE.md](V02-EVIDENCE.md) for the raw command+output evidence.
+Re-verified independently on 2026-09-29 by a by-hand run (agent run `run_684e5723`
+→ approval `e65e4b7e90` → sandboxed shell `exit=0`, `NET_BLOCKED`; MCP stdio session
+`initialize`/`tools/list`/`tools/call` → reply) — same evidence file, §"Independent
+re-verification".
 
 - ✅ **Tool registry** — `config/tools.yaml` declares `shell`, `fs.read`, `fs.write`, `git`, `http`, `browser` with a JSON schema, `enabled` allowlist, `approval` policy, per-tool `auto_approve` regexes and hard `deny` regexes (`registry.py`, `tools.py`)
 - ✅ **Approval gates** — `/api/approvals` queue: every action is recorded (auto-approved, pending, approved, denied, expired); `/api/tools/call` and the agent loop both go through it; the tool result becomes the agent's `observation`

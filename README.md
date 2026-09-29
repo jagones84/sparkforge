@@ -100,6 +100,12 @@ Optional auth: start with `--token <t>` and send `Authorization: Bearer <t>`.
 4. **Real sandbox.** `shell` runs on a fresh per-run scratch dir in `docker --network none --read-only --cap-drop ALL --user 65534` (falls back to `bwrap`/`nsjail`, and refuses to silently degrade to the host). Verified: network egress fails inside the container.
 5. **Observable.** Every decision and tool result is a feed event and lands in the run trace; `tests/v02_acceptance.py` proves each claim with command + output + numbers.
 
+**Verification.** `tests/v02_acceptance.py` passes **8/8** against a running instance
+(`./run.sh`; report in `data/v02-acceptance.json`), and the two v0.2 acceptance criteria
+were reproduced by hand — an agent run executing a real sandboxed shell command with a
+recorded approval whose output is the observation, and a Paperclip-style MCP session that
+receives a reply. Raw command + output evidence: [docs/V02-EVIDENCE.md](docs/V02-EVIDENCE.md).
+
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the research base in
