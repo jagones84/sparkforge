@@ -3,7 +3,7 @@
 
 Verifies, against a *running* SparkForge, with command + output + numbers:
   A. always-on: systemd user unit active; API refuses unauthenticated (401),
-     accepts the bearer token (200); /api/status reports version 0.4.0
+     accepts the bearer token (200); /api/status reports version >= 0.5.0
   B. durable event store (SQLite) + replay: events survive restarts and the
      feed reconnects with ?since=N, replaying every event after N
   C. tracing: a chat run produces genuine OpenTelemetry spans (shared
@@ -79,8 +79,8 @@ def a_alwayson_and_auth():
           no_tok.get("error") == "unauthorized" and "service" in with_tok,
           "no-token -> %s; with-token -> service=%s version=%s"
           % (no_tok.get("error"), with_tok.get("service"), with_tok.get("version")))
-    check("A3 version 0.4.0",
-          with_tok.get("version") == "0.4.0",
+    check("A3 version >= 0.5.0",
+          tuple(int(x) for x in with_tok.get("version", "0").split(".")) >= (0, 5, 0),
           "/api/status.version = %r" % with_tok.get("version"))
 
 

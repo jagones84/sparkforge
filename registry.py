@@ -88,6 +88,13 @@ TOOL_SCHEMAS = {
         "required": ["url"],
         "subject": "url",
     },
+    "self": {
+        "description": ("Self-knowledge: where the harness is installed (repo, data, "
+                        "config paths), how to install a skill/MCP server, and the "
+                        "systemd service state. Read-only, always safe."),
+        "type": "object",
+        "properties": {},
+    },
 }
 
 

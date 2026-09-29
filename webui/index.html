@@ -2,65 +2,139 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06070c">
 <title>⚡ SparkForge — DGX Harness</title>
 <style>
   :root {
-    --bg: #06070c; --panel: rgba(16,20,34,.72); --line: rgba(120,140,255,.14);
-    --txt: #dfe4ff; --dim: #7c86ad; --acc: #6c8cff; --acc2: #b56cff; --ok: #4ade80; --warn: #fbbf24;
+    --bg: #06070c; --panel: rgba(16,20,34,.72); --panel2: rgba(12,16,30,.8);
+    --line: rgba(120,140,255,.14); --txt: #dfe4ff; --dim: #7c86ad;
+    --acc: #6c8cff; --acc2: #b56cff; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --radius: 12px;
   }
-  * { box-sizing: border-box; margin: 0; }
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
   body {
     background: radial-gradient(1200px 800px at 80% -10%, #141a3a 0%, var(--bg) 55%),
                 radial-gradient(900px 700px at -10% 110%, #241638 0%, transparent 60%);
     color: var(--txt); font: 14px/1.55 ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
-    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
   }
   header {
-    display: flex; align-items: center; gap: 14px; padding: 12px 20px;
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px; flex-wrap: wrap;
     border-bottom: 1px solid var(--line); background: rgba(8,10,20,.6); backdrop-filter: blur(10px);
   }
   header .logo { font-weight: 700; letter-spacing: .06em; font-size: 16px;
     background: linear-gradient(90deg, var(--acc), var(--acc2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   header .sub { color: var(--dim); font-size: 11px; }
-  .pill { font-size: 10px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); }
+  .pill { font-size: 10px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); white-space: nowrap; }
   .pill.ok { color: var(--ok); border-color: rgba(74,222,128,.35); }
-  main { flex: 1; display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
-  aside { border-right: 1px solid var(--line); padding: 14px; overflow-y: auto; background: rgba(8,10,20,.45); }
-  section h2 { font-size: 10px; letter-spacing: .18em; color: var(--dim); margin: 14px 0 8px; text-transform: uppercase; }
-  section h2:first-child { margin-top: 0; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .pill.warn { color: var(--warn); border-color: rgba(251,191,36,.4); }
+  main { flex: 1; display: grid; grid-template-columns: 320px 1fr; min-height: 0; }
+
+  /* ---------------- sidebar ---------------- */
+  aside {
+    border-right: 1px solid var(--line); padding: 14px; overflow-y: auto;
+    background: rgba(8,10,20,.45); display: flex; flex-direction: column; gap: 4px;
+  }
+  aside h2 { font-size: 10px; letter-spacing: .18em; color: var(--dim); margin: 12px 0 8px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px; }
+  aside h2:first-child { margin-top: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; }
   .step, .task { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 8px; margin-bottom: 4px; font-size: 12.5px; }
   .step:hover, .task:hover { background: rgba(108,140,255,.08); cursor: pointer; }
   .step.done { color: var(--dim); text-decoration: line-through; }
   .task .st { font-size: 9px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); flex-shrink: 0; }
   .task .st.doing { color: var(--warn); border-color: rgba(251,191,36,.4); }
   .task .st.done { color: var(--ok); border-color: rgba(74,222,128,.4); }
-  #chat { display: flex; flex-direction: column; min-height: 0; }
-  #log { flex: 1; overflow-y: auto; padding: 22px 26px; }
-  .msg { margin-bottom: 14px; max-width: 860px; }
-  .msg .who { font-size: 10px; letter-spacing: .14em; color: var(--dim); margin-bottom: 4px; }
-  .msg.user .who { color: var(--acc2); }
-  .msg .bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; white-space: pre-wrap; word-break: break-word; }
-  .msg.user .bubble { border-color: rgba(181,108,255,.25); }
-  details.think { margin-bottom: 8px; }
-  details.think summary { cursor: pointer; font-size: 11px; color: var(--acc); letter-spacing: .08em; }
-  details.think .t { color: var(--dim); font-size: 12px; white-space: pre-wrap; border-left: 2px solid rgba(108,140,255,.3);
-    padding: 6px 0 6px 12px; margin-top: 6px; }
-  #composer { display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--line); background: rgba(8,10,20,.6); }
-  #inp { flex: 1; background: rgba(12,16,30,.8); border: 1px solid var(--line); color: var(--txt);
-    border-radius: 12px; padding: 12px 16px; font: inherit; outline: none; }
-  #inp:focus { border-color: rgba(108,140,255,.5); box-shadow: 0 0 0 3px rgba(108,140,255,.12); }
+  .task.fresh { animation: pop .5s ease; border: 1px dashed rgba(181,108,255,.4); }
+  @keyframes pop { from { transform: scale(.96); opacity: .3; } }
+  .remaining { color: var(--dim); font-size: 11px; }
+  .agentline { font-size: 12px; color: var(--dim); padding: 4px 0; }
+  .agentline b { color: var(--acc); }
+
+  /* sessions */
+  .sess { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
+    border: 1px solid transparent; margin-bottom: 4px; cursor: pointer; font-size: 12.5px; }
+  .sess:hover { background: rgba(108,140,255,.08); }
+  .sess.active { border-color: rgba(108,140,255,.45); background: rgba(108,140,255,.1); }
+  .sess .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sess .n { color: var(--dim); font-size: 10px; flex-shrink: 0; }
+  .sess .del { color: var(--err); font-size: 13px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: .6; }
+  .sess .del:hover { opacity: 1; background: rgba(248,113,113,.12); }
+
+  /* context meter */
+  .meter { height: 8px; border-radius: 999px; background: rgba(120,140,255,.12); overflow: hidden; margin: 8px 0 4px; }
+  .meter > i { display: block; height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--acc), var(--acc2)); transition: width .4s ease; }
+  .meter > i.hot { background: linear-gradient(90deg, var(--warn), var(--err)); }
+  .ctxrow { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
+
+  /* approvals */
   button { background: linear-gradient(90deg, var(--acc), var(--acc2)); border: 0; color: #fff;
-    border-radius: 12px; padding: 12px 22px; font: inherit; font-weight: 600; cursor: pointer; }
+    border-radius: var(--radius); padding: 12px 22px; font: inherit; font-weight: 600; cursor: pointer; }
+  button:active { transform: scale(.97); }
   button.ghost { background: transparent; border: 1px solid var(--line); color: var(--dim); font-weight: 400; padding: 8px 14px; }
   button.ghost:hover { color: var(--txt); border-color: rgba(108,140,255,.4); }
   .feed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
   .feed-dot.off { background: var(--dim); box-shadow: none; }
-  .remaining { color: var(--dim); font-size: 11px; }
-  .agentline { font-size: 12px; color: var(--dim); padding: 4px 0; }
-  .agentline b { color: var(--acc); }
-  @media (max-width: 860px) { main { grid-template-columns: 1fr; } aside { display: none; } }
+
+  /* ---------------- chat ---------------- */
+  #chat { display: flex; flex-direction: column; min-height: 0; }
+  #log { flex: 1; overflow-y: auto; padding: 22px 26px; scroll-behavior: smooth; }
+  .msg { margin-bottom: 14px; max-width: 860px; }
+  .msg .who { font-size: 10px; letter-spacing: .14em; color: var(--dim); margin-bottom: 4px; }
+  .msg.user .who { color: var(--acc2); }
+  .msg .bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px;
+    white-space: pre-wrap; word-break: break-word; }
+  .msg.user .bubble { border-color: rgba(181,108,255,.25); }
+  details.think { margin-bottom: 8px; }
+  details.think summary { cursor: pointer; font-size: 11px; color: var(--acc); letter-spacing: .08em; }
+  details.think .t { color: var(--dim); font-size: 12px; white-space: pre-wrap; border-left: 2px solid rgba(108,140,255,.3);
+    padding: 6px 0 6px 12px; margin-top: 6px; max-height: 320px; overflow-y: auto; }
+  .cursor { display: inline-block; width: 8px; height: 14px; background: var(--acc); margin-left: 2px;
+    vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #composer { display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--line); background: rgba(8,10,20,.6); }
+  #inp, .inp { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+    border-radius: var(--radius); padding: 12px 16px; font: inherit; outline: none; }
+  #inp { flex: 1; }
+  #inp:focus, .inp:focus { border-color: rgba(108,140,255,.5); box-shadow: 0 0 0 3px rgba(108,140,255,.12); }
+
+  /* CoT live drawer (mobile) */
+  #cotDrawer { display: none; max-height: 34dvh; overflow-y: auto; padding: 10px 22px;
+    border-top: 1px solid var(--line); background: rgba(8,10,20,.75); backdrop-filter: blur(10px); }
+  #cotDrawer .t { color: var(--dim); font-size: 12px; white-space: pre-wrap; }
+  #cotDrawer .hd { font-size: 10px; letter-spacing: .16em; color: var(--acc); margin-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center; }
+
+  /* mobile: sidebar becomes a tabbed drawer */
+  #tabbar { display: none; }
+  .backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 8; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    aside {
+      position: fixed; z-index: 9; inset: 0 0 0 auto; width: min(92vw, 400px);
+      transform: translateX(105%); transition: transform .28s ease;
+      background: rgba(10,12,24,.96); backdrop-filter: blur(14px);
+      padding-top: max(14px, env(safe-area-inset-top));
+    }
+    aside.open { transform: translateX(0); }
+    aside.show { display: block !important; }
+    .backdrop.show { display: block; }
+    #tabbar {
+      display: flex; border-top: 1px solid var(--line); background: rgba(8,10,20,.85); backdrop-filter: blur(12px);
+      padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); gap: 6px;
+    }
+    #tabbar button { flex: 1; background: transparent; border: 1px solid var(--line); color: var(--dim);
+      padding: 9px 4px; font-size: 11px; font-weight: 400; border-radius: 10px; }
+    #tabbar button.active { color: var(--txt); border-color: rgba(108,140,255,.5); background: rgba(108,140,255,.1); }
+    #tabbar .badge { color: var(--warn); }
+    #log { padding: 14px; }
+    #composer { padding: 10px 12px; gap: 8px; }
+    #composer button { padding: 11px 16px; }
+    #cotDrawer { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -68,20 +142,32 @@
   <span class="logo">⚡ SPARKFORGE</span>
   <span class="sub">agent harness · dgx spark · local router</span>
   <span style="flex:1"></span>
+  <span class="pill" id="ctxPill" title="context tokens / budget">ctx: …</span>
+  <button class="ghost" id="compactBtn" title="compact the session transcript now">🗜 compact</button>
   <span class="pill" id="modelPill">model: …</span>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
   <span class="pill" id="srvPill">server</span>
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
 </header>
 <main>
-  <aside>
+  <aside id="aside">
+    <section>
+      <h2>Sessions</h2>
+      <div class="card">
+        <div id="sessions"></div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input id="sessInp" class="inp" placeholder="new session title…" style="flex:1;padding:6px 10px;font-size:12px">
+          <button class="ghost" onclick="newSession()">+ new</button>
+        </div>
+      </div>
+    </section>
     <section>
       <h2>Plan</h2>
       <div class="card">
         <div id="planGoal" class="remaining">no goal yet</div>
         <div id="planSteps" style="margin-top:8px"></div>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;background:rgba(12,16,30,.8);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font:inherit;font-size:12px;outline:none">
+          <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;padding:6px 10px;font-size:12px">
           <button class="ghost" onclick="genPlan()">plan it</button>
         </div>
       </div>
@@ -91,10 +177,18 @@
       <div class="card">
         <div id="tasks"></div>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="taskInp" placeholder="new task…" style="flex:1;background:rgba(12,16,30,.8);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 10px;font:inherit;font-size:12px;outline:none">
+          <input id="taskInp" class="inp" placeholder="new task…" style="flex:1;padding:6px 10px;font-size:12px">
           <button class="ghost" onclick="addTask()">+</button>
         </div>
         <div id="remaining" class="remaining" style="margin-top:8px"></div>
+      </div>
+    </section>
+    <section>
+      <h2>Context</h2>
+      <div class="card">
+        <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
+        <div class="meter"><i id="ctxBar" style="width:0%"></i></div>
+        <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
       </div>
     </section>
     <section>
@@ -110,23 +204,36 @@
   </aside>
   <div id="chat">
     <div id="log"></div>
+    <div id="cotDrawer">
+      <div class="hd"><span>🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
+      <div class="t"></div>
+    </div>
     <div id="composer">
       <input id="inp" placeholder="command the forge… (Enter to send)" autofocus>
       <button onclick="send()">send</button>
       <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
     </div>
+    <div id="tabbar">
+      <button data-tab="chat" class="active" onclick="openTab('chat')">💬 chat</button>
+      <button data-tab="sessions" onclick="openTab('sessions')">🗂 sessions</button>
+      <button data-tab="tasks" onclick="openTab('tasks')">✅ tasks</button>
+      <button data-tab="context" onclick="openTab('context')">📊 context</button>
+      <button data-tab="feed" onclick="openTab('feed')">📡 feed</button>
+    </div>
   </div>
 </main>
+<div class="backdrop" id="backdrop" onclick="closeAside()"></div>
 <script>
 const $ = id => document.getElementById(id);
 let sessionId = localStorage.getItem("sf_session") || null;
 let TOKEN = localStorage.getItem("sf_token");
-let curThink = null, curAns = null, feedSince = 0;
+let curThink = null, curAns = null, feedSince = 0, cotText = "";
+let cursorEl = null;
 
 async function ensureToken() {
   if (TOKEN) return TOKEN;
   const s = await fetch("/api/status").then(r => r.ok);
-  if (s) return null;  // no auth required
+  if (s) return null;
   TOKEN = prompt("SparkForge API token:") || "";
   localStorage.setItem("sf_token", TOKEN);
   return TOKEN;
@@ -155,26 +262,37 @@ function ensureAnswer() {
     const d = who("ai", "");
     if (curThink) curThink.querySelector("details").open = false;
     curAns = d; curThink = null;
+    cursorEl = document.createElement("span"); cursorEl.className = "cursor";
+    d.querySelector(".bubble").appendChild(cursorEl);
   }
   return curAns.querySelector(".bubble");
+}
+function endStream() {
+  if (cursorEl) { cursorEl.remove(); cursorEl = null; }
+  curAns = curThink = null;
+}
+function cotFeed(text) {
+  cotText += text;
+  $("cotDrawer").querySelector(".t").textContent = cotText;
+  const dt = $("cotDrawer"); dt.scrollTop = dt.scrollHeight;
 }
 
 function send(text) {
   const inp = $("inp");
   const msg = (text !== undefined ? text : inp.value).trim();
   if (!msg) return;
-  inp.value = ""; who("user", msg); curThink = curAns = null;
+  inp.value = ""; who("user", msg); curThink = curAns = null; cotText = "";
   const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + (authQS() ? "&" + authQS() : "");
   const es = new EventSource(url);
   es.addEventListener("chat.delta", e => {
     const d = JSON.parse(e.data);
     if (!sessionId) { sessionId = d.session; localStorage.setItem("sf_session", sessionId); }
-    if (d.channel === "think") { ensureThink().textContent += d.text; }
+    if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); }
     else { ensureAnswer().textContent += d.text; }
     scroll();
   });
-  es.addEventListener("done", () => { es.close(); curAns = curThink = null; loadPlan(); loadTasks(); });
-  es.addEventListener("error", () => { es.close(); curAns = curThink = null; });
+  es.addEventListener("done", () => { es.close(); endStream(); loadPlan(); loadTasks(); loadCtx(); });
+  es.addEventListener("error", () => { es.close(); endStream(); });
 }
 
 async function api(method, path, body) {
@@ -183,6 +301,84 @@ async function api(method, path, body) {
   return r.json();
 }
 
+/* ---- sessions ---- */
+async function loadSessions() {
+  const out = await api("GET", "/api/sessions");
+  const box = $("sessions"); box.innerHTML = "";
+  (out.sessions || []).forEach(s => {
+    const d = document.createElement("div");
+    d.className = "sess" + (s.id === sessionId ? " active" : "");
+    d.innerHTML = `<span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg</span><span class="del" title="delete">✕</span>`;
+    d.onclick = e => {
+      if (e.target.classList.contains("del")) return;
+      sessionId = s.id; localStorage.setItem("sf_session", sessionId);
+      $("log").innerHTML = ""; curThink = curAns = null;
+      loadSessions(); loadHistory(); loadCtx(); closeAside();
+    };
+    d.querySelector(".del").onclick = async () => {
+      if (!confirm("delete session " + (s.title || s.id) + "?")) return;
+      await api("DELETE", "/api/sessions/" + s.id);
+      if (sessionId === s.id) { sessionId = null; localStorage.removeItem("sf_session"); $("log").innerHTML = ""; }
+      loadSessions(); loadCtx();
+    };
+    box.appendChild(d);
+  });
+  if (!(out.sessions || []).length) box.innerHTML = '<div class="remaining">no sessions yet</div>';
+}
+async function newSession() {
+  const title = $("sessInp").value.trim() || ("session " + new Date().toLocaleTimeString());
+  $("sessInp").value = "";
+  const s = await api("GET", "/api/sessions/new?title=" + encodeURIComponent(title) + (authQS() ? "&" + authQS() : ""));
+  sessionId = s.id; localStorage.setItem("sf_session", sessionId);
+  $("log").innerHTML = ""; curThink = curAns = null;
+  loadSessions(); loadCtx(); closeAside();
+}
+async function loadHistory() {
+  if (!sessionId) return;
+  const s = await api("GET", "/api/history?session=" + encodeURIComponent(sessionId));
+  (s.messages || []).forEach(m => {
+    if (m.role === "user") { who("user", m.content); return; }
+    const d = who("ai", m.content);
+    if (m.reasoning) {
+      const det = document.createElement("details"); det.className = "think";
+      det.innerHTML = `<summary>🧠 chain-of-thought</summary><div class="t"></div>`;
+      det.querySelector(".t").textContent = m.reasoning;
+      d.insertBefore(det, d.querySelector(".bubble"));
+    }
+  });
+}
+
+/* ---- context / compaction ---- */
+async function loadCtx() {
+  const params = new URLSearchParams();
+  if (sessionId) params.set("session", sessionId);
+  if (TOKEN) params.set("token", TOKEN);
+  try {
+    const c = await api("GET", "/api/context?" + params.toString());
+    if (c.error) return;
+    const pct = Math.min(100, Math.round(c.tokens_used / Math.max(c.budget_tokens, 1) * 100));
+    $("ctxTok").textContent = c.tokens_used + " tok";
+    $("ctxMsgs").textContent = c.messages + " messages";
+    $("ctxBudget").textContent = c.budget_tokens + " tok" + (c.over_budget ? " · OVER" : "");
+    $("ctxBudget").className = c.over_budget ? "" : "";
+    $("ctxBudget").style.color = c.over_budget ? "var(--err)" : "var(--dim)";
+    const bar = $("ctxBar"); bar.style.width = pct + "%";
+    bar.className = pct > 90 ? "hot" : "";
+    $("ctxPill").textContent = "ctx: " + c.tokens_used + "/" + c.budget_tokens;
+    $("ctxPill").className = "pill" + (c.over_budget ? " warn" : "");
+  } catch {}
+}
+async function compactNow() {
+  if (!sessionId) { alert("no active session"); return; }
+  const btn = $("compactBtn"); btn.textContent = "compacting…";
+  const r = await api("POST", "/api/context/compact", { session: sessionId });
+  btn.textContent = "🗜 compact";
+  if (r.error) { alert(r.error); return; }
+  who("ai", `🗜 compacted: ${r.input_messages} → ${r.input_messages - r.compacted} messages (${r.compacted} compacted, ${r.tokens_after} tok after)`);
+  $("log").innerHTML = ""; loadHistory(); loadCtx();
+}
+
+/* ---- plan / tasks ---- */
 async function loadPlan() {
   const p = await api("GET", "/api/plan");
   $("planGoal").textContent = p.goal || "no goal yet";
@@ -199,15 +395,8 @@ async function genPlan() {
   const goal = $("planInp").value.trim(); if (!goal) return;
   $("planInp").value = ""; who("user", "⚙ plan: " + goal); curThink = curAns = null;
   const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6" + (authQS() ? "&" + authQS() : ""));
-  es.addEventListener("agent.iteration", e => { const d = JSON.parse(e.data);
-    const l = document.createElement("div"); l.className = "agentline";
-    l.innerHTML = `── iteration <b>${d.i}/${d.of}</b> ──`; $("log").appendChild(l); scroll(); });
   es.addEventListener("agent.think", e => { const d = JSON.parse(e.data);
-    if (d.channel === "think") { ensureThink().textContent += d.text; scroll(); } });
-  es.addEventListener("agent.thought", e => { const d = JSON.parse(e.data);
-    const l = document.createElement("div"); l.className = "agentline";
-    l.innerHTML = `🧠 <b>${d.action}</b> — ${(d.thought || "").slice(0, 160)}`;
-    $("log").appendChild(l); scroll(); });
+    if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); scroll(); } });
   es.addEventListener("agent.observation", e => { const d = JSON.parse(e.data);
     const l = document.createElement("div"); l.className = "agentline";
     l.textContent = "👁 " + d.observation; $("log").appendChild(l); scroll(); });
@@ -220,8 +409,9 @@ async function loadTasks() {
   $("tasks").innerHTML = ""; $("remaining").innerHTML = "";
   const open = (t.tasks || []).filter(x => x.status !== "done").length;
   $("taskCount").textContent = open ? `(${open} open)` : "";
-  (t.tasks || []).forEach(x => {
+  (t.tasks || []).slice(-40).forEach(x => {
     const d = document.createElement("div"); d.className = "task";
+    if (x.fresh) d.classList.add("fresh");
     d.innerHTML = `<span class="st ${x.status}">${x.status}</span><span>${x.title}</span>`;
     const next = x.status === "todo" ? "doing" : x.status === "doing" ? "done" : "todo";
     d.onclick = () => api("PATCH", "/api/tasks", { id: x.id, status: next }).then(loadTasks);
@@ -262,7 +452,7 @@ async function loadApprovals() {
       <div style="margin:4px 0;white-space:pre-wrap;word-break:break-all">${a.summary}</div>`;
     const row = document.createElement("div"); row.style.cssText = "display:flex;gap:6px";
     row.innerHTML = `<button class="ghost" style="color:var(--ok)">approve</button>
-                     <button class="ghost" style="color:#f87171">deny</button>`;
+                     <button class="ghost" style="color:var(--err)">deny</button>`;
     row.children[0].onclick = () => decide(a.id, "approve");
     row.children[1].onclick = () => decide(a.id, "deny");
     d.appendChild(row); box.appendChild(d);
@@ -273,17 +463,17 @@ async function decide(id, decision) {
   loadApprovals();
 }
 
-/* ---- run the tool-enabled agent loop (SSE) ---- */
+/* ---- agent loop (tool-enabled, SSE) ---- */
 function runAgent(goal) {
   if (!goal) return;
-  who("user", "⚡ agent: " + goal); curThink = curAns = null;
+  who("user", "⚡ agent: " + goal); curThink = curAns = null; cotText = "";
   const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6"
                              + (authQS() ? "&" + authQS() : ""));
   es.addEventListener("agent.iteration", e => { const d = JSON.parse(e.data);
     const l = document.createElement("div"); l.className = "agentline";
     l.innerHTML = `── iteration <b>${d.i}/${d.of}</b> ──`; $("log").appendChild(l); scroll(); });
   es.addEventListener("agent.think", e => { const d = JSON.parse(e.data);
-    if (d.channel === "think") { ensureThink().textContent += d.text; scroll(); } });
+    if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); scroll(); } });
   es.addEventListener("agent.thought", e => { const d = JSON.parse(e.data);
     const l = document.createElement("div"); l.className = "agentline";
     l.innerHTML = `🧠 <b>${d.action}</b> — ${(d.thought || "").slice(0, 160)}`;
@@ -300,9 +490,11 @@ function runAgent(goal) {
   es.addEventListener("agent.aborted", e => { const d = JSON.parse(e.data);
     who("ai", "⛔ aborted: " + (d.summary || "")); });
   es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
-    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadTasks(); });
+    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadTasks(); loadCtx(); });
   es.addEventListener("error", () => es.close());
 }
+
+/* ---- feed ---- */
 function connectFeed() {
   const es = new EventSource("/api/feed" + (authQS() ? "?" + authQS() : ""));
   es.onopen = () => { $("feedDot").classList.remove("off"); };
@@ -317,9 +509,21 @@ function connectFeed() {
     arr.slice(-15).forEach(x => push(`${x.kind}`));
   });
   es.addEventListener("chat.user", e => { const d = JSON.parse(e.data); push("💬 user: " + (d.text || "").slice(0, 60)); });
-  es.addEventListener("chat.done", () => push("💬 chat done"));
+  es.addEventListener("chat.done", () => { push("💬 chat done"); loadCtx(); });
+  es.addEventListener("tasks.breakdown", e => { const d = JSON.parse(e.data);
+    push("✅ todo breakdown: " + (d.tasks || []).length + " tasks");
+    (d.tasks || []).forEach(t => { const x = document.createElement("div");
+      x.className = "task fresh"; x.innerHTML = `<span class="st todo">todo</span><span>${t}</span>`;
+      $("tasks").appendChild(x); });
+    loadTasksSoon(); });
+  es.addEventListener("context.compact", e => { const d = JSON.parse(e.data);
+    push(`🗜 compact: ${d.compacted} msgs compacted, ${d.tokens_after} tok`); loadCtx(); });
+  es.addEventListener("context.built", e => { const d = JSON.parse(e.data);
+    push(`📊 context: ${d.final_tokens}/${d.budget_tokens} tok`); loadCtxSoon(); });
+  es.addEventListener("session.created", e => { const d = JSON.parse(e.data); push("🗂 session created"); loadSessions(); });
+  es.addEventListener("session.deleted", e => { const d = JSON.parse(e.data); push("🗂 session deleted"); loadSessions(); });
   es.addEventListener("plan.update", () => { push("🗺 plan updated"); loadPlan(); });
-  es.addEventListener("tasks.update", () => { push("✅ tasks updated"); loadTasks(); });
+  es.addEventListener("tasks.update", () => { push("✅ tasks updated"); loadTasksSoon(); });
   es.addEventListener("agent.start", e => { const d = JSON.parse(e.data || "{}"); push("⚡ agent: " + (d.goal || "").slice(0, 60)); });
   es.addEventListener("agent.finish", () => push("🏁 agent finished"));
   es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); push("🔐 approval needed: " + (d.tool || "") + " " + (d.summary || "").slice(0, 40)); loadApprovals(); });
@@ -330,11 +534,28 @@ function connectFeed() {
   es.addEventListener("agent.aborted", () => push("⛔ run aborted"));
   es.addEventListener("agent.control", e => { const d = JSON.parse(e.data); push("🎛 " + d.action + " → " + d.status); });
 }
+let _tasksT, _ctxT;
+function loadTasksSoon() { clearTimeout(_tasksT); _tasksT = setTimeout(loadTasks, 300); }
+function loadCtxSoon() { clearTimeout(_ctxT); _ctxT = setTimeout(loadCtx, 300); }
+
+/* ---- mobile tabs / drawer ---- */
+function openTab(name) {
+  document.querySelectorAll("#tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  if (name === "chat") return closeAside();
+  $("aside").classList.add("open");
+  $("backdrop").classList.add("show");
+}
+function closeAside() { $("aside").classList.remove("open"); $("backdrop").classList.remove("show"); }
+
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 $("taskInp").addEventListener("keydown", e => { if (e.key === "Enter") addTask(); });
+$("sessInp").addEventListener("keydown", e => { if (e.key === "Enter") newSession(); });
 $("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progress on the current plan"; $("inp").value = ""; runAgent(g); };
+$("compactBtn").onclick = compactNow;
 
-ensureToken().then(() => { loadPlan(); loadTasks(); loadStatus(); loadApprovals(); connectFeed(); });
+ensureToken().then(() => {
+  loadSessions(); loadPlan(); loadTasks(); loadStatus(); loadApprovals(); loadCtx(); loadHistory(); connectFeed();
+});
 setInterval(loadStatus, 5000);
 setInterval(loadApprovals, 4000);
 </script>

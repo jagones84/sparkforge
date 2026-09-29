@@ -107,3 +107,8 @@ tools:
     approval: required
     auto_approve: []
     allow_hosts: []
+
+  # self-knowledge: repo/config paths, skill/MCP install recipe, systemd state
+  self:
+    enabled: true
+    approval: auto

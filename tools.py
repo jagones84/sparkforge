@@ -164,8 +164,46 @@ def _browser(args, run_id):
             "sandboxed": False, "note": "lightweight HTML->text extractor, not a headless browser"}
 
 
+def _self(args, run_id):
+    """v0.5 self-knowledge: paths, config, docs, systemd state, extension recipe."""
+    import subprocess as sp
+    info = {
+        "ok": True, "backend": "host", "sandboxed": False, "exit_code": 0,
+        "name": "SparkForge", "version": "0.5.0",
+        "repo_path": REPO,
+        "data_dir": os.path.join(REPO, "data"),
+        "sessions_dir": os.path.join(REPO, "data", "sessions"),
+        "webui": os.path.join(REPO, "webui"),
+        "entrypoint": os.path.join(REPO, "server.py"), "port": 8790,
+        "router": os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080"),
+        "config": {"tools": os.path.join(REPO, "config", "tools.yaml"),
+                   "routing": os.path.join(REPO, "config", "routing.yaml"),
+                   "mcp_clients": os.path.join(REPO, "config", "mcp_clients.yaml")},
+        "docs": {"plan": os.path.join(REPO, "docs", "PLAN.md"),
+                 "readme": os.path.join(REPO, "README.md"),
+                 "architecture": os.path.join(REPO, "docs", "ARCHITECTURE.md")},
+        "service": {"unit": "sparkforge.service", "scope": "user",
+                    "unit_file": os.path.join(REPO, "deploy", "sparkforge.service"),
+                    "restart_cmd": "systemctl --user restart sparkforge.service"},
+        "install_skill_mcp": (
+            "External MCP servers: add an entry to config/mcp_clients.yaml with "
+            "either command+args (stdio) or url (HTTP); tools are discovered via "
+            "tools/list and exposed as <client>__<tool> in the registry. Harness-"
+            "native tools go in registry.TOOL_SCHEMAS + tools.py with policy in "
+            "config/tools.yaml. Apply with POST /api/tools (reload) or "
+            "`systemctl --user restart sparkforge.service`."),
+    }
+    try:
+        out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
+                     capture_output=True, text=True, timeout=4).stdout.strip()
+        info["service"]["active"] = out or "unknown"
+    except Exception:
+        info["service"]["active"] = "unknown"
+    return info
+
+
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
-             "git": _git, "http": _http, "browser": _browser}
+             "git": _git, "http": _http, "browser": _browser, "self": _self}
 
 
 def execute(tool, args, run_id=None):

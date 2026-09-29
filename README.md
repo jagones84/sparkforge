@@ -15,6 +15,7 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 🔌 **MCP server mode** — expose the harness to Paperclip (or any MCP client) over stdio or HTTP
 - 📡 **Loopback feed** — Server-Sent Events stream of every harness event (chat deltas, plan/task changes, agent iterations, tool calls, approvals) for mobile + WebUI live views
 - 🖥️ **Frontier WebUI** — dark glassmorphism, live thinking, plan/tasks sidebar, command bar
+- ✨ **UX harness moderna (v0.5)** — mobile tab bar (chat/sessions/tasks/context/feed), live CoT drawer, todo breakdown of every request onto the task board, token budget meter with one-tap compaction, session switch/create/delete, `self` tool for agent self-knowledge
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
 
@@ -131,6 +132,11 @@ journalctl --user -u sparkforge.service -f
 | GET/POST/PATCH | `/api/tasks` | Task board; `PATCH /api/tasks {id, status?}` |
 | POST | `/api/agent/run` | Agent loop `{goal, max_steps, script?}` (also GET `/api/agent/run?goal=` for SSE) |
 | GET | `/api/sessions`, `/api/history?session=` | Chat session store |
+| POST | `/api/sessions`, `/api/sessions/new` | Create a session `{title?}` |
+| DELETE | `/api/sessions/<id>` | Delete a session |
+| GET | `/api/self` | Self-knowledge: paths, config, MCP/skill install recipe, systemd state |
+| GET | `/api/context?session=` | Token usage vs context budget (UI indicator) |
+| POST | `/api/context/compact` | Compact a session transcript in place `{session, budget_tokens?}` |
 | GET | `/api/runs`, `/api/runs/<id>/trace` | Run trace + token/cost accounting |
 | GET | `/api/eval/tasks`, `/api/eval/run` | Eval harness (gold tasks + scoring) |
 | GET/POST | `/api/voice/status`, `/api/voice/stt`, `/api/voice/tts` | Speech I/O (whisper.cpp + sherpa-onnx) |

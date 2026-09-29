@@ -133,6 +133,35 @@ Verified by `tests/v03_acceptance.py` (7/7 checks) — raw report in
   il vocabolario tra indice e query (prima le dimensioni disallineate crashavano
   la ricerca semantica) e `_match` degrada a AND-of-words.
 
+## Done — v0.5 "UX harness moderna" (2026-09-29, JAG-41)
+
+Follow-up dall'acceptance del Coordinator su JAG-33: API ok ma UX non da harness
+moderna. Wave UX, verificata in live (chat reale via router, modello
+`nex-n25-mini-uncensored-q8`) + regressioni v0.2 (8/8) e v0.3 (7/7) sul nuovo build.
+
+- ✅ **Chat/CoT in UI sempre in streaming**: reasoning live visibile sia nel
+  messaggio che nel drawer CoT mobile (`#cotDrawer`), con cursore di streaming;
+  `reasoning` persistito in sessione e ri-mostrato da `/api/history`.
+- ✅ **Todo dalla richiesta**: ogni richiesta utente viene spezzettata live in
+  task sulla board (`breakdown_tasks()`, prompt planner-role, thread separato non
+  bloccante, evento SSE `tasks.breakdown`). Evidenza: "ciao! ricordati che mi
+  chiamo Dario…" → task `Salutare Dario`, `Creare tre task di test`, …
+- ✅ **Compaction reale**: `POST /api/context/compact` compatta in-place il
+  transcript di sessione (40 msg / 4040 tok → budget 800: 32 compattati, 8
+  droppati, 1344 tok finali). `GET /api/context` + indicatore token con barra
+  in header e pannello Context in UI; evento `context.compact` nel feed.
+- ✅ **Sessioni UX**: lista/switch/crea (`GET/POST /api/sessions`,
+  `/api/sessions/new`) + cancella (`DELETE /api/sessions/<id>`) dalla GUI,
+  cronologia persistente ri-caricata dal file di sessione.
+- ✅ **Self-knowledge agente**: tool `self` (registry, approval auto, anche via
+  MCP) + `GET /api/self`: repo/data/config paths, ricetta install skill/MCP
+  (`config/mcp_clients.yaml` + reload), stato systemd. Iniettato nel system
+  prompt di chat e agent loop. Evidenza: alla domanda "dove sei installato e
+  come installi una skill MCP?" il modello risponde con path e procedura reali.
+- ✅ **GUI mobile arricchita** (webui 342 → 562 righe): stesso tema dark glass,
+  tab bar mobile (chat/sessions/tasks/context/feed), drawer CoT live, meter
+  contesto, pulsante compact, badge approvazioni.
+
 ## Remaining (v0.4 leftovers / polish)
 
 - [ ] **SparkPulse app-side streaming** (native SSE): consume `/api/chat/stream` + `/api/feed?since=` in the Forge tab instead of one-shot REST, Command tab with live plan/tasks/approvals — server-side contract is live and authed

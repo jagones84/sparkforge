@@ -479,6 +479,99 @@ PLANNER_PROMPT = (
     '{"title": "<short step>", "detail": "<one sentence>"}'
 )
 
+BREAKDOWN_PROMPT = (
+    "Break the user request into 1-6 concrete todo tasks for the harness task "
+    "board. Respond with ONLY a JSON array of short task strings. If the request "
+    "is pure smalltalk with nothing actionable, respond with []."
+)
+
+
+def self_summary():
+    """Compact self-knowledge block injected into the system prompt (v0.5)."""
+    return (
+        "Self-knowledge: you are SparkForge v0.5, a local agent harness installed "
+        "at the repo path %s on this DGX Spark. Data dir: %s. Tool policy: "
+        "config/tools.yaml; model routing: config/routing.yaml; external MCP "
+        "servers: config/mcp_clients.yaml (add a stdio command or HTTP url entry, "
+        "tools appear as <client>__<tool>; then reload via POST /api/tools or "
+        "restart with `systemctl --user restart sparkforge.service`, unit file "
+        "deploy/sparkforge.service, port 8790). Harness-native tools: "
+        "registry.TOOL_SCHEMAS + tools.py. Full self report: GET /api/self or "
+        "the `self` tool."
+    ) % (REPO, DATA_DIR)
+
+
+def self_knowledge():
+    """Full self report: paths, config, docs, service state, extension recipe."""
+    import subprocess as sp
+    info = {
+        "name": "SparkForge", "version": "0.5.0",
+        "repo_path": REPO, "data_dir": DATA_DIR, "sessions_dir": SESSIONS_DIR,
+        "webui": WEBUI_DIR,
+        "entrypoint": os.path.join(REPO, "server.py"), "port": 8790,
+        "router": ROUTER_BASE,
+        "config": {"tools": os.path.join(REPO, "config", "tools.yaml"),
+                   "routing": os.path.join(REPO, "config", "routing.yaml"),
+                   "mcp_clients": os.path.join(REPO, "config", "mcp_clients.yaml")},
+        "docs": {"plan": os.path.join(REPO, "docs", "PLAN.md"),
+                 "readme": os.path.join(REPO, "README.md"),
+                 "architecture": os.path.join(REPO, "docs", "ARCHITECTURE.md")},
+        "service": {"unit": "sparkforge.service", "scope": "user",
+                    "unit_file": os.path.join(REPO, "deploy", "sparkforge.service"),
+                    "restart_cmd": "systemctl --user restart sparkforge.service"},
+        "install_skill_mcp": (
+            "External MCP servers: add an entry to config/mcp_clients.yaml with "
+            "either command+args (stdio) or url (HTTP); tools are discovered via "
+            "tools/list and exposed as <client>__<tool> in the registry. Harness-"
+            "native tools go in registry.TOOL_SCHEMAS + tools.py with policy in "
+            "config/tools.yaml. Apply with POST /api/tools (reload) or "
+            "`systemctl --user restart sparkforge.service`."),
+    }
+    try:
+        out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
+                     capture_output=True, text=True, timeout=4).stdout.strip()
+        info["service"]["active"] = out or "unknown"
+    except Exception:
+        info["service"]["active"] = "unknown"
+    return info
+
+
+def breakdown_tasks(message, model=None, session=None):
+    """Ask the planner-role model to split a request into TASKS board todos.
+
+    Runs in a background thread so chat streaming is never delayed; the board
+    is mutated live and the UI sees it through the tasks.update SSE event.
+    """
+    def work():
+        try:
+            msgs = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + BREAKDOWN_PROMPT},
+                    {"role": "user", "content": message}]
+            m = routing.pick("planner") or model or default_model()
+            answer, _think = _router_stream(msgs, m, lambda ch, t: None)
+            items = extract_json(answer)
+            if isinstance(items, dict):
+                items = items.get("tasks") or items.get("items")
+            if not isinstance(items, list):
+                return
+            tasks = load_tasks()
+            added = []
+            for it in items[:6]:
+                title = str(it).strip()
+                if not title:
+                    continue
+                t = {"id": uuid.uuid4().hex[:6], "title": title[:140],
+                     "status": "todo", "created": round(time.time(), 3),
+                     "session": session}
+                tasks.setdefault("tasks", []).append(t)
+                added.append(t)
+            if added:
+                save_tasks(tasks)
+                publish("tasks.breakdown", session=session, source=(message or "")[:120],
+                        tasks=[t["title"] for t in added])
+        except Exception:
+            pass
+    threading.Thread(target=work, daemon=True).start()
+
 
 def context_summary():
     plan, tasks = load_plan(), load_tasks()
@@ -516,7 +609,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None):
     if on_delta is None:
         on_delta = lambda channel, text: publish(
             "chat.delta", session=sess["id"], channel=channel, text=text)
-    sys = SYSTEM_PROMPT + "\n\nCurrent harness state:\n" + context_summary()
+    sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\nCurrent harness state:\n" + context_summary()
+    breakdown_tasks(message, model, sess["id"])
     # v0.3 context engineering: compaction + token budget + memory retrieval
     try:
         import context_engine
@@ -642,7 +736,7 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
 
     actions = []
     for i in range(max_steps):
-        sys = SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT + "\n\nHarness state:\n" + context_summary()
+        sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT + "\n\nHarness state:\n" + context_summary()
         msgs = [{"role": "system", "content": sys},
                 {"role": "user", "content": "Goal: %s (iteration %d/%d)" % (goal, i + 1, max_steps)}]
         on_event("agent.iteration", i=i + 1, of=max_steps)
@@ -990,11 +1084,45 @@ def telemetry_summary():
     return out
 
 
+def context_status(session=None):
+    """Token usage vs budget for a session (UI indicator + compaction evidence)."""
+    import context_engine
+    budget = int(os.environ.get("SPARKFORGE_CONTEXT_BUDGET", context_engine.DEFAULT_BUDGET))
+    sess = load_session(session) if session else None
+    used = sum(context_engine.count_tokens(m.get("content", ""))
+               for m in (sess or {}).get("messages", []))
+    return {"budget_tokens": budget, "session": session,
+            "messages": len((sess or {}).get("messages", [])),
+            "tokens_used": used, "over_budget": used > budget}
+
+
+def compact_session(session, budget_tokens=None):
+    """Compact a session transcript in place under the token budget (v0.5).
+
+    Uses the v0.3 extractive compaction; the newest messages stay verbatim,
+    older ones are merged into a synthetic summary message. Returns stats.
+    """
+    import context_engine
+    sess = load_session(session) if session else None
+    if not sess:
+        return {"error": "session not found: %s" % session}
+    budget = int(budget_tokens or os.environ.get(
+        "SPARKFORGE_CONTEXT_BUDGET", context_engine.DEFAULT_BUDGET))
+    msgs, stats = context_engine.compact(sess.get("messages", []), budget)
+    sess["messages"] = msgs
+    save_session(sess)
+    stats.update({"session": session, "budget_tokens": budget,
+                  "tokens_after": sum(context_engine.count_tokens(m.get("content", ""))
+                                      for m in msgs)})
+    publish("context.compact", **stats)
+    return stats
+
+
 def status_payload():
     plan, tasks = load_plan(), load_tasks()
     probe = sandbox.probe()
     return {
-        "service": "sparkforge", "version": "0.4.0", "ts": round(time.time()),
+        "service": "sparkforge", "version": "0.5.0", "ts": round(time.time()),
         "router": ROUTER_BASE, "models": router_models(),
         "default_model": default_model(),
         "telemetry": telemetry_summary(),
@@ -1013,7 +1141,7 @@ def status_payload():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "SparkForge/0.1"
+    server_version = "SparkForge/0.5"
 
     def _send(self, code, obj, ctype="application/json"):
         if isinstance(obj, (dict, list)):
@@ -1057,6 +1185,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, f.read(), ctype="text/html; charset=utf-8")
             except FileNotFoundError:
                 return self._send(404, {"error": "webui missing"})
+        if path == "/api/self":
+            return self._send(200, self_knowledge())
+        if path == "/api/context":
+            return self._send(200, context_status(qs.get("session")))
         if path == "/api/status":
             return self._send(200, status_payload())
         if path == "/api/models":
@@ -1073,6 +1205,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {**tasks, "remaining": remaining})
         if path == "/api/sessions":
             return self._send(200, {"sessions": list_sessions()})
+        if path == "/api/sessions/new":
+            sess = get_or_create_session(None, qs.get("title"))
+            publish("session.created", session=sess["id"], title=sess["title"])
+            return self._send(200, sess)
         if path == "/api/history":
             sid = qs.get("session")
             sess = load_session(sid) if sid else None
@@ -1202,6 +1338,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "goal required"})
             result = agent_run(goal, int(body.get("max_steps", 6)), body.get("model"))
             return self._send(200, result)
+        if path == "/api/context/compact":
+            res = compact_session(body.get("session"), body.get("budget_tokens"))
+            return self._send(200 if "error" not in res else 404, res)
+        if path == "/api/sessions":
+            sess = get_or_create_session(None, body.get("title"))
+            publish("session.created", session=sess["id"], title=sess["title"])
+            return self._send(200, sess)
         if path == "/api/eval/run":
             return self._send(200, eval_run(body.get("model"), int(body.get("max_steps", 6)),
                                             body.get("task_id"), body.get("save", True)))
@@ -1233,6 +1376,23 @@ class Handler(BaseHTTPRequestHandler):
                     save_tasks(tasks)
                     return self._send(200, t)
             return self._send(404, {"error": "task not found"})
+        return self._send(404, {"error": "not found"})
+
+    # ---- DELETE ----
+    def do_DELETE(self):
+        path, qs = self._query()
+        if not check_auth(self.headers, qs):
+            return self._send(401, {"error": "unauthorized"})
+        if api_v02.handle(self, "DELETE", path, qs, None):
+            return
+        if path.startswith("/api/sessions/"):
+            sid = path[len("/api/sessions/"):]
+            fpath = os.path.join(SESSIONS_DIR, sid + ".json")
+            if "/" in sid or ".." in sid or not os.path.isfile(fpath):
+                return self._send(404, {"error": "session not found"})
+            os.unlink(fpath)
+            publish("session.deleted", session=sid)
+            return self._send(200, {"ok": True, "deleted": sid})
         return self._send(404, {"error": "not found"})
 
     def log_message(self, fmt, *args):
