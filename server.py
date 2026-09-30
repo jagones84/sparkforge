@@ -1135,7 +1135,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             tool, args = tc
             on_event("tool.call", session=sess["id"], tool=tool, args=args, inline=True)
             try:
-                res = api_v02.gated_call(tool, args)
+                res = api_v02.gated_call(tool, args, run_id=sess["id"])
                 obs = res.get("observation") or res.get("error") or res.get("status") or ""
                 ok = res.get("status") == "executed"
                 on_event("tool.result", session=sess["id"], tool=tool, ok=ok, inline=True)
@@ -1685,7 +1685,8 @@ def chat_stream_gen(sess, message, model, mark=None):
             target = model or routing.pick("chat") or default_model()
             trace = RunTrace("chat", goal=message[:120], model=target)
             trace.span("chat.stream", session=sess["id"])
-            q.put("event: chat.run\ndata: %s\n\n" % json.dumps({"run_id": trace.id}))
+            q.put("event: chat.run\ndata: %s\n\n" % json.dumps(
+                {"run_id": trace.id, "session": sess["id"]}))
             try:
                 loaded, _m = model_loaded(target) if target else (True, None)
                 if target and not loaded:

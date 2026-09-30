@@ -30,6 +30,107 @@ REPO = registry.REPO
 _probe_lock = threading.Lock()
 _probe_cache = None
 
+# JAG-68: live jobs, so a running tool can be STOPPED from the client.
+#   job_id -> {"proc": Popen, "argv": [...], "started": ts, "cancelled": bool}
+_RUNNING = {}
+_RUN_LOCK = threading.Lock()
+
+
+def running():
+    """Jobs currently executing: [{job, pid, command, seconds}]."""
+    now = time.time()
+    with _RUN_LOCK:
+        items = list(_RUNNING.items())
+    return [{"job": k, "pid": v["proc"].pid, "command": " ".join(v["argv"])[:200],
+             "seconds": round(now - v["started"], 2),
+             "cancel": v.get("cancelled", False)} for k, v in items]
+
+
+def _kill(entry):
+    """SIGTERM then SIGKILL the whole process group of a job (wrapper + children).
+
+    For a docker job the CLI may die while the container keeps running, so we
+    also `docker kill <name>` the explicitly named container.
+    """
+    import signal
+    proc = entry["proc"]
+    argv = entry.get("argv") or []
+    if argv and os.path.basename(argv[0]) == "docker":
+        try:
+            name = argv[argv.index("--name") + 1]
+            subprocess.run(["docker", "kill", name], timeout=10,
+                           capture_output=True, text=True)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except Exception:  # noqa: BLE001
+        try:
+            proc.terminate()
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        proc.wait(timeout=5)
+    except Exception:  # noqa: BLE001
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception:  # noqa: BLE001
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def cancel(job_id):
+    """Terminate the running job `job_id` (and its children). Idempotent."""
+    with _RUN_LOCK:
+        entry = _RUNNING.get(job_id)
+    if not entry:
+        return {"cancelled": False, "job": job_id, "reason": "not running"}
+    entry["cancelled"] = True
+    _kill(entry)
+    return {"cancelled": True, "job": job_id, "pid": entry["proc"].pid}
+
+
+def _run_tracked(argv, timeout=None, cwd=None, env=None, job_id=None):
+    """Popen + process-group tracking so the job can be cancelled mid-flight."""
+    t0 = time.time()
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, cwd=cwd, env=env, start_new_session=True)
+    except FileNotFoundError as e:
+        return {"exit_code": 127, "stdout": "", "stderr": "not found: %s" % e,
+                "duration_ms": 0}
+    except Exception as e:  # noqa: BLE001
+        return {"exit_code": 125, "stdout": "", "stderr": "exec error: %s" % e,
+                "duration_ms": 0}
+    entry = {"proc": proc, "argv": argv, "started": t0, "cancelled": False}
+    if job_id:
+        with _RUN_LOCK:
+            _RUNNING[job_id] = entry
+    why = None
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        why = "timeout"
+        _kill(entry)
+        out, err = proc.communicate()
+    finally:
+        if job_id:
+            with _RUN_LOCK:
+                _RUNNING.pop(job_id, None)
+    if entry["cancelled"]:
+        why = "cancelled"
+    res = {"exit_code": proc.returncode, "stdout": out or "", "stderr": err or "",
+           "duration_ms": int((time.time() - t0) * 1000)}
+    if why == "timeout":
+        res.update({"exit_code": 124, "timeout": True,
+                    "stderr": (res["stderr"] or "") + "\ntimeout after %ss" % timeout})
+    elif why == "cancelled":
+        res.update({"cancelled": True, "exit_code": 130,
+                    "stderr": (res["stderr"] or "") + "\ncancelled by user"})
+    return res
+
 
 def _run(argv, timeout=None, cwd=None, env=None):
     t0 = time.time()
@@ -156,9 +257,13 @@ def _bwrap_argv(ws, command):
     return argv
 
 
-def run(command, run_id=None, timeout=None, workspace=None, backend=None):
+def run(command, run_id=None, timeout=None, workspace=None, backend=None, job_id=None):
     """Execute `command` in the configured sandbox. Returns a result dict with
-    exit_code / stdout / stderr / duration_ms / backend / sandboxed / workspace."""
+    exit_code / stdout / stderr / duration_ms / backend / sandboxed / workspace.
+
+    JAG-68: the job is tracked under `job_id` (defaults to `run_id`) so a client
+    can STOP it while it is still running via `sandbox.cancel(job_id)`.
+    """
     cfg = registry.load_config()
     sb = cfg["sandbox"]
     p = probe()
@@ -167,14 +272,15 @@ def run(command, run_id=None, timeout=None, workspace=None, backend=None):
         chosen = p["backend"]
     timeout = int(timeout or sb["timeout_secs"])
     ws = workspace or workspace_for(run_id)
+    job_id = job_id or run_id
 
     if chosen == "docker":
         argv = _docker_argv(cfg, ws, command, sb["image"])
-        res = _run(argv, timeout=timeout)
+        res = _run_tracked(argv, timeout=timeout, job_id=job_id)
         res["backend"] = "docker(%s)" % sb["image"]
         res["sandboxed"] = True
     elif chosen == "bwrap":
-        res = _run(_bwrap_argv(ws, command), timeout=timeout)
+        res = _run_tracked(_bwrap_argv(ws, command), timeout=timeout, job_id=job_id)
         res["backend"] = "bwrap"
         res["sandboxed"] = True
     elif chosen == "nsjail":
@@ -183,13 +289,14 @@ def run(command, run_id=None, timeout=None, workspace=None, backend=None):
                 "--bindmount_ro", "/lib", "--bindmount_ro", "/lib64",
                 "--bindmount", ws, "/work", "--cwd", "/work",
                 "--", "/bin/sh", "-c", command]
-        res = _run(argv, timeout=timeout)
+        res = _run_tracked(argv, timeout=timeout, job_id=job_id)
         res["backend"] = "nsjail"
         res["sandboxed"] = True
     else:
         # host execution: either the operator explicitly opted out
         # (config sandbox.backend: none) or no real backend is available.
-        res = _run(["/bin/sh", "-c", command], timeout=timeout, cwd=ws)
+        res = _run_tracked(["/bin/sh", "-c", command], timeout=timeout, cwd=ws,
+                           job_id=job_id)
         res["backend"] = "none(host)"
         res["sandboxed"] = False
         res["warning"] = ("host execution: sandbox.backend is 'none' — runs on the DGX"

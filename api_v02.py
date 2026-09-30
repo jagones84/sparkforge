@@ -615,6 +615,8 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, {"tools": registry.catalog(),
                                      "sandbox": sandbox.probe(force=qs.get("probe") == "1"),
                                      "approvals": approvals.stats()})
+        if path == "/api/tools/running":
+            return _r(handler, 200, {"running": sandbox.running()})
         if path == "/api/sandbox":
             return _r(handler, 200, sandbox.probe(force=qs.get("force") == "1"))
         if path == "/api/approvals":
@@ -720,6 +722,13 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, gated_call(tool, body.get("args") or {},
                                                body.get("run_id"), body.get("wait", True),
                                                body.get("by", "api")))
+        if path == "/api/tools/cancel":
+            job = body.get("job") or body.get("run_id")
+            if not job:
+                return _r(handler, 400, {"error": "job or run_id required"})
+            res = sandbox.cancel(job)
+            _publish("tool.cancel", job=job, cancelled=res.get("cancelled"))
+            return _r(handler, 200, res)
         if path.startswith("/api/approvals/"):
             rec = approvals.decide(path.rsplit("/", 1)[-1], body.get("decision"),
                                    body.get("by", "webui"))
