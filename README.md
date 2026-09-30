@@ -22,6 +22,10 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 🔌 **Real MCP clients (v0.7)** — `config/mcp_clients.yaml` connects the agent to real MCP servers (e.g. `pmcp` on `:3344`, bearer auth via `${VAR}` headers + env_files); their tools appear as `<client>__<tool>` in the registry and the agent loop calls them through the approval gate, with the MCP output as observation; verified by `tests/v07_mcp_fsedit.py`
 - ✂️ **`fs.edit` (v0.7)** — surgical search/replace file edit (single or `replace_all`, refuses missing/ambiguous matches) instead of rewriting whole files with `fs.write`
 - 🧠 **Skills (v0.7.1, JAG-56)** — `skills/` holds the agent skill registry: one `SKILL.md` per skill under `skills/<category>/<name>/` (symlinked into the user skill distribution, e.g. `skills/ops -> ../../skills-autodist-skill/ops`); the `skills` tool (`{"action":"list"}` / `{"action":"read","name":"..."}`) lists and loads them, `self` reports the installed skills + how to add more; verified by `tests/v071_skills_pmcp.py`
+- 🪝 **Deterministic hooks (v0.7.3, JAG-69)** — `hooks.py` + `config/hooks.yaml` (empty by default): shell scripts on `PreToolUse` (exit 2 **blocks** the call, Claude Code contract), `PostToolUse` (observation in `$SPARKFORGE_OBSERVATION`) and `Stop`; no model in the loop, every hook emits `hook.run`; `GET /api/hooks`; verified by `tests/v073_hooks.py`
+- ⏹️ **Stop a running tool (v0.7.2, JAG-68)** — `sandbox.run` uses Popen with a process group, so `POST /api/tools/cancel {run_id}` SIGTERM→SIGKILLs the actual job (and `docker kill`s a container); `GET /api/tools/running` lists live jobs; the app's STOP kills the job, not just the socket
+- 🧩 **Model-authored task list (JAG-65)** — the todo list is written **inline** by the model on its own first turn (harness action `write_todos`), never by a separate blocking planner call; session-keyed, persistent, re-injected every turn, and the reasoning streams live during tool steps
+- 📏 **Real context budget (JAG-66)** — the compaction budget is derived from the model's actual window (`meta.n_ctx`, e.g. 258048 for the 256k models) minus a reply reserve, instead of a fixed 6000
 - 💬 **Chat UI leggibile (v0.7.1, JAG-55)** — la **risposta** è il testo principale del messaggio (il reasoning resta nel drawer CoT, mai al posto della reply); **copia** con un tap per messaggio (⧉) e transcript selezionabile; **tool call inline** nella chat come mini-card 🔧→✅/⛔ con esito (`tool.call`/`tool.result` sullo stream, coerenti con i nodi del task graph); indicatore **contesto onesto**: con `session` reale mostra token/budget/messaggi veri, senza sessione `/api/context` risponde `available:false` e la UI mostra **n/d** invece del finto 6000/0
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
@@ -276,6 +280,9 @@ the stream ends — read the session back after the terminal `done`.
 | POST | `/api/swarm/run` | Swarm coordinator |
 | GET/POST | `/api/tools` | Tool registry (allowlist); POST flips `enabled`/`approval` |
 | POST | `/api/tools/call` | Run one tool through the approval gate `{tool, args, wait?}` |
+| GET | `/api/tools/running` | Jobs currently executing (job, pid, command, seconds) |
+| POST | `/api/tools/cancel` | Stop a running tool job `{job\|run_id}` |
+| GET | `/api/hooks` | Lifecycle hooks (`PreToolUse`/`PostToolUse`/`Stop`); `?reload=1` to re-read |
 | GET | `/api/approvals`, `/api/approvals/<id>` | Approval queue + stats / one record |
 | POST | `/api/approvals/<id>` | `{decision: approve\|deny, by}` |
 | POST | `/api/agent/control` | `{runId, action: pause\|resume\|abort}` |
