@@ -1059,6 +1059,21 @@ def _looks_like_json_action(text):
     return ('"action"' in t) or ('"tool"' in t) or ('"args"' in t)
 
 
+# JAG-74: "act, don't announce". A reply that OPENS with an action verb in the
+# first person and is short is a promise of imminent work, not a result. If no
+# tool ran this turn we nudge the model once to actually do it (or conclude).
+_PROMISE_RE = re.compile(
+    r"^\s*(?:\*\*)?(?:carico|procedo|eseguo|lancio|creo|installo|avvio|aggiorno|"
+    r"verifico|controllo|continuo|i'?ll|i will|i'?m going to|let me|loading|running)\b",
+    re.IGNORECASE)
+
+
+def _looks_like_promise(text):
+    """True when the reply only announces an action (and is not a result)."""
+    t = (text or "").strip()
+    return bool(t) and len(t) <= 400 and bool(_PROMISE_RE.match(t))
+
+
 def _chat_tool_call(act, av02):
     """Accept the canonical {"action":"tool","tool":X,"args":{...}} and the
     model's frequent variant {"action":X,"args":{...}} when X is a real tool
@@ -1163,6 +1178,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     max_steps = CHAT_TOOL_MAX_STEPS if tool_ctx else 1
     answer, think = "", ""
     final_answer = ""
+    announce_nudged = False
     for _step in range(max_steps):
         collected = []
 
@@ -1224,6 +1240,17 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          '{"action":"tool","tool":"<name>","args":{...}} with all '
                          "braces closed, or answer the user in plain prose. Never "
                          "show JSON to the user."})
+            continue
+        if _looks_like_promise(answer) and not announce_nudged:
+            # JAG-74: the model promised an action ("Carico un'altra skill…") but
+            # called no tool this turn — nudge it ONCE to actually act or conclude.
+            announce_nudged = True
+            msgs.append({"role": "assistant", "content": answer})
+            msgs.append({"role": "user", "content":
+                         "You announced an action but did not call any tool. Either "
+                         'call it NOW with {"action":"tool","tool":"<name>","args":{...}}, '
+                         "or — if there is nothing left to do — reply with the final "
+                         "result in plain prose. Do not just repeat the announcement."})
             continue
         for ch, t in collected:
             on_delta(ch, t)

@@ -65,6 +65,18 @@ def log(fmt, *a):
         print("[mcp-client]", msg, file=sys.stderr, flush=True)
 
 
+def _mcp_session_expired(resp):
+    """True when a streamable-HTTP MCP response reports a dead session (JAG-74)."""
+    if not isinstance(resp, dict):
+        return False
+    err = resp.get("error")
+    if not isinstance(err, dict):
+        return False
+    msg = str(err.get("message", "")).lower()
+    return err.get("code") == -32001 or (
+        "session" in msg and any(w in msg for w in ("not found", "expired", "invalid", "terminated")))
+
+
 # --------------------------------------------------------------- session ---
 
 class MCPSession:
@@ -124,7 +136,7 @@ class MCPSession:
         self._reader.start()
         return True
 
-    def _send_raw(self, obj, timeout=20):
+    def _send_raw(self, obj, timeout=20, _retry=True):
         mid = self._next_id()
         q = queue.Queue()
         is_notification = str(obj.get("method", "")).startswith("notifications/")
@@ -139,6 +151,18 @@ class MCPSession:
             elif self._http_base:
                 resp = self._http_call(req, timeout)
                 self._pending.pop(mid, None)
+                # JAG-74: a streamable-HTTP MCP session can expire server-side
+                # ("Session not found"), which made every pmcp tool fail until a
+                # restart. Re-initialize once and replay the call.
+                if _retry and _mcp_session_expired(resp):
+                    log("%s: MCP session expired — re-initializing", self.name)
+                    self._http_session_id = None
+                    self._connected = False
+                    try:
+                        self.initialize()
+                    except Exception:  # noqa: BLE001 — best effort
+                        pass
+                    return self._send_raw(obj, timeout, _retry=False)
                 return resp
             else:
                 self._pending.pop(mid, None)
@@ -216,7 +240,6 @@ class MCPSession:
 
     def _send_http(self, obj, timeout=20):
         return self._http_call(obj, timeout)
-
     # ---- public session lifecycle ----
 
     def initialize(self):
@@ -225,7 +248,8 @@ class MCPSession:
             "capabilities": {},
             "clientInfo": {"name": "sparkforge", "version": "0.3.0"},
         }
-        resp = self._send_raw({"method": "initialize", "params": params}, timeout=30)
+        resp = self._send_raw({"method": "initialize", "params": params}, timeout=30,
+                              _retry=False)
         if resp is None:
             return False
         result = resp.get("result") or {}
