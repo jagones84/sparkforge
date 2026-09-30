@@ -199,20 +199,31 @@ def part_b_mock():
         check("B3 nodes are todo with deps (model-generated labels)",
               statuses == {"todo"} and deps_ok,
               "statuses=%s deps=%s" % (statuses, [e[1]["node"]["deps"] for e in added]))
-        st, g = http("GET", "/api/runs/%s/graph" % run_id, base=base, token=tok)
-        check("B4 GET /api/runs/<id>/graph → persisted graph bound to run+session",
-              st == 200 and g.get("run_id") == run_id and g.get("session_id") == "v06-mock"
+        st, g = http("GET", "/api/runs/%s/graph" % "v06-mock", base=base, token=tok)
+        check("B4 GET /api/runs/<session>/graph → persisted task list (session-keyed)",
+              st == 200 and g.get("session_id") == "v06-mock"
               and g.get("node_count", 0) >= 3,
-              "HTTP %s run=%s session=%s nodes=%s status=%s" % (
-                  st, g.get("run_id"), g.get("session_id"), g.get("node_count"), g.get("status")))
-        # run end: all nodes done, each with evidence
-        st, g = http("GET", "/api/runs/%s/graph" % run_id, base=base, token=tok)
-        all_done = g.get("counts", {}).get("done") == g.get("node_count") and g["node_count"] >= 3
-        with_ev = all(n.get("evidence") for n in g.get("nodes", []))
-        check("B5 at run end all nodes done, each with evidence",
-              all_done and with_ev,
-              "counts=%s evidence_missing=%s" % (
-                  g.get("counts"), [n["label"] for n in g.get("nodes", []) if not n.get("evidence")]))
+              "HTTP %s key=%s session=%s nodes=%s status=%s" % (
+                  st, g.get("key") or g.get("run_id"), g.get("session_id"),
+                  g.get("node_count"), g.get("status")))
+        # JAG-63: the task list must PERSIST across turns — it is NOT force-closed
+        # at the end of every message (that was the old, wrong behaviour).
+        st, g = http("GET", "/api/runs/%s/graph" % "v06-mock", base=base, token=tok)
+        open_n = sum(g.get("counts", {}).get(k, 0) for k in ("todo", "doing", "blocked"))
+        check("B5 task list persists after the run; steps stay OPEN (not auto-closed)",
+              st == 200 and g.get("node_count", 0) >= 3 and open_n >= 3,
+              "counts=%s open=%s" % (g.get("counts"), open_n))
+        # a 2nd message on the SAME session must keep the SAME list (dedup)
+        before = g.get("node_count", 0)
+        _s2, _c2, evs2 = sse_stream(base, tok, "Continua il lavoro", "v06-mock", model="mock-alpha")
+        added2 = [e for e in evs2 if e[0] == "graph.node.added"]
+        _st, g2 = http("GET", "/api/runs/%s/graph" % "v06-mock", base=base, token=tok)
+        check("B8 2nd message on same session keeps the SAME list (no duplicates)",
+              len(added2) == 0 and g2.get("node_count") == before,
+              "added2=%d nodes_before=%d nodes_after=%d" % (
+                  len(added2), before, g2.get("node_count")))
+        g = g2
+        run_id = "v06-mock"
 
         # interactive POST /api/runs/<id>/graph/nodes
         st, n = http("POST", "/api/runs/%s/graph/nodes" % run_id,
@@ -277,10 +288,12 @@ def part_c_live():
           "run=%s nodes=%d kinds(first)=%s" % (run_id, len(added), kinds[:6]))
     if not run_id:
         return
-    _st, g = http("GET", "/api/runs/%s/graph" % run_id, timeout=20)
-    check("C2 live run graph is all-done with evidence",
-          g.get("counts", {}).get("done") == g.get("node_count") and g.get("node_count", 0) >= 3,
-          "nodes=%s counts=%s" % (g.get("node_count"), g.get("counts")))
+    _st, g = http("GET", "/api/runs/%s/graph" % "v06-live", timeout=20)
+    _open = sum(g.get("counts", {}).get(k, 0) for k in ("todo", "doing", "blocked"))
+    check("C2 live request → persistent SESSION task list (keyed by session)",
+          g.get("node_count", 0) >= 3 and g.get("session_id") == "v06-live" and _open >= 1,
+          "nodes=%s counts=%s session=%s" % (
+              g.get("node_count"), g.get("counts"), g.get("session_id")))
 
 
 def main():

@@ -812,19 +812,32 @@ def breakdown_tasks(message, model=None, session=None):
     threading.Thread(target=work, daemon=True).start()
 
 
-def context_summary():
-    plan, tasks = load_plan(), load_tasks()
+def context_summary(session_id=None, graph_key=None):
+    """Harness state injected into EVERY prompt.
+
+    JAG-63: the persistent task list (the graph) is the single TODO the model
+    owns. It is re-injected on every turn, so the model never forgets it across
+    compaction or restarts. The old parallel `tasks.json` board is no longer
+    injected here (it was the source of the "graph vs todo" confusion).
+    """
+    plan = load_plan()
     lines = []
+    key = graph_key or session_id
+    g = None
+    if key:
+        try:
+            g = taskgraph.load(key)
+        except Exception:  # noqa: BLE001 — context must never break a turn
+            g = None
     if plan.get("goal"):
         lines.append("PLAN goal: " + plan["goal"])
         for s in plan.get("steps", []):
             lines.append(" - [%s] %s" % ("x" if s.get("done") else " ", s.get("title", "")))
-    todo = [t for t in tasks.get("tasks", []) if t.get("status") != "done"]
-    if tasks.get("tasks"):
-        lines.append("TASKS: %d open / %d total" % (len(todo), len(tasks["tasks"])))
-        for t in todo[:8]:
-            lines.append(" * (%s) %s" % (t.get("status", "todo"), t.get("title", "")))
-    return "\n".join(lines) if lines else "(no plan or tasks yet)"
+    if g:
+        todos = taskgraph.render_todos(g)
+        if todos:
+            lines.append(todos)
+    return "\n".join(lines) if lines else "(no task list yet)"
 
 
 def extract_json(text):
@@ -968,8 +981,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     except Exception:  # noqa: BLE001 — tool registry must never break chat
         tool_ctx = ""
     sys = (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
-           + "\n\nCurrent harness state:\n" + context_summary())
-    breakdown_tasks(message, model, sess["id"])
+           + "\n\nCurrent harness state (your persistent task list):\n"
+           + context_summary(session_id=sess["id"]))
     # v0.3 context engineering: compaction + token budget + memory retrieval
     try:
         import context_engine
@@ -1181,7 +1194,7 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
 
     actions = []
     for i in range(max_steps):
-        sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT + "\n\nHarness state:\n" + context_summary()
+        sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT + "\n\nHarness state (your persistent task list):\n" + context_summary(graph_key=trace.id)
         msgs = [{"role": "system", "content": sys},
                 {"role": "user", "content": "Goal: %s (iteration %d/%d)" % (goal, i + 1, max_steps)}]
         on_event("agent.iteration", i=i + 1, of=max_steps)
@@ -1544,29 +1557,38 @@ def chat_stream_gen(sess, message, model, mark=None):
                 loaded, _m = model_loaded(target) if target else (True, None)
                 if target and not loaded:
                     ensure_model(target, on_event=_emit)
-                # v0.6: the FIRST action of the run is a model-generated
-                # write_todos call → the per-run task graph is populated live.
-                # v1.6.3 (JAG-55): the very same tool call is surfaced on the
-                # chat stream as a real tool.call/tool.result pair, so the WebUI
-                # and the SparkPulse chat render an inline mini-card that is
-                # coherent with the run-graph nodes it produces.
+                # JAG-63: the graph is keyed by SESSION = the persistent task
+                # list for this task. It survives every message, compaction and
+                # restart; a NEW task (previous list fully done) starts fresh.
+                # The same write_todos is surfaced on the chat stream as a
+                # tool.call/tool.result pair, so the app renders an inline card.
+                gkey = sess["id"]
+                _existing = taskgraph.load(gkey)
+                if _existing and taskgraph.all_done(_existing):
+                    taskgraph.reset(gkey)  # previous task finished → new task
                 _emit("tool.call", run=trace.id, session=sess["id"],
                       tool="write_todos", args={"goal": message[:120]})
                 try:
                     _g, _added = taskgraph.generate_from_model(
-                        trace.id, message, session_id=sess["id"],
+                        gkey, message, session_id=sess["id"],
                         model=target, on_event=_emit)
+                    _open = [n for n in _g.get("nodes", [])
+                             if n.get("status") in taskgraph.OPEN_STATUSES]
                     _emit("tool.result", run=trace.id, session=sess["id"],
                           tool="write_todos", ok=True, exit_code=0,
                           backend="harness",
-                          summary="%d nodi nel task graph" % len(_g.get("nodes", [])))
+                          summary="task list: %d open / %d total"
+                                  % (len(_open), len(_g.get("nodes", []))))
                 except Exception as e:  # graph must never break the chat
                     _emit("tool.result", run=trace.id, session=sess["id"],
                           tool="write_todos", ok=False, backend="harness",
                           stderr=str(e)[:200])
                     publish("graph.error", run=trace.id, error=str(e))
                 chat_once(sess, message, target, on_delta, trace=trace, on_event=_emit)
-                finish_run_graph(trace.id, sess["id"], message, on_event=_emit)
+                # JAG-63: do NOT finalize the task list at the end of every
+                # message — that forced every open node to 'done' and is exactly
+                # why the list could never persist. Nodes close only with real
+                # evidence (or explicitly by the user).
                 trace.finish("done")
             except Exception as e:
                 trace.finish("error")
@@ -1994,6 +2016,10 @@ class Handler(BaseHTTPRequestHandler):
             run_id = path[len("/api/runs/"):-len("/graph/nodes")].strip("/")
             payload, err, code = graph_post(run_id, body)
             return self._send(code, err if err else payload)
+        if path.startswith("/api/sessions/") and path.endswith("/graph/reset"):
+            # JAG-63: only the user clears the persistent task list (new task).
+            sess_id = path[len("/api/sessions/"):-len("/graph/reset")].strip("/")
+            return self._send(200, taskgraph.reset(sess_id))
         if path == "/api/context/compact":
             res = compact_session(body.get("session"), body.get("budget_tokens"))
             return self._send(200 if "error" not in res else 404, res)

@@ -44,15 +44,17 @@ OPEN_STATUSES = ("todo", "doing", "blocked")
 WRITE_TODOS_PROMPT = (
     "You are the SparkForge planner. Your FIRST action for every request is to "
     "call the `write_todos` tool: decompose the current user request into an "
-    "ordered task graph of 2-6 steps. Respond with ONLY JSON, one object per "
-    "line (no prose, no markdown):\n"
+    "ordered task graph of 2-8 steps. This list is PERSISTENT — it is saved, "
+    "re-shown to you on every turn, and you must work through every open step. "
+    "Respond with ONLY JSON, one object per line (no prose, no markdown):\n"
     '{"tool":"write_todos"}\n'
     '{"label":"<imperative step specific to the request>","status":"todo","deps":[]}\n'
     '{"label":"<next step>","status":"todo","deps":[0]}\n'
+    '{"label":"<subtask of step 0>","status":"todo","parent":0}\n'
     "Rules: labels are imperative and mention the actual request (never generic "
-    "placeholders); `deps` holds the 0-based indices of prerequisite todos; the "
-    "first step has no dependencies. A single JSON object with a `todos` array "
-    "is also accepted."
+    "placeholders); `deps` holds the 0-based indices of prerequisite steps; "
+    "`parent` (optional) makes a step a SUBTASK of another; the first step has "
+    "no dependencies. A single JSON object with a `todos` array is also accepted."
 )
 
 
@@ -69,12 +71,12 @@ def _publish(kind, **data):
 
 # ------------------------------------------------------------------ storage --
 
-def _safe_id(run_id):
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", str(run_id or "unknown"))[:96]
+def _safe_id(key):
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", str(key or "unknown"))[:96]
 
 
-def _path(run_id):
-    return os.path.join(GRAPH_DIR, _safe_id(run_id) + ".json")
+def _path(key):
+    return os.path.join(GRAPH_DIR, _safe_id(key) + ".json")
 
 
 def _read_json(path, default=None):
@@ -93,28 +95,39 @@ def _write_json(path, obj):
     os.replace(tmp, path)
 
 
-def load(run_id):
-    """Load one run graph (dict) or None."""
-    return _read_json(_path(run_id), None)
+def load(key):
+    """Load the graph for `key` (a session id = a task, or a run id) or None."""
+    return _read_json(_path(key), None)
 
 
 def save(graph):
     graph["updated"] = round(time.time(), 3)
-    _write_json(_path(graph["run_id"]), graph)
+    _write_json(_path(graph.get("key") or graph.get("run_id")), graph)
     return graph
 
 
-def ensure(run_id, session_id=None, goal=None):
-    """Get-or-create the graph for a run, tagged with session_id + run_id."""
+def ensure(key, session_id=None, goal=None):
+    """Get-or-create the graph for `key`.
+
+    JAG-63: the graph is the ONE persistent task list. In chat it is keyed by
+    the SESSION id (one task = one session → it survives across messages,
+    compaction and restarts). Agent runs key it by the run id.
+    """
     with GRAPH_LOCK:
-        g = load(run_id)
+        g = load(key)
         if g is None:
-            g = {"run_id": run_id, "session_id": session_id, "goal": goal,
+            g = {"key": key, "run_id": key, "session_id": session_id, "goal": goal,
                  "nodes": [], "created": round(time.time(), 3),
                  "updated": round(time.time(), 3), "generated": False}
             save(g)
         else:
             changed = False
+            if not g.get("key"):
+                g["key"] = key
+                changed = True
+            if not g.get("run_id"):
+                g["run_id"] = key
+                changed = True
             if session_id and g.get("session_id") != session_id:
                 g["session_id"] = session_id
                 changed = True
@@ -124,6 +137,49 @@ def ensure(run_id, session_id=None, goal=None):
             if changed:
                 save(g)
         return g
+
+
+def reset(key):
+    """Archive (soft-clear) the task list for `key`. Only a user / new task may
+    call this — never the model, so the list never silently disappears."""
+    p = _path(key)
+    if not os.path.exists(p):
+        return {"reset": False, "key": key}
+    archived = p + ".reset-%d" % int(time.time())
+    try:
+        os.replace(p, archived)
+    except OSError as e:  # noqa: BLE001
+        return {"reset": False, "key": key, "error": str(e)}
+    _publish("graph.reset", run=key, session=key, archived=os.path.basename(archived))
+    return {"reset": True, "key": key, "archived": os.path.basename(archived)}
+
+
+def render_todos(graph, limit=12):
+    """Compact text block of the persistent task list, for prompt injection."""
+    if not graph or not graph.get("nodes"):
+        return ""
+    c = counts(graph)
+    open_n = c.get("todo", 0) + c.get("doing", 0) + c.get("blocked", 0)
+    lines = ["TASK LIST (persistent — this is YOUR todo list; it survives "
+             "compaction and restarts; %d open / %d total):" % (open_n, len(graph["nodes"]))]
+    for n in graph["nodes"][:limit]:
+        mark = {"todo": "[ ]", "doing": "[>]", "done": "[x]",
+                "blocked": "[!]", "cancelled": "[-]"}.get(n.get("status"), "[ ]")
+        indent = "    " if n.get("parent") else "  "
+        lines.append("%s%s %s (%s)" % (indent, mark, n.get("label", ""), n.get("id")))
+    if open_n:
+        lines.append("Keep every open step in mind; mark one done ONLY with "
+                     "evidence, and add new steps if the goal grows.")
+    return "\n".join(lines)
+
+
+def all_done(graph):
+    """True when the list has nodes and none are still open."""
+    nodes = graph.get("nodes", []) if graph else []
+    if not nodes:
+        return False
+    return all(n.get("status") in ("done", "cancelled") for n in nodes)
+
 
 
 def counts(graph):
@@ -173,8 +229,12 @@ def _has_evidence(node):
 # ------------------------------------------------------------ node mutation --
 
 def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None,
-             source="model"):
-    """Append a node; emits `graph.node.added`. `done` requires evidence."""
+             source="model", parent=None):
+    """Append a node; emits `graph.node.added`. `done` requires evidence.
+
+    JAG-63: `parent` (a node id) turns a node into a SUBTASK of another step,
+    so the task list can carry hierarchy, not just flat `deps`.
+    """
     label = str(label or "").strip()[:200]
     if not label:
         raise ValueError("label required")
@@ -187,7 +247,8 @@ def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None
     if status == "done" and not ev:
         raise ValueError("evidence required for a node in status 'done'")
     node = {"id": node_id or _next_id(graph), "label": label, "status": status,
-            "deps": deps, "evidence": ev, "source": source,
+            "deps": deps, "parent": str(parent) if parent else None, "evidence": ev,
+            "source": source,
             "created": round(time.time(), 3), "updated": round(time.time(), 3)}
     with GRAPH_LOCK:
         graph["nodes"].append(node)
@@ -290,8 +351,16 @@ def apply_write_todos(graph, todos, source="model:write_todos", index_map=None, 
         evidence = item.get("evidence")
         if status == "done" and not evidence:
             status = "todo"
+        # JAG-63: `parent` may be a 0-based index into this list or a node id.
+        parent = item.get("parent")
+        if isinstance(parent, bool):
+            parent = None
+        if isinstance(parent, int) and parent in index_map:
+            parent = index_map[parent]
+        elif isinstance(parent, str) and parent.isdigit() and int(parent) in index_map:
+            parent = index_map[int(parent)]
         node = add_node(graph, label, deps=deps, status=status, evidence=evidence,
-                        source=source)
+                        source=source, parent=parent)
         index_map[start + i] = node["id"]
         added.append(node)
     graph["generated"] = True

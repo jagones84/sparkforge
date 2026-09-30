@@ -334,7 +334,8 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                          action=action, scripted=True)
             else:
                 sysp = (srv.SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT_V2 + "\n\n"
-                        + tool_context() + "\n\nHarness state:\n" + srv.context_summary())
+                        + tool_context() + "\n\nHarness state (your persistent task list):\n"
+                        + srv.context_summary(graph_key=st.id))
                 if not hist:
                     hist.append({"role": "user", "content":
                                  "Goal: %s\n\nWork step by step: issue ONE action "
