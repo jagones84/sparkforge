@@ -19,7 +19,7 @@ evidence (message counts, estimated tokens in/out, retrieved memory hits).
 
 import os
 
-DEFAULT_BUDGET = int(os.environ.get("SPARKFORGE_CONTEXT_BUDGET", "6000"))
+DEFAULT_BUDGET = int(os.environ.get("SPARKFORGE_CONTEXT_BUDGET", "32768"))
 DEFAULT_KEEP_RECENT = int(os.environ.get("SPARKFORGE_CONTEXT_KEEP_RECENT", "8"))
 RETRIEVAL_TOP_K = int(os.environ.get("SPARKFORGE_CONTEXT_RETRIEVAL_K", "3"))
 

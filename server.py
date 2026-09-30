@@ -268,17 +268,68 @@ def ensure_reply_persisted(sess, since, error=None, model=None):
 
 
 def router_models():
-    """[{alias, status, loaded}] from the llama.cpp router; [] on failure."""
+    """[{alias, status, loaded, n_ctx}] from the llama.cpp router; [] on failure.
+
+    JAG-66: `n_ctx` is the model's REAL context window (from `meta.n_ctx`, or the
+    `--ctx-size` in its launch args) — the source of truth for the token budget.
+    """
     try:
         with urllib.request.urlopen(ROUTER_BASE + "/v1/models", timeout=6) as r:
             data = json.loads(r.read().decode("utf-8") or "{}")
         out = []
         for m in data.get("data", []):
             st = (m.get("status") or {}).get("value", "unknown")
-            out.append({"alias": m.get("id"), "status": st, "loaded": st == "loaded"})
+            meta = m.get("meta") or {}
+            n_ctx = meta.get("n_ctx") or meta.get("n_ctx_train") or 0
+            if not n_ctx:
+                args = (m.get("status") or {}).get("args") or []
+                for i, a in enumerate(args):
+                    if a == "--ctx-size" and i + 1 < len(args):
+                        n_ctx = int(args[i + 1])
+                        break
+            out.append({"alias": m.get("id"), "status": st, "loaded": st == "loaded",
+                        "n_ctx": int(n_ctx or 0)})
         return out
     except Exception:
         return []
+
+
+CONTEXT_RESERVE = int(os.environ.get("SPARKFORGE_CONTEXT_RESERVE", "4096"))
+
+
+def model_context_window(alias=None):
+    """Real context window (tokens) of `alias`, else the loaded model, else 0."""
+    ms = router_models()
+    if alias:
+        for m in ms:
+            if m.get("alias") == alias and m.get("n_ctx"):
+                return m["n_ctx"]
+    for m in ms:
+        if m.get("loaded") and m.get("n_ctx"):
+            return m["n_ctx"]
+    return 0
+
+
+def context_budget(alias=None):
+    """Token budget for compaction.
+
+    JAG-66: NOT a hardcoded 6000. An explicit `SPARKFORGE_CONTEXT_BUDGET` still
+    wins (for tests), otherwise we use the model's real context window minus a
+    reserve for the reply, so the harness actually exploits 131k/256k instead of
+    compacting every trivial conversation.
+    """
+    env = os.environ.get("SPARKFORGE_CONTEXT_BUDGET")
+    if env:
+        try:
+            return int(env)
+        except ValueError:
+            pass
+    import context_engine
+    n = model_context_window(alias)
+    if n:
+        return max(2048, n - CONTEXT_RESERVE)
+    return context_engine.DEFAULT_BUDGET
+
 
 
 def default_model():
@@ -1038,9 +1089,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     try:
         import context_engine
         msgs, ctx_stats = context_engine.build(
-            sys, sess["messages"], message,
-            budget_tokens=int(os.environ.get("SPARKFORGE_CONTEXT_BUDGET",
-                                             context_engine.DEFAULT_BUDGET)))
+            sys, sess["messages"], message, budget_tokens=context_budget())
         publish("context.built", session=sess["id"], **{
             k: v for k, v in ctx_stats.items() if k in (
                 "budget_tokens", "retrieved_memories", "final_messages",
@@ -1759,7 +1808,7 @@ def context_status(session=None):
     render "n/d" when `available` is false instead of a fake budget.
     """
     import context_engine
-    budget = int(os.environ.get("SPARKFORGE_CONTEXT_BUDGET", context_engine.DEFAULT_BUDGET))
+    budget = context_budget()
     sess = load_session(session) if session else None
     used = sum(context_engine.count_tokens(m.get("content", ""))
                for m in (sess or {}).get("messages", []))
@@ -1779,8 +1828,7 @@ def compact_session(session, budget_tokens=None):
     sess = load_session(session) if session else None
     if not sess:
         return {"error": "session not found: %s" % session}
-    budget = int(budget_tokens or os.environ.get(
-        "SPARKFORGE_CONTEXT_BUDGET", context_engine.DEFAULT_BUDGET))
+    budget = int(budget_tokens) if budget_tokens else context_budget()
     msgs, stats = context_engine.compact(sess.get("messages", []), budget)
     sess["messages"] = msgs
     save_session(sess)
