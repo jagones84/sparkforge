@@ -931,7 +931,12 @@ CHAT_TOOL_PROMPT = (
     'JSON and nothing else: {"action":"tool","tool":"<name>","args":{...}}. '
     "After the tool runs you receive its observation and MUST continue: call another "
     "tool or answer the user in plain text. Never show JSON to the user; the final "
-    "message must be plain prose. Tool registry (allowlist):\n"
+    "message must be plain prose. To plan a multi-step request, FIRST emit ONLY "
+    '{"action":"write_todos","todos":[{"label":"<imperative step>","deps":[],"parent":null}]} '
+    "(2-8 steps you author yourself; this list is PERSISTENT — it is saved and "
+    "re-shown to you on every turn, and only you or the user may clear it), then "
+    "work through it and mark steps done with evidence. "
+    "Tool registry (allowlist):\n"
 )
 
 
@@ -964,6 +969,43 @@ def _chat_tool_call(act, av02):
         if k in act and k not in args:
             args[k] = act[k]
     return str(tool), args
+
+
+def _apply_chat_todos(sess, act, on_event):
+    """Harness action `write_todos`: persist the model-authored todo list.
+
+    The chat loop is the ONLY writer of the task list (no separate planner
+    call): when the model emits `{"action":"write_todos","todos":[...]}` we map
+    it onto the session graph, publish a normal tool.call/tool.result pair so
+    the app renders an inline card, and let the model continue.
+    """
+    try:
+        graph = taskgraph.ensure(sess["id"], session_id=sess["id"])
+        todos = act.get("todos")
+        if isinstance(todos, str):
+            todos, _ = taskgraph.parse_todos(todos)
+        on_event("tool.call", session=sess["id"], tool="write_todos", args={},
+                 inline=True)
+        base = len(graph.get("nodes", []))
+        added = taskgraph.apply_write_todos(
+            graph, taskgraph._missing(graph, todos or []))
+        total = len(graph.get("nodes", []))
+        # surface each node on the chat stream too, so the app renders the list
+        # live (apply_write_todos only fans out on the global feed).
+        for i, node in enumerate(added):
+            on_event("graph.node.added", session=sess["id"], node=node,
+                     index=base + i, total=total)
+        on_event("tool.result", session=sess["id"], tool="write_todos", ok=True,
+                 exit_code=0, backend="harness",
+                 summary="task list: %d node(s), +%d" % (total, len(added)))
+        return len(added)
+    except Exception as e:  # noqa: BLE001 — the task list must never break chat
+        try:
+            on_event("tool.result", session=sess["id"], tool="write_todos",
+                     ok=False, backend="harness", stderr=str(e)[:200])
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
 
 
 def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=None):
@@ -1018,10 +1060,27 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     final_answer = ""
     for _step in range(max_steps):
         collected = []
-        answer, think, model = stream_with_fallback(
-            msgs, model, "chat",
-            lambda ch, t, _c=collected: _c.append((ch, t)))
+
+        def _capture(ch, t, _c=collected):
+            # JAG-65: stream the model's REASONING live, so a tool-calling turn
+            # shows progress instead of dead air; buffer only answer text so raw
+            # tool-call JSON is never streamed to the user.
+            if ch == "think":
+                on_delta("think", t)
+            else:
+                _c.append((ch, t))
+
+        answer, think, model = stream_with_fallback(msgs, model, "chat", _capture)
         act = extract_json(answer)
+        if isinstance(act, dict) and act.get("action") == "write_todos":
+            n = _apply_chat_todos(sess, act, on_event)
+            msgs.append({"role": "assistant", "content": answer})
+            msgs.append({"role": "user", "content":
+                         "Task list saved (%d new step(s)); the full persistent list "
+                         "is in your system state. Now work through it: answer the "
+                         "user in plain prose, or call a tool — one step at a time."
+                         % n})
+            continue
         tc = _chat_tool_call(act, api_v02) if tool_ctx else None
         if tc:
             tool, args = tc
@@ -1585,30 +1644,15 @@ def chat_stream_gen(sess, message, model, mark=None):
                 # JAG-63: the graph is keyed by SESSION = the persistent task
                 # list for this task. It survives every message, compaction and
                 # restart; a NEW task (previous list fully done) starts fresh.
-                # The same write_todos is surfaced on the chat stream as a
-                # tool.call/tool.result pair, so the app renders an inline card.
+                # JAG-65: the todo list is authored INLINE by the model on its own
+                # first response (harness action `write_todos`) — exactly like
+                # Claude Code / Deep Agents. There is NO separate planner call:
+                # that extra round-trip was dead air before any reply and fed the
+                # model only the raw user message, so it parroted it back as steps.
                 gkey = sess["id"]
                 _existing = taskgraph.load(gkey)
                 if _existing and taskgraph.all_done(_existing):
                     taskgraph.reset(gkey)  # previous task finished → new task
-                _emit("tool.call", run=trace.id, session=sess["id"],
-                      tool="write_todos", args={"goal": message[:120]})
-                try:
-                    _g, _added = taskgraph.generate_from_model(
-                        gkey, message, session_id=sess["id"],
-                        model=target, on_event=_emit)
-                    _open = [n for n in _g.get("nodes", [])
-                             if n.get("status") in taskgraph.OPEN_STATUSES]
-                    _emit("tool.result", run=trace.id, session=sess["id"],
-                          tool="write_todos", ok=True, exit_code=0,
-                          backend="harness",
-                          summary="task list: %d open / %d total"
-                                  % (len(_open), len(_g.get("nodes", []))))
-                except Exception as e:  # graph must never break the chat
-                    _emit("tool.result", run=trace.id, session=sess["id"],
-                          tool="write_todos", ok=False, backend="harness",
-                          stderr=str(e)[:200])
-                    publish("graph.error", run=trace.id, error=str(e))
                 chat_once(sess, message, target, on_delta, trace=trace, on_event=_emit)
                 # JAG-63: do NOT finalize the task list at the end of every
                 # message — that forced every open node to 'done' and is exactly

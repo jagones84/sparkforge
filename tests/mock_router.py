@@ -24,21 +24,20 @@ STATE = {"loaded": False, "load_start": None, "fail_503": 0, "warm_seconds": 2,
 ALIAS = "mock-alpha"
 LOCK = threading.Lock()
 
-# v0.6: when the system prompt asks for a `write_todos` tool call, answer with a
-# stream-friendly NDJSON task graph instead of the generic "pong".
-MULTI_STEP = (
-    '{"tool":"write_todos"}\n'
-    '{"label":"Raccogliere il testo della richiesta","status":"todo","deps":[]}\n'
-    '{"label":"Estrarre i requisiti e i vincoli","status":"todo","deps":[0]}\n'
-    '{"label":"Produrre il piano finale verificato","status":"todo","deps":[1]}\n'
-)
-TODOS_TEXT = MULTI_STEP
+# JAG-65: the chat loop asks the model to author the task list INLINE as a
+# harness action (`write_todos`); it is emitted ONCE, then the mock answers in
+# plain prose — exactly how a real harness-driven model behaves.
+TODOS_ACTION = ('{"action":"write_todos","todos":['
+                '{"label":"Raccogliere il testo della richiesta","deps":[]},'
+                '{"label":"Estrarre i requisiti e i vincoli","deps":[0]},'
+                '{"label":"Produrre il piano finale verificato","deps":[1]}]}')
 # a re-plan asks only for the steps still missing → return distinct new steps
 REPLAN_TEXT = (
     '{"tool":"write_todos"}\n'
     '{"label":"Registrare l esito della verifica","status":"todo","deps":[]}\n'
     '{"label":"Notificare il risultato finale","status":"todo","deps":[0]}\n'
 )
+TODOS_TEXT = TODOS_ACTION
 
 
 def _is_todo_call(body):
@@ -50,8 +49,16 @@ def _is_todo_call(body):
 
 
 def _todo_answer(body):
-    """NDJSON answer for a write_todos request (re-plan gets the 'missing' steps)."""
-    text = "\n".join((m.get("content") or "") for m in (body.get("messages") or []))
+    """Inline task-list action on the first call, prose afterwards.
+
+    A re-plan request (system prompt says the list "already contains" labels)
+    gets the distinct NDJSON 'missing' steps instead.
+    """
+    msgs = body.get("messages") or []
+    if any(m.get("role") == "assistant" and '"write_todos"' in (m.get("content") or "")
+           for m in msgs):
+        return "pong"
+    text = "\n".join((m.get("content") or "") for m in msgs)
     if "already contains" in text or "already has these nodes" in text:
         return REPLAN_TEXT
     return TODOS_TEXT
