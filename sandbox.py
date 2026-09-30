@@ -187,11 +187,14 @@ def run(command, run_id=None, timeout=None, workspace=None, backend=None):
         res["backend"] = "nsjail"
         res["sandboxed"] = True
     else:
-        # explicit opt-out only (config sandbox.backend: none) — NOT isolated
+        # host execution: either the operator explicitly opted out
+        # (config sandbox.backend: none) or no real backend is available.
         res = _run(["/bin/sh", "-c", command], timeout=timeout, cwd=ws)
         res["backend"] = "none(host)"
         res["sandboxed"] = False
-        res["warning"] = "no sandbox backend available — ran on the host"
+        res["warning"] = ("host execution: sandbox.backend is 'none' — runs on the DGX"
+                          if p.get("requested") == "none"
+                          else "no sandbox backend available — ran on the host")
     res["command"] = command
     res["workspace"] = ws
     return res

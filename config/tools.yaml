@@ -8,11 +8,16 @@ version: "0.2"
 sandbox:
   # auto | docker | bwrap | nsjail | none
   #   auto  -> first working backend of: docker, bwrap, nsjail
-  #   none  -> run on the host (NOT sandboxed; only for debugging, marked as such)
-  backend: auto
+  #   none  -> run on the host (NOT sandboxed; marked `sandboxed: false`)
+  #
+  # JAG-59: "tutto deve vivere sul DGX" — the shell tool must use the real DGX
+  # environment (JDK/Gradle/Android SDK/adb + the repo), which an alpine
+  # container cannot provide. So we run on the host. Mutating commands are
+  # still approval-gated and checked against the `deny` list below.
+  backend: none
   image: alpine:latest          # container image for the docker backend
-  timeout_secs: 25              # per-command wall clock
-  network: false                # no network by default (--network none)
+  timeout_secs: 900             # per-command wall clock (APK builds take minutes)
+  network: true                 # host network (docker backend would use --network host)
   memory_mb: 256
   pids_limit: 128
   cpus: "1.0"
@@ -65,12 +70,13 @@ tools:
     roots:
       - "."
 
-  # write a file (host-side, constrained to the sandbox workspace by default)
+  # write a file (host-side, constrained to the allowed roots; JAG-59: the repo
+  # root so the agent can create/edit the DGX repos it works on)
   fs.write:
     enabled: true
     approval: required
     roots:
-      - "data/sandbox"
+      - "."
 
   # surgical edit: exact search/replace inside a file (safer than rewriting
   # the whole file with fs.write); same roots as fs.write
@@ -78,7 +84,7 @@ tools:
     enabled: true
     approval: required
     roots:
-      - "data/sandbox"
+      - "."
 
   # git — read-only subcommands auto-approved, mutating ones need approval
   git:
