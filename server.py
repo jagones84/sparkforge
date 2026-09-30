@@ -1915,6 +1915,16 @@ def chat_stream_gen(sess, message, model, mark=None):
                 if _existing and taskgraph.all_done(_existing):
                     taskgraph.reset(gkey)  # previous task finished → new task
                 chat_once(sess, message, target, on_delta, trace=trace, on_event=_emit)
+                # JAG-76: guarantee a plan. The model normally authors the list
+                # itself via `write_todos`; when it answers with prose only (which
+                # left the app's 🧩 GRAFO panel empty — "non c'è nessun plan"), we
+                # generate the graph from the request so the panel is never empty.
+                # Skipped for one-liners (greetings/chit-chat) where a task list
+                # would be noise.
+                _g = taskgraph.load(gkey)
+                if (not _g or not _g.get("nodes")) and len(str(message).split()) >= 4:
+                    start_run_graph(gkey, message, gkey, routing.pick("planner"),
+                                    on_event=_emit)
                 # JAG-63: do NOT finalize the task list at the end of every
                 # message — that forced every open node to 'done' and is exactly
                 # why the list could never persist. Nodes close only with real
@@ -2350,8 +2360,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 trace = RunTrace("chat", goal=message[:120], model=body.get("model"))
                 trace.span("chat.once", session=sess["id"])
-                # v0.6 first action: model-generated write_todos → per-run graph
-                start_run_graph(trace.id, message, sess["id"], routing.pick("planner"))
+                # v0.6 first action: model-generated write_todos → per-run graph.
+                # JAG-76: key the graph by the SESSION (same key as
+                # `/api/chat/stream`), so every client that binds the panel to the
+                # session finds it. Keying it by the ephemeral trace id made the
+                # two chat paths disagree and the panel look empty.
+                start_run_graph(sess["id"], message, sess["id"], routing.pick("planner"))
                 reply, model = chat_once(sess, message, body.get("model"), trace=trace)
             except Exception as e:  # noqa: BLE001
                 # JAG-51: persist an explicit assistant error turn *before* the
@@ -2364,7 +2378,7 @@ class Handler(BaseHTTPRequestHandler):
                                         "session": sess["id"],
                                         "run_id": getattr(trace, "id", None),
                                         "stored_error": True})
-            finish_run_graph(trace.id, sess["id"], message)
+            finish_run_graph(sess["id"], sess["id"], message)
             trace.model = model
             trace.finish("done")
             return self._send(200, {"session": sess["id"], "model": model, "run_id": trace.id,
