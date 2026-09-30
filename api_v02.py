@@ -452,7 +452,15 @@ def agent_stream_gen_v2(goal, max_steps, model, run_id, script=None):
     yield "event: run\ndata: %s\n\n" % json.dumps({"run_id": run_id})
     threading.Thread(target=worker, daemon=True).start()
     while True:
-        item = q.get()
+        try:
+            item = q.get(timeout=15)
+        except queue.Empty:
+            # Keepalive: a run blocked on an approval gate can stay silent for
+            # up to 300s; without this the SSE channel idles and mobile
+            # networks/proxies abort it ("Software caused connection abort").
+            # Clients ignore SSE comment lines.
+            yield ": ping\n\n"
+            continue
         if item is None:
             break
         yield item

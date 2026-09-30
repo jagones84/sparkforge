@@ -1467,15 +1467,19 @@ def sse_pump(q, worker, open_comment=": stream open\n\n", terminal="done",
              idle_timeout=None):
     """Drain a producer queue into SSE frames, then stop for good.
 
-    v0.6.1 (JAG-48): the chat stream is *not* keep-alive — no `: ping` filler.
-    It ends with exactly one terminal `done` and the caller closes the socket.
+    v0.6.1 (JAG-48): the stream is *terminal* — it ends with exactly one
+    terminal `done` and the caller closes the socket.
     Two guards make that unconditional, so the connection can never linger:
       * the producer thread dying without its sentinel ends the stream, and
       * `idle_timeout` seconds without a single event ends the stream with an
         `error` + `done` instead of waiting on a stalled upstream forever.
+    v1.6.9 (JAG-60): while the producer is silent (blocked on the approval
+    gate, or a slow first token) we emit an SSE comment `: ping` every ~10s so
+    mobile networks/proxies don't idle-abort the channel ("connection abort").
     """
     yield open_comment  # first bytes out immediately → the client sees 200
     deadline = time.time() + idle_timeout if idle_timeout else None
+    idle_s = 0.0
     while True:
         try:
             item = q.get(timeout=1.0)
@@ -1486,9 +1490,14 @@ def sse_pump(q, worker, open_comment=": stream open\n\n", terminal="done",
                 break
             if not worker.is_alive():
                 break  # producer gone without a sentinel: never hang the client
+            idle_s += 1.0
+            if idle_s >= 10.0:
+                idle_s = 0.0
+                yield ": ping\n\n"  # heartbeat: keeps the SSE channel alive
             continue
         if item is None:
             break
+        idle_s = 0.0
         if deadline is not None:
             deadline = time.time() + idle_timeout
         yield item
