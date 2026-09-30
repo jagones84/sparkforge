@@ -935,6 +935,15 @@ CHAT_TOOL_PROMPT = (
 )
 
 
+def _looks_like_json_action(text):
+    """True when `text` is a (possibly malformed/truncated) tool-call JSON —
+    i.e. something we must NEVER show to the user as a chat reply."""
+    t = (text or "").strip()
+    if not t.startswith(("{", "[")):
+        return False
+    return ('"action"' in t) or ('"tool"' in t) or ('"args"' in t)
+
+
 def _chat_tool_call(act, av02):
     """Accept the canonical {"action":"tool","tool":X,"args":{...}} and the
     model's frequent variant {"action":X,"args":{...}} when X is a real tool
@@ -1041,6 +1050,17 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          '{"action":"tool","tool":"<name>","args":{...}} for a real '
                          "tool, or answer the user in plain text."})
             continue
+        if _looks_like_json_action(answer):
+            # JAG-64: malformed/TRUNCATED tool-call JSON (extract_json failed, so
+            # `act` is None). Never leak it into the chat — ask for a clean retry.
+            msgs.append({"role": "assistant", "content": answer})
+            msgs.append({"role": "user", "content":
+                         "That JSON was invalid or incomplete (it did not parse). "
+                         "Re-emit a VALID "
+                         '{"action":"tool","tool":"<name>","args":{...}} with all '
+                         "braces closed, or answer the user in plain prose. Never "
+                         "show JSON to the user."})
+            continue
         for ch, t in collected:
             on_delta(ch, t)
         final_answer, think = answer, think
@@ -1056,6 +1076,11 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         trace.llm_call(msgs, answer + think)
     meta = {"model": model}
     content = answer.strip()
+    if _looks_like_json_action(content):
+        # JAG-64: last-resort guard — never persist raw tool-call JSON.
+        meta = {"model": model, "error": True,
+                "error_detail": "tool-call JSON leaked instead of a reply"}
+        content = ERROR_PREFIX + "the model returned tool-call JSON, not a reply — retry."
     if not content:
         # JAG-51: an empty answer is not a reply — record it explicitly instead
         # of persisting a silent blank assistant turn.

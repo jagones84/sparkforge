@@ -180,7 +180,10 @@ def part_b_mock():
         if not up:
             return
         msg = "Analizza questo testo in 3 step e produci un riassunto verificato"
-        status, ctype, evs = sse_stream(base, tok, msg, "v06-mock", model="mock-alpha")
+        # JAG-63: the task list is keyed by SESSION and persists — use a fresh
+        # session per run so every check stays idempotent.
+        sess = "v06-mock-%s" % uuid.uuid4().hex[:8]
+        status, ctype, evs = sse_stream(base, tok, msg, sess, model="mock-alpha")
         kinds = [e[0] for e in evs]
         run_id = next((e[1].get("run_id") for e in evs if e[0] == "chat.run"), None)
         check("B1 chat stream emits chat.run with a run_id",
@@ -199,31 +202,31 @@ def part_b_mock():
         check("B3 nodes are todo with deps (model-generated labels)",
               statuses == {"todo"} and deps_ok,
               "statuses=%s deps=%s" % (statuses, [e[1]["node"]["deps"] for e in added]))
-        st, g = http("GET", "/api/runs/%s/graph" % "v06-mock", base=base, token=tok)
+        st, g = http("GET", "/api/runs/%s/graph" % sess, base=base, token=tok)
         check("B4 GET /api/runs/<session>/graph → persisted task list (session-keyed)",
-              st == 200 and g.get("session_id") == "v06-mock"
+              st == 200 and g.get("session_id") == sess
               and g.get("node_count", 0) >= 3,
               "HTTP %s key=%s session=%s nodes=%s status=%s" % (
                   st, g.get("key") or g.get("run_id"), g.get("session_id"),
                   g.get("node_count"), g.get("status")))
         # JAG-63: the task list must PERSIST across turns — it is NOT force-closed
         # at the end of every message (that was the old, wrong behaviour).
-        st, g = http("GET", "/api/runs/%s/graph" % "v06-mock", base=base, token=tok)
+        st, g = http("GET", "/api/runs/%s/graph" % sess, base=base, token=tok)
         open_n = sum(g.get("counts", {}).get(k, 0) for k in ("todo", "doing", "blocked"))
         check("B5 task list persists after the run; steps stay OPEN (not auto-closed)",
               st == 200 and g.get("node_count", 0) >= 3 and open_n >= 3,
               "counts=%s open=%s" % (g.get("counts"), open_n))
         # a 2nd message on the SAME session must keep the SAME list (dedup)
         before = g.get("node_count", 0)
-        _s2, _c2, evs2 = sse_stream(base, tok, "Continua il lavoro", "v06-mock", model="mock-alpha")
+        _s2, _c2, evs2 = sse_stream(base, tok, "Continua il lavoro", sess, model="mock-alpha")
         added2 = [e for e in evs2 if e[0] == "graph.node.added"]
-        _st, g2 = http("GET", "/api/runs/%s/graph" % "v06-mock", base=base, token=tok)
+        _st, g2 = http("GET", "/api/runs/%s/graph" % sess, base=base, token=tok)
         check("B8 2nd message on same session keeps the SAME list (no duplicates)",
               len(added2) == 0 and g2.get("node_count") == before,
               "added2=%d nodes_before=%d nodes_after=%d" % (
                   len(added2), before, g2.get("node_count")))
         g = g2
-        run_id = "v06-mock"
+        run_id = sess
 
         # interactive POST /api/runs/<id>/graph/nodes
         st, n = http("POST", "/api/runs/%s/graph/nodes" % run_id,
@@ -274,8 +277,10 @@ def part_c_live():
         return
     msg = ("Pianifica in 3 step questa attivita: analizza il file README.md, "
            "estrai i 3 punti chiave e produci una sintesi finale verificata")
+    # JAG-63: fresh session (the task list persists per session).
+    sess_live = "v06-live-%s" % uuid.uuid4().hex[:8]
     try:
-        status, _ctype, evs = sse_stream(BASE, TOKEN, msg, "v06-live", timeout=180)
+        status, _ctype, evs = sse_stream(BASE, TOKEN, msg, sess_live, timeout=180)
     except Exception as e:  # noqa: BLE001
         check("C1 live multi-step request → >= 3-node graph", True,
               "SKIPPED: live stream error %s" % e, skipped=True)
@@ -288,10 +293,10 @@ def part_c_live():
           "run=%s nodes=%d kinds(first)=%s" % (run_id, len(added), kinds[:6]))
     if not run_id:
         return
-    _st, g = http("GET", "/api/runs/%s/graph" % "v06-live", timeout=20)
+    _st, g = http("GET", "/api/runs/%s/graph" % sess_live, timeout=20)
     _open = sum(g.get("counts", {}).get(k, 0) for k in ("todo", "doing", "blocked"))
     check("C2 live request → persistent SESSION task list (keyed by session)",
-          g.get("node_count", 0) >= 3 and g.get("session_id") == "v06-live" and _open >= 1,
+          g.get("node_count", 0) >= 3 and g.get("session_id") == sess_live and _open >= 1,
           "nodes=%s counts=%s session=%s" % (
               g.get("node_count"), g.get("counts"), g.get("session_id")))
 
