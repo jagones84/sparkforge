@@ -295,6 +295,9 @@ def router_models():
 
 
 CONTEXT_RESERVE = int(os.environ.get("SPARKFORGE_CONTEXT_RESERVE", "4096"))
+# JAG-70: auto-compaction triggers when the REAL prompt reaches this % of the
+# budget (the frontier pattern: compact before you hit the wall, not after).
+AUTOCOMPACT_PCT = float(os.environ.get("SPARKFORGE_CONTEXT_AUTOCOMPACT_PCT", "75"))
 
 
 def model_context_window(alias=None):
@@ -1078,13 +1081,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     # JAG-58b: the chat IS the agent — same tool registry as the agent loop, so
     # the model can call tools inline before it answers. Falls back to plain chat
     # if the tool registry is unavailable.
-    try:
-        tool_ctx = CHAT_TOOL_PROMPT + "\n" + api_v02.tool_context()
-    except Exception:  # noqa: BLE001 — tool registry must never break chat
-        tool_ctx = ""
-    sys = (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
-           + "\n\nCurrent harness state (your persistent task list):\n"
-           + context_summary(session_id=sess["id"]))
+    # JAG-70: one shared assembler (`_system_prompt`) is used here AND by the
+    # context indicator, so the measured prompt size cannot drift from reality.
+    tool_ctx = _tool_context()
+    sys = _system_prompt(sess, tool_ctx)
     # v0.3 context engineering: compaction + token budget + memory retrieval
     try:
         import context_engine
@@ -1810,18 +1810,87 @@ def context_status(session=None):
 
     v1.6.3 (JAG-55): `available` tells the UI whether these numbers describe a
     real session. Without one the payload used to look like a valid measurement
-    (budget 6000 / 0 messages) and the indicator was misleading — clients now
-    render "n/d" when `available` is false instead of a fake budget.
+    and the indicator was misleading — clients render "n/d" when it is false.
+
+    JAG-70: `tokens_used` is now the EFFECTIVE prompt size (system prompt +
+    compacted transcript + pending message) — what is really sent to the model —
+    not just the stored transcript, which under-reported by ~18x because the
+    system prompt (tool registry, skills, task list) dominates.
+    """
+    return context_usage(session)
+
+
+def _tool_context():
+    """The tool-registry block for the chat system prompt ("" if unavailable)."""
+    try:
+        return CHAT_TOOL_PROMPT + "\n" + api_v02.tool_context()
+    except Exception:  # noqa: BLE001 — the registry must never break chat
+        return ""
+
+
+def _system_prompt(sess, tool_ctx=None):
+    """Single source of truth for the chat system prompt (JAG-70).
+
+    Used by BOTH the model call and the context indicator, so the measured `x`
+    can never drift from what is actually sent.
+    """
+    if tool_ctx is None:
+        tool_ctx = _tool_context()
+    return (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
+            + "\n\nHarness state (your persistent task list):\n"
+            + context_summary(session_id=(sess or {}).get("id")))
+
+
+def context_usage(session_id=None, message=None):
+    """Effective prompt tokens vs budget for the next turn (JAG-70).
+
+    Counts what is REALLY sent: the system prompt (tool registry + skills +
+    persistent task list), the compacted transcript and the pending user
+    message. Returns the raw parts too, so the UI can explain the number.
     """
     import context_engine
     budget = context_budget()
-    sess = load_session(session) if session else None
-    used = sum(context_engine.count_tokens(m.get("content", ""))
-               for m in (sess or {}).get("messages", []))
-    return {"budget_tokens": budget, "session": session,
-            "available": bool(sess),
-            "messages": len((sess or {}).get("messages", [])),
-            "tokens_used": used, "over_budget": used > budget}
+    base = {"budget_tokens": budget, "session": session_id,
+            "auto_compact_pct": AUTOCOMPACT_PCT}
+    sess = load_session(session_id) if session_id else None
+    if not sess:
+        return {**base, "available": False, "messages": 0, "tokens_used": 0,
+                "pct": 0.0, "over_threshold": False, "over_budget": False}
+    sysp = _system_prompt(sess)
+    msgs, stats = context_engine.build(
+        sysp, sess.get("messages", []), message,
+        budget_tokens=budget, retrieve_memory=False)
+    used = int(stats.get("final_tokens") or 0)
+    pct = round(used / budget * 100, 1) if budget else 0.0
+    return {**base, "available": True,
+            "messages": len(sess.get("messages", [])),
+            "tokens_used": used, "pct": pct,
+            "system_tokens": context_engine.count_tokens(sysp),
+            "transcript_tokens": stats.get("compaction", {}).get("input_tokens", 0),
+            "final_messages": stats.get("final_messages"),
+            "over_threshold": pct >= AUTOCOMPACT_PCT,
+            "over_budget": used > budget}
+
+
+def prepare_session_for_turn(sess):
+    """Auto-compact the stored transcript BEFORE a turn when it is over threshold.
+
+    JAG-70: runs at the start of the request (before the JAG-51 `since` boundary
+    is captured), so message indices stay valid. Extractive + local: no model
+    call, so it can never stall a turn. Returns the (possibly reloaded) session.
+    """
+    try:
+        usage = context_usage(sess["id"])
+        if not usage.get("available") or not usage.get("over_threshold"):
+            return sess
+        stats = compact_session(sess["id"], usage["budget_tokens"])
+        publish("context.auto_compact", session=sess["id"],
+                pct=usage.get("pct"), threshold=AUTOCOMPACT_PCT,
+                before=stats.get("input_tokens"), after=stats.get("output_tokens"),
+                compacted=stats.get("compacted"), dropped=stats.get("dropped"))
+        return load_session(sess["id"]) or sess
+    except Exception:  # noqa: BLE001 — compaction must never break a turn
+        return sess
 
 
 def compact_session(session, budget_tokens=None):
@@ -1976,6 +2045,7 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(sid)
+            sess = prepare_session_for_turn(sess)  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
@@ -2048,6 +2118,7 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session"))
+            sess = prepare_session_for_turn(sess)  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
@@ -2083,6 +2154,7 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session") or qs.get("session"))
+            sess = prepare_session_for_turn(sess)  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
