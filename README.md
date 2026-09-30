@@ -26,6 +26,9 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - ⏹️ **Stop a running tool (v0.7.2, JAG-68)** — `sandbox.run` uses Popen with a process group, so `POST /api/tools/cancel {run_id}` SIGTERM→SIGKILLs the actual job (and `docker kill`s a container); `GET /api/tools/running` lists live jobs; the app's STOP kills the job, not just the socket
 - 🧩 **Model-authored task list (JAG-65)** — the todo list is written **inline** by the model on its own first turn (harness action `write_todos`), never by a separate blocking planner call; session-keyed, persistent, re-injected every turn, and the reasoning streams live during tool steps
 - 📏 **Real context budget (JAG-66)** — the compaction budget is derived from the model's actual window (`meta.n_ctx`, e.g. 258048 for the 256k models) minus a reply reserve, instead of a fixed 6000
+- 🔀 **Providers & model picker (v0.7.5, JAG-71)** — `config/providers.yaml` + `providers.py` catalogue llama.cpp (DGX **and** Windows), vLLM, **OpenRouter** (GLM-flash / DeepSeek-flash families) and the **original DeepSeek** API; a model reference is `<provider>:<model>` (bare id resolves local-first); keys come from a gitignored `.env`/`~/.hermes/.env`, never the repo; `GET /api/providers` feeds the phone picker and `&model=` routes any chat/agent/context request
+- 📈 **Honest `ctx x / max` (JAG-70/72)** — `x` is the REAL prompt (system prompt + compacted transcript + message) measured with the same assembler, model-aware budget and memory the turn actually uses; `max` is the model's real window (local `n_ctx`, remote from live OpenRouter metadata, no guess); auto-compaction fires at **75%**
+- ⚡ **No more stalls (JAG-72)** — the memory embedder is loaded **once** and a dead embeddings endpoint is disabled after a single probe; previously the model was rebuilt / a 30s timeout was paid per memory kind on every search
 - 💬 **Chat UI leggibile (v0.7.1, JAG-55)** — la **risposta** è il testo principale del messaggio (il reasoning resta nel drawer CoT, mai al posto della reply); **copia** con un tap per messaggio (⧉) e transcript selezionabile; **tool call inline** nella chat come mini-card 🔧→✅/⛔ con esito (`tool.call`/`tool.result` sullo stream, coerenti con i nodi del task graph); indicatore **contesto onesto**: con `session` reale mostra token/budget/messaggi veri, senza sessione `/api/context` risponde `available:false` e la UI mostra **n/d** invece del finto 6000/0
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
@@ -261,7 +264,7 @@ the stream ends — read the session back after the terminal `done`.
 | POST | `/api/sessions`, `/api/sessions/new` | Create a session `{title?}` |
 | DELETE | `/api/sessions/<id>` | Delete a session |
 | GET | `/api/self` | Self-knowledge: paths, config, MCP/skill install recipe, systemd state |
-| GET | `/api/context?session=` | Token usage vs context budget (UI indicator) |
+| GET | `/api/context?session=&model=` | Effective prompt tokens vs the model's real budget (UI indicator) |
 | POST | `/api/context/compact` | Compact a session transcript in place `{session, budget_tokens?}` |
 | GET | `/api/runs`, `/api/runs/<id>/trace` | Run trace + token/cost accounting |
 | GET | `/api/runs/<id>/graph` | **v0.6** — the run's LLM task graph (nodes, deps, evidence, counts) |
@@ -283,6 +286,7 @@ the stream ends — read the session back after the terminal `done`.
 | GET | `/api/tools/running` | Jobs currently executing (job, pid, command, seconds) |
 | POST | `/api/tools/cancel` | Stop a running tool job `{job\|run_id}` |
 | GET | `/api/hooks` | Lifecycle hooks (`PreToolUse`/`PostToolUse`/`Stop`); `?reload=1` to re-read |
+| GET | `/api/providers` | Provider/model catalogue (dgx, win, vllm, openrouter, deepseek) with live availability + real context windows |
 | GET | `/api/approvals`, `/api/approvals/<id>` | Approval queue + stats / one record |
 | POST | `/api/approvals/<id>` | `{decision: approve\|deny, by}` |
 | POST | `/api/agent/control` | `{runId, action: pause\|resume\|abort}` |
