@@ -315,6 +315,12 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
         except Exception as e:  # noqa: BLE001 — graph must never break the run
             _publish("graph.error", run=st.id, error=str(e))
     last_sig, repeated = None, 0
+    # JAG-61: persistent turn history. The observation produced at step N MUST be
+    # visible to the model at step N+1, otherwise the model re-derives everything
+    # from scratch each iteration, never learns its own tool output, and loops
+    # forever (the exact failure that looked like "the model cannot install the
+    # app"). We carry assistant actions + observations across the whole run.
+    hist = []
     try:
         for i in range(max_steps):
             checkpoint(st)
@@ -329,9 +335,15 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
             else:
                 sysp = (srv.SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT_V2 + "\n\n"
                         + tool_context() + "\n\nHarness state:\n" + srv.context_summary())
-                msgs = [{"role": "system", "content": sysp},
-                        {"role": "user", "content": "Goal: %s (iteration %d/%d)"
-                         % (goal, i + 1, max_steps)}]
+                if not hist:
+                    hist.append({"role": "user", "content":
+                                 "Goal: %s\n\nWork step by step: issue ONE action "
+                                 "per message, read each Observation, then continue "
+                                 "from what you already learned. Do not repeat an "
+                                 "action that already succeeded. Keep going until "
+                                 "the goal is fully accomplished (max %d steps)."
+                                 % (goal, max_steps)})
+                msgs = [{"role": "system", "content": sysp}] + hist
                 on_event("agent.iteration", run=st.id, i=i + 1, of=max_steps)
                 answer, think = srv._router_stream(
                     msgs, model, lambda ch, t: on_event("agent.think", channel=ch, text=t))
@@ -401,6 +413,16 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
 
             st.trace.append(entry)
             on_event("agent.observation", run=st.id, i=i + 1, observation=obs)
+            if script is None:
+                # JAG-61: feed the action + its observation back so the next
+                # iteration continues from evidence instead of restating the goal.
+                hist.append({"role": "assistant",
+                             "content": json.dumps(act, ensure_ascii=False, default=str)[:4000]})
+                hist.append({"role": "user", "content":
+                             "Observation (step %d/%d):\n%s"
+                             % (i + 1, max_steps, (obs or "")[:4000])})
+                if len(hist) > 30:
+                    del hist[:-30]
         else:
             summary = "stopped at max_steps=%d; see trace" % max_steps
             st.summary, st.status = summary, "done"

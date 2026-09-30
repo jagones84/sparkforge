@@ -1,6 +1,6 @@
 roles:
   chat:
-    pattern: nex
+    pattern: qwen
     fallbacks:
     - qwen
     - glm
@@ -12,9 +12,9 @@ roles:
     - glm
     - deepseek
   agent:
-    pattern: nex
+    pattern: qwen
     fallbacks:
-    - qwen
+    - nex
     - glm
     - deepseek
   subagent:

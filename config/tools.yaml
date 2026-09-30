@@ -69,14 +69,19 @@ tools:
     approval: auto
     roots:
       - "."
+      - "/home/jagones/Repositories"
 
   # write a file (host-side, constrained to the allowed roots; JAG-59: the repo
   # root so the agent can create/edit the DGX repos it works on)
+  # JAG-61: also allow the Repositories parent — "." resolves to REPO
+  # (sparkforge/), so without this the agent cannot write to sibling repos like
+  # tododemo (it would fall back to printf-through-shell).
   fs.write:
     enabled: true
     approval: required
     roots:
       - "."
+      - "/home/jagones/Repositories"
 
   # surgical edit: exact search/replace inside a file (safer than rewriting
   # the whole file with fs.write); same roots as fs.write
@@ -85,6 +90,7 @@ tools:
     approval: required
     roots:
       - "."
+      - "/home/jagones/Repositories"
 
   # git — read-only subcommands auto-approved, mutating ones need approval
   git:
@@ -92,6 +98,7 @@ tools:
     approval: required
     roots:
       - "."
+      - "/home/jagones/Repositories"
     auto_approve:
       - "^status(\\s|$)"
       - "^log(\\s|$)"
