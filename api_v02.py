@@ -451,6 +451,11 @@ def _result(st, goal, model):
         _srv().finish_run_graph(st.id, None, goal)
     except Exception:  # noqa: BLE001
         pass
+    try:  # JAG-69: deterministic Stop hooks at the end of the run
+        import hooks
+        hooks.run("Stop", run_id=st.id, observation=st.summary)
+    except Exception:  # noqa: BLE001
+        pass
     return {"run_id": st.id, "goal": goal, "model": model, "status": st.status,
             "summary": st.summary, "trace": st.trace}
 
@@ -617,6 +622,11 @@ def handle(handler, method, path, qs, body):
                                      "approvals": approvals.stats()})
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
+        if path == "/api/hooks":
+            import hooks
+            return _r(handler, 200, {"hooks": hooks.load(reload=qs.get("reload") == "1"),
+                                     "events": list(hooks.EVENTS),
+                                     "config": hooks.CONFIG})
         if path == "/api/sandbox":
             return _r(handler, 200, sandbox.probe(force=qs.get("force") == "1"))
         if path == "/api/approvals":

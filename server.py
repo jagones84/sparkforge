@@ -1199,6 +1199,11 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                            meta=meta)
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
             model=model, think_chars=len(think), error=bool(meta.get("error")))
+    try:  # JAG-69: deterministic Stop hooks at the end of the turn
+        import hooks
+        hooks.run("Stop", run_id=sess["id"], observation=content)
+    except Exception:  # noqa: BLE001 — a hook must never break a turn
+        pass
     return reply, model
 
 

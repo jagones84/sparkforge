@@ -281,7 +281,7 @@ _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
              "skills": _skills}
 
 
-def execute(tool, args, run_id=None):
+def _dispatch_execute(tool, args, run_id=None):
     fn = _DISPATCH.get(tool)
     if fn is None:
         # external MCP tools (<client>__<tool>) route through the MCP client
@@ -290,6 +290,7 @@ def execute(tool, args, run_id=None):
                 import mcp_client
                 res = mcp_client.call_tool(tool, args, run_id=run_id)
                 res["duration_ms"] = res.get("duration_ms", 0)
+                res["tool"] = tool
                 return res
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "error": "external MCP call failed: %s" % e,
@@ -303,6 +304,33 @@ def execute(tool, args, run_id=None):
     res["tool"] = tool
     res["args"] = args
     res.setdefault("exit_code", 0 if res.get("ok") else 125)
+    return res
+
+
+def execute(tool, args, run_id=None):
+    """Run a tool through the lifecycle hooks (JAG-69), then dispatch.
+
+    `PreToolUse` may BLOCK the call (hook exit 2); `PostToolUse` receives the
+    observation. Both are deterministic shell scripts — the model is not asked.
+    """
+    try:
+        import hooks
+        pre = hooks.run("PreToolUse", tool=tool, args=args or {}, run_id=run_id)
+    except Exception:  # noqa: BLE001 — a hook must never break tool execution
+        pre = {"blocked": False}
+    if pre.get("blocked"):
+        return {"ok": False, "tool": tool, "args": args or {}, "exit_code": 126,
+                "hook_blocked": True,
+                "error": "blocked by PreToolUse hook: %s" % pre.get("reason")}
+    res = _dispatch_execute(tool, args, run_id=run_id)
+    try:
+        import hooks
+        obs = (res.get("observation") or res.get("error") or res.get("content")
+               or res.get("stdout"))
+        hooks.run("PostToolUse", tool=tool, args=args or {}, observation=obs,
+                  run_id=run_id)
+    except Exception:  # noqa: BLE001
+        pass
     return res
 
 

@@ -1,0 +1,41 @@
+# SparkForge hooks — deterministic lifecycle scripts (JAG-69).
+#
+# Frontier harnesses (Claude Code, Codex CLI) wrap the agent loop with shell
+# hooks that run WITHOUT the model: the exit code decides. This is the
+# "contorno" that makes a harness reliable — formatting, linting, logging,
+# enforcement — instead of hoping the model remembers to do it.
+#
+# Events:
+#   PreToolUse   runs before a tool executes. Exit 2  ->  BLOCKS the call
+#                (the reason shown to the model is the hook's stdout).
+#                Other non-zero exits are advisory unless block_on_fail: true.
+#   PostToolUse  runs after a tool executes; the observation is available in
+#                $SPARKFORGE_OBSERVATION.
+#   Stop         runs when a chat turn / agent run ends.
+#
+# Environment given to every hook:
+#   SPARKFORGE_HOOK_EVENT, SPARKFORGE_TOOL, SPARKFORGE_RUN,
+#   SPARKFORGE_ARGS (JSON), SPARKFORGE_OBSERVATION
+#
+# The file ships with NO active hook (default behaviour is unchanged). Uncomment
+# or add entries to enable them; the server re-reads on each change (mtime).
+#
+# Example — hard-block a class of commands before they reach the sandbox:
+# hooks:
+#   - event: PreToolUse
+#     matcher: "^shell$"
+#     command: "grep -qE 'rm +-rf +/' <<<\"$SPARKFORGE_ARGS\" && exit 2 || exit 0"
+#     timeout_secs: 10
+#
+# Example — audit every tool call to an append-only log:
+#   - event: PostToolUse
+#     matcher: ""
+#     command: "printf '%s\\t%s\\n' \"$SPARKFORGE_TOOL\" \"$SPARKFORGE_RUN\" >> data/hooks-audit.log"
+#     timeout_secs: 10
+#
+# Example — run a formatter when a file is written:
+#   - event: PostToolUse
+#     matcher: "^fs\\.write$"
+#     command: "python3 scripts/format_if_needed.py"
+#     timeout_secs: 60
+hooks: []
