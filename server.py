@@ -328,11 +328,37 @@ def context_budget(alias=None):
         except ValueError:
             pass
     import context_engine
+    # JAG-71: a provider model may declare its window (remote models have no
+    # router meta); the live router roster is the fallback for local aliases.
+    try:
+        import providers
+        declared = providers.context_length(alias) if alias else 0
+        if declared:
+            return max(2048, declared - CONTEXT_RESERVE)
+    except Exception:  # noqa: BLE001
+        pass
     n = model_context_window(alias)
     if n:
         return max(2048, n - CONTEXT_RESERVE)
     return context_engine.DEFAULT_BUDGET
 
+
+
+def _local_ref(model):
+    """True when `model` must be warmed on the local router (JAG-71).
+
+    Remote providers (OpenRouter, DeepSeek API) have no `/models/load`, so the
+    warm-up path is skipped for them; an unknown alias is assumed local, keeping
+    the pre-JAG-71 behaviour.
+    """
+    try:
+        import providers
+        hit = providers.resolve(model)
+        if hit is None:
+            return True
+        return bool(hit[0].get("local"))
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def default_model():
@@ -514,22 +540,38 @@ def _set_read_idle(resp, seconds):
     return False
 
 
+def _chat_endpoint(model):
+    """(url, headers, model_id) for a completion, provider-aware (JAG-71).
+
+    A `<provider>:<model>` reference (or a known bare model id) routes to that
+    provider's endpoint with its key; anything unknown falls back to the local
+    DGX router, so existing configs keep working unchanged.
+    """
+    try:
+        import providers
+        resolved = providers.endpoint(model)
+        if resolved:
+            return resolved
+    except Exception:  # noqa: BLE001 — the catalogue must never break chat
+        pass
+    return (ROUTER_BASE + "/v1/chat/completions",
+            {"Content-Type": "application/json"}, model or "default")
+
+
 def _router_stream(messages, model, on_delta, timeout=300):
-    """POST /v1/chat/completions with stream=true; feed deltas to on_delta.
+    """POST /chat/completions with stream=true; feed deltas to on_delta.
 
     on_delta(channel, text) with channel in {think, answer}. Returns the
     full (answer, think) pair. Falls back to a non-streaming call.
     """
+    url, headers, model_id = _chat_endpoint(model)
     body = json.dumps({
-        "model": model or "default",
+        "model": model_id,
         "messages": messages,
         "stream": True,
         "temperature": 0.7,
     }).encode("utf-8")
-    req = urllib.request.Request(
-        ROUTER_BASE + "/v1/chat/completions", data=body,
-        headers={"Content-Type": "application/json"},
-    )
+    req = urllib.request.Request(url, data=body, headers=headers)
     answer, think = [], []
     try:
         with _open_with_retry(req, timeout) as resp:
@@ -566,12 +608,9 @@ def _router_stream(messages, model, on_delta, timeout=300):
         if answer or think:
             return "".join(answer), "".join(think)
         # non-streaming fallback
-        body = json.dumps({"model": model or "default", "messages": messages,
+        body = json.dumps({"model": model_id, "messages": messages,
                            "temperature": 0.7}).encode("utf-8")
-        req = urllib.request.Request(
-            ROUTER_BASE + "/v1/chat/completions", data=body,
-            headers={"Content-Type": "application/json"},
-        )
+        req = urllib.request.Request(url, data=body, headers=headers)
         with _open_with_retry(req, timeout) as resp:
             data = json.loads(resp.read().decode("utf-8") or "{}")
         msg = (data.get("choices") or [{}])[0].get("message") or {}
@@ -1089,7 +1128,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     try:
         import context_engine
         msgs, ctx_stats = context_engine.build(
-            sys, sess["messages"], message, budget_tokens=context_budget())
+            sys, sess["messages"], message, budget_tokens=context_budget(model))
         publish("context.built", session=sess["id"], **{
             k: v for k, v in ctx_stats.items() if k in (
                 "budget_tokens", "retrieved_memories", "final_messages",
@@ -1693,9 +1732,12 @@ def chat_stream_gen(sess, message, model, mark=None):
             q.put("event: chat.run\ndata: %s\n\n" % json.dumps(
                 {"run_id": trace.id, "session": sess["id"]}))
             try:
-                loaded, _m = model_loaded(target) if target else (True, None)
-                if target and not loaded:
-                    ensure_model(target, on_event=_emit)
+                # JAG-71: only a LOCAL model has a warm-up (/models/load); remote
+                # providers are called directly with no loading step.
+                if target and _local_ref(target):
+                    loaded, _m = model_loaded(target)
+                    if not loaded:
+                        ensure_model(target, on_event=_emit)
                 # JAG-63: the graph is keyed by SESSION = the persistent task
                 # list for this task. It survives every message, compaction and
                 # restart; a NEW task (previous list fully done) starts fresh.
@@ -1805,7 +1847,7 @@ def telemetry_summary():
     return out
 
 
-def context_status(session=None):
+def context_status(session=None, model=None):
     """Token usage vs budget for a session (UI indicator + compaction evidence).
 
     v1.6.3 (JAG-55): `available` tells the UI whether these numbers describe a
@@ -1817,7 +1859,19 @@ def context_status(session=None):
     not just the stored transcript, which under-reported by ~18x because the
     system prompt (tool registry, skills, task list) dominates.
     """
-    return context_usage(session)
+    return context_usage(session, model=model)
+
+
+def providers_catalog():
+    """Every provider + model the harness can use, with live usability (JAG-71)."""
+    try:
+        import providers
+    except Exception as e:  # noqa: BLE001
+        return {"providers": [], "error": str(e)}
+    loaded = {m["alias"] for m in router_models() if m.get("loaded")}
+    cat = providers.catalog(loaded_aliases=loaded)
+    cat["router_models"] = router_models()  # backward compat for the old client
+    return cat
 
 
 def _tool_context():
@@ -1841,7 +1895,7 @@ def _system_prompt(sess, tool_ctx=None):
             + context_summary(session_id=(sess or {}).get("id")))
 
 
-def context_usage(session_id=None, message=None):
+def context_usage(session_id=None, message=None, model=None):
     """Effective prompt tokens vs budget for the next turn (JAG-70).
 
     Counts what is REALLY sent: the system prompt (tool registry + skills +
@@ -1849,7 +1903,7 @@ def context_usage(session_id=None, message=None):
     message. Returns the raw parts too, so the UI can explain the number.
     """
     import context_engine
-    budget = context_budget()
+    budget = context_budget(model)
     base = {"budget_tokens": budget, "session": session_id,
             "auto_compact_pct": AUTOCOMPACT_PCT}
     sess = load_session(session_id) if session_id else None
@@ -1857,9 +1911,11 @@ def context_usage(session_id=None, message=None):
         return {**base, "available": False, "messages": 0, "tokens_used": 0,
                 "pct": 0.0, "over_threshold": False, "over_budget": False}
     sysp = _system_prompt(sess)
+    # JAG-72: mirror `chat_once` EXACTLY — same model-aware budget and the same
+    # memory-retrieval block — so the indicator's `x` equals the real prompt.
     msgs, stats = context_engine.build(
         sysp, sess.get("messages", []), message,
-        budget_tokens=budget, retrieve_memory=False)
+        budget_tokens=budget, retrieve_memory=True)
     used = int(stats.get("final_tokens") or 0)
     pct = round(used / budget * 100, 1) if budget else 0.0
     return {**base, "available": True,
@@ -1872,15 +1928,18 @@ def context_usage(session_id=None, message=None):
             "over_budget": used > budget}
 
 
-def prepare_session_for_turn(sess):
+def prepare_session_for_turn(sess, model=None):
     """Auto-compact the stored transcript BEFORE a turn when it is over threshold.
 
     JAG-70: runs at the start of the request (before the JAG-51 `since` boundary
     is captured), so message indices stay valid. Extractive + local: no model
     call, so it can never stall a turn. Returns the (possibly reloaded) session.
+
+    JAG-72: the threshold is evaluated against the SAME model-aware budget the
+    turn will use, so a small-window remote model is compacted correctly.
     """
     try:
-        usage = context_usage(sess["id"])
+        usage = context_usage(sess["id"], model=model)
         if not usage.get("available") or not usage.get("over_threshold"):
             return sess
         stats = compact_session(sess["id"], usage["budget_tokens"])
@@ -2005,11 +2064,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/self":
             return self._send(200, self_knowledge())
         if path == "/api/context":
-            return self._send(200, context_status(qs.get("session")))
+            return self._send(200, context_status(qs.get("session"), qs.get("model")))
         if path == "/api/status":
             return self._send(200, status_payload())
-        if path == "/api/models":
-            return self._send(200, {"models": router_models()})
+        if path == "/api/models" or path == "/api/providers":
+            return self._send(200, providers_catalog())
         if path == "/api/selfcheck":
             llm = qs.get("llm", "1").lower() not in ("0", "false", "no")
             return self._send(200, selfcheck_payload(
@@ -2045,7 +2104,7 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(sid)
-            sess = prepare_session_for_turn(sess)  # JAG-70: auto-compact @75%
+            sess = prepare_session_for_turn(sess, qs.get("model"))  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
@@ -2118,7 +2177,7 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session"))
-            sess = prepare_session_for_turn(sess)  # JAG-70: auto-compact @75%
+            sess = prepare_session_for_turn(sess, body.get("model"))  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
@@ -2154,7 +2213,7 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session") or qs.get("session"))
-            sess = prepare_session_for_turn(sess)  # JAG-70: auto-compact @75%
+            sess = prepare_session_for_turn(sess, body.get("model") or qs.get("model"))  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
@@ -2286,6 +2345,12 @@ def main():
     args = ap.parse_args()
     AUTH_TOKEN = args.token
     _ensure_dirs()
+    try:
+        import providers
+        providers.load_env()
+        providers.warm()  # JAG-72: fetch remote model windows off the request path
+    except Exception:  # noqa: BLE001 — provider metadata is optional
+        pass
     publish("service.start", host=args.host, port=args.port, router=ROUTER_BASE)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.host, server.port = args.host, args.port

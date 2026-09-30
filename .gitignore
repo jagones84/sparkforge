@@ -3,3 +3,11 @@ data/
 *.log
 .venv/
 eval/results/
+
+# Secrets — NEVER commit API keys (JAG-71). Providers reference their key by
+# env-var name and the values live in a .env / ~/.hermes/.env, both ignored here.
+.env
+.env.*
+*/.env
+*/.env.*
+!.env.template

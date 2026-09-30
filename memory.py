@@ -222,6 +222,34 @@ def _build_vocab(texts):
     return sorted(vocab)
 
 
+_EMBEDDER = None
+_EMBEDDER_READY = False
+_EMBEDDER_LOCK = threading.Lock()
+_ENDPOINT_DISABLED = False
+
+
+def _get_embedder():
+    """Load the sentence-transformer backend ONCE and reuse it (JAG-72).
+
+    The old code constructed `SentenceTransformer(...)` on EVERY search — seconds
+    of work (and, on a cold cache, a possible multi-minute model download) per
+    turn. That is the main reason the agent looked "inactive". Now it is loaded a
+    single time; if it is unavailable we remember that and never retry.
+    """
+    global _EMBEDDER, _EMBEDDER_READY
+    if _EMBEDDER_READY:
+        return _EMBEDDER
+    with _EMBEDDER_LOCK:
+        if not _EMBEDDER_READY:
+            try:
+                from sentence_transformers import SentenceTransformer
+                _EMBEDDER = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+            except Exception:
+                _EMBEDDER = None
+            _EMBEDDER_READY = True
+    return _EMBEDDER
+
+
 def _embed_batch(texts, vocab=None):
     """Return a list of numpy vectors, or None if no embedding backend works.
 
@@ -229,26 +257,30 @@ def _embed_batch(texts, vocab=None):
     the exact vocab the index was built with or the cosine product misaligns.
     """
     # Priority: sentence-transformers (GPU-friendly) > local endpoint > bag-of-words
-    try:
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
-        return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
-    except Exception:
-        pass
-    try:
-        import urllib.request
-        import json as j
-        body = j.dumps({"model": "default", "input": texts}).encode()
-        req = urllib.request.Request(
-            "http://127.0.0.1:8080/v1/embeddings", data=body,
-            headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = j.loads(resp.read().decode())
-        emb = [d["embedding"] for d in data.get("data", [])]
-        import numpy as np
-        return np.array(emb) / np.linalg.norm(emb, axis=1, keepdims=True)
-    except Exception:
-        pass
+    global _ENDPOINT_DISABLED
+    model = _get_embedder()
+    if model is not None:
+        try:
+            return model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
+        except Exception:
+            pass
+    if not _ENDPOINT_DISABLED:
+        try:
+            import urllib.request
+            import json as j
+            body = j.dumps({"model": "default", "input": texts}).encode()
+            req = urllib.request.Request(
+                "http://127.0.0.1:8080/v1/embeddings", data=body,
+                headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = j.loads(resp.read().decode())
+            emb = [d["embedding"] for d in data.get("data", [])]
+            import numpy as np
+            return np.array(emb) / np.linalg.norm(emb, axis=1, keepdims=True)
+        except Exception:
+            # JAG-72: one failed probe disables it for the session so we never
+            # pay this timeout again (it used to be 30s per kind, per call).
+            _ENDPOINT_DISABLED = True
     try:
         import numpy as np
         # bag-of-words fallback over the shared vocab

@@ -1,0 +1,101 @@
+# SparkForge providers — every LLM the harness can talk to (JAG-71).
+#
+# ONE place that lists providers + the models each one exposes, so the mobile app
+# can pick any of them and the harness routes the request to the right endpoint.
+# NO secret ever lives here: a provider references its key by ENV VAR name, and
+# the keys are read from a gitignored .env (see `env_files` below and .gitignore).
+#
+# Model references (`model` on the API) use `<provider_id>:<model_id>`, e.g.
+#   dgx:glm-5.3-flash-iq2
+#   win:qwen-3.8-27b-abliterated-q4
+#   openrouter:z-ai/glm-5.3-flash
+#   deepseek:deepseek-reasoner
+# A bare model id (no known provider prefix) is resolved against every provider,
+# local first, so existing configs keep working.
+version: "1"
+
+# Keys are loaded from these files at startup (first hit wins, no overwrite):
+#   $SPARKFORGE_ENV_FILE, <repo>/.env, ~/.hermes/.env
+env_files:
+  - .env
+  - ~/.hermes/.env
+
+# The model a bare/absent request falls back to.
+default: dgx:qwen-3.8-27b-uncensored-q8
+
+providers:
+  # ---- local: llama.cpp router on the DGX Spark -----------------------------
+  - id: dgx
+    name: Llama.cpp (DGX Spark)
+    kind: llamacpp
+    base_url: http://127.0.0.1:8080/v1
+    local: true
+    models:
+      - {id: qwen-3.8-27b-uncensored-q8, context_length: 262144}
+      - {id: qwen-3.8-27b-uncensored-q4, context_length: 262144}
+      - {id: glm-5.3-flash-iq2, context_length: 262144}
+      - {id: deepseek-v4-flash-uncensored-q2-0731, context_length: 262144}
+      - {id: nex-n25-mini-uncensored-q8, context_length: 262144}
+      - {id: qwen-3.8-flash-next-iq3, context_length: 131072}
+      - {id: qwen-3.8-flash-next-uncensored-iq3, context_length: 131072}
+
+  # ---- local: llama.cpp on the Windows PC (Tailscale) -----------------------
+  - id: win
+    name: Llama.cpp (Windows PC)
+    kind: llamacpp
+    base_url: http://100.76.251.9:8080/v1
+    local: true
+    models:
+      - {id: qwen-3.8-27b-abliterated-q4}
+      - {id: qwen-3.8-27b-abliterated-q3}
+      - {id: qwen3.6-35b-a3b-uncensored-iq4xs, context_length: 96000}
+      - {id: nex-n2.5-mini-uncensored-iq4xs, context_length: 131072}
+      - {id: deepseek-r1-distill-qwen-32b-abl-iq2m}
+      - {id: muse-glimmer-30b-abliterated-q3}
+      - {id: gemma-4-26b-a4b}
+      - {id: gpt-oss-20b}
+
+  # ---- local: vLLM ----------------------------------------------------------
+  - id: vllm
+    name: vLLM (DGX)
+    kind: openai
+    base_url: http://127.0.0.1:8000/v1
+    local: true
+    api_key_env: VLLM_API_KEY
+    models:
+      - {id: deepseek-v4-flash-0731-exl3-k2}
+
+  # ---- OpenRouter (cloud) ---------------------------------------------------
+  - id: openrouter
+    name: OpenRouter
+    kind: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    models:
+      # GLM flash family (requested)
+      - {id: "~z-ai/glm-flash-latest"}
+      - {id: "z-ai/glm-5.3-flash"}
+      - {id: "z-ai/glm-5.3-flashx"}
+      - {id: "~z-ai/glm-latest"}
+      - {id: "z-ai/glm-5.3"}
+      # DeepSeek flash / pro family (requested)
+      - {id: "~deepseek/deepseek-flash-latest"}
+      - {id: "~deepseek/deepseek-v4-flash-latest"}
+      - {id: "deepseek/deepseek-v4.1-flash"}
+      - {id: "deepseek/deepseek-v4.1-flash:batch"}
+      - {id: "deepseek/deepseek-v4-flash-0731"}
+      - {id: "deepseek/deepseek-v4-pro-0813"}
+      - {id: "~deepseek/deepseek-pro-latest"}
+      # convenient router aliases
+      - {id: "openrouter/auto"}
+      - {id: "openrouter/auto-beta"}
+
+  # ---- DeepSeek, original API (requested) -----------------------------------
+  - id: deepseek
+    name: DeepSeek (original API)
+    kind: deepseek
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    models:
+      - {id: deepseek-chat}
+      - {id: deepseek-reasoner}
