@@ -46,7 +46,7 @@ ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
 STORE_LOCK = threading.RLock()
 
-VERSION = "0.6.2"
+VERSION = "0.7.1"
 # Router resilience (v0.5.1): retry/backoff on 503 "model not loaded" plus the
 # warm-up path that loads a cold model before the first token.
 ROUTER_RETRIES = int(os.environ.get("SPARKFORGE_ROUTER_RETRIES", 5))
@@ -1428,10 +1428,24 @@ def chat_stream_gen(sess, message, model, mark=None):
                     ensure_model(target, on_event=_emit)
                 # v0.6: the FIRST action of the run is a model-generated
                 # write_todos call → the per-run task graph is populated live.
+                # v1.6.3 (JAG-55): the very same tool call is surfaced on the
+                # chat stream as a real tool.call/tool.result pair, so the WebUI
+                # and the SparkPulse chat render an inline mini-card that is
+                # coherent with the run-graph nodes it produces.
+                _emit("tool.call", run=trace.id, session=sess["id"],
+                      tool="write_todos", args={"goal": message[:120]})
                 try:
-                    taskgraph.generate_from_model(trace.id, message, session_id=sess["id"],
-                                                  model=target, on_event=_emit)
+                    _g, _added = taskgraph.generate_from_model(
+                        trace.id, message, session_id=sess["id"],
+                        model=target, on_event=_emit)
+                    _emit("tool.result", run=trace.id, session=sess["id"],
+                          tool="write_todos", ok=True, exit_code=0,
+                          backend="harness",
+                          summary="%d nodi nel task graph" % len(_g.get("nodes", [])))
                 except Exception as e:  # graph must never break the chat
+                    _emit("tool.result", run=trace.id, session=sess["id"],
+                          tool="write_todos", ok=False, backend="harness",
+                          stderr=str(e)[:200])
                     publish("graph.error", run=trace.id, error=str(e))
                 chat_once(sess, message, target, on_delta, trace=trace)
                 finish_run_graph(trace.id, sess["id"], message, on_event=_emit)
@@ -1528,13 +1542,20 @@ def telemetry_summary():
 
 
 def context_status(session=None):
-    """Token usage vs budget for a session (UI indicator + compaction evidence)."""
+    """Token usage vs budget for a session (UI indicator + compaction evidence).
+
+    v1.6.3 (JAG-55): `available` tells the UI whether these numbers describe a
+    real session. Without one the payload used to look like a valid measurement
+    (budget 6000 / 0 messages) and the indicator was misleading — clients now
+    render "n/d" when `available` is false instead of a fake budget.
+    """
     import context_engine
     budget = int(os.environ.get("SPARKFORGE_CONTEXT_BUDGET", context_engine.DEFAULT_BUDGET))
     sess = load_session(session) if session else None
     used = sum(context_engine.count_tokens(m.get("content", ""))
                for m in (sess or {}).get("messages", []))
     return {"budget_tokens": budget, "session": session,
+            "available": bool(sess),
             "messages": len((sess or {}).get("messages", [])),
             "tokens_used": used, "over_budget": used > budget}
 
