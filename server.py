@@ -802,6 +802,23 @@ BREAKDOWN_PROMPT = (
     "is pure smalltalk with nothing actionable, respond with []."
 )
 
+# JAG-73: make the memory store explicit and actionable. Before this the agent
+# had no tool to remember/recall (the store was passive), and the prompt never
+# said memory existed or WHEN to use it.
+MEMORY_POLICY = (
+    "Memory: you have a persistent memory store seeded across sessions (the "
+    "`memory` tool; also GET /api/memory). Relevant past memories are "
+    "AUTO-INJECTED below as 'Relevant memories from previous sessions' when they "
+    "match the current message. Use it deliberately:\n"
+    "- to REMEMBER: call memory{action:'store', content:'...'} as soon as you "
+    "learn a durable fact — a user preference, a decision and its reason, a "
+    "project convention, the fix for a bug. Keep it short and self-contained.\n"
+    "- to RECALL: call memory{action:'recall', query:'...'} whenever the user "
+    "refers to earlier work or you are missing context; memory{action:'recent'} "
+    "shows the newest notes.\n"
+    "Never store ephemeral chatter, and never store secrets."
+)
+
 
 def self_summary():
     """Compact self-knowledge block injected into the system prompt (v0.5)."""
@@ -1891,6 +1908,7 @@ def _system_prompt(sess, tool_ctx=None):
     if tool_ctx is None:
         tool_ctx = _tool_context()
     return (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
+            + "\n\n" + MEMORY_POLICY
             + "\n\nHarness state (your persistent task list):\n"
             + context_summary(session_id=(sess or {}).get("id")))
 

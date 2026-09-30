@@ -275,10 +275,51 @@ def _self(args, run_id):
     return info
 
 
+def _memory(args, run_id):
+    """Agent memory (JAG-73): store a durable note, or recall/search memories.
+
+    action=store  {content, kind?}            → append-only record
+    action=recall {query, kind?, limit?}      → semantic + keyword search
+    action=recent {kind?, limit?}             → newest first
+
+    Closes a real gap: the store existed and was auto-injected, but the agent had
+    NO tool to deliberately remember or recall anything.
+    """
+    import memory as mem
+    action = (args.get("action") or "recall").strip().lower()
+    limit = int(args.get("limit") or (10 if action == "recent" else 5))
+    if action == "store":
+        content = (args.get("content") or "").strip()
+        if not content:
+            return {"ok": False, "error": "content required for action=store",
+                    "backend": "host", "sandboxed": False}
+        kind = (args.get("kind") or "memory.store").strip()
+        mem.store(kind, content, session=run_id or "", source="agent")
+        return {"ok": True, "count": 1,
+                "stdout": "stored %d chars as %s" % (len(content), kind),
+                "backend": "host", "sandboxed": False}
+    try:
+        if action == "recent":
+            hits = [(1.0, r) for r in mem.query("", args.get("kind"), limit)]
+        else:
+            query = (args.get("query") or "").strip()
+            if not query:
+                return {"ok": False, "error": "query required for action=recall",
+                        "backend": "host", "sandboxed": False}
+            hits = mem.search(query, args.get("kind"), limit, True)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "memory lookup failed: %s" % e,
+                "backend": "host", "sandboxed": False}
+    lines = ["- (%s, %.2f) %s" % (r.get("kind"), s, (r.get("content") or "")[:200])
+             for s, r in hits]
+    return {"ok": True, "count": len(hits), "stdout": "\n".join(lines) or "(no memories)",
+            "backend": "host", "sandboxed": False}
+
+
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
              "fs.edit": _fs_edit,
              "git": _git, "http": _http, "browser": _browser, "self": _self,
-             "skills": _skills}
+             "skills": _skills, "memory": _memory}
 
 
 def _dispatch_execute(tool, args, run_id=None):

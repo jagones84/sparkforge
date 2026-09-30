@@ -118,6 +118,24 @@ TOOL_SCHEMAS = {
             "name": {"type": "string", "description": "skill name (for action=read)"},
         },
     },
+    "memory": {
+        "description": ("Your persistent memory across sessions. action=store saves "
+                        "a durable fact/preference/decision; action=recall searches "
+                        "past memories by meaning; action=recent lists the newest. "
+                        "Relevant memories are ALSO auto-injected into your prompt "
+                        "each turn, so store things worth remembering later."),
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["store", "recall", "recent"],
+                       "default": "recall"},
+            "content": {"type": "string", "description": "text to save (action=store)"},
+            "query": {"type": "string", "description": "what to look for (action=recall)"},
+            "kind": {"type": "string", "description": "optional category filter"},
+            "limit": {"type": "integer", "default": 5},
+        },
+        "required": [],
+        "subject": "action",
+    },
 }
 
 

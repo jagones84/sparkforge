@@ -140,6 +140,12 @@ tools:
     enabled: true
     approval: auto
 
+  # agent memory (JAG-73): store/recall durable notes across sessions; the file
+  # writes are append-only under data/memory, so it is always safe.
+  memory:
+    enabled: true
+    approval: auto
+
   # external MCP tools appear as <client>__<tool> (config/mcp_clients.yaml);
   # default policy is approval=required. Read-only pmcp gateway probes are
   # auto-approved so the agent can observe real MCP output.
