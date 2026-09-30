@@ -1045,7 +1045,15 @@ CHAT_TOOL_PROMPT = (
     '{"action":"write_todos","todos":[{"label":"<imperative step>","deps":[],"parent":null}]} '
     "(2-8 steps you author yourself; this list is PERSISTENT — it is saved and "
     "re-shown to you on every turn, and only you or the user may clear it), then "
-    "work through it and mark steps done with evidence. "
+    "FOLLOW it: before starting a step emit ONLY "
+    '{"action":"update_todos","steps":[{"index":<0-based>,"status":"doing"}]}; when '
+    "a step is finished emit ONLY "
+    '{"action":"update_todos","steps":[{"index":<i>,"status":"done","evidence":"<what proves it>"}]} '
+    "(done REQUIRES evidence). If new work appears or a step became irrelevant, "
+    "briefly re-plan with "
+    '{"action":"replan_todos","note":"<why>"} and then IMMEDIATELY resume the plan. '
+    "Never drift: after any update, return to the list and continue with the next "
+    "step. "
     "Tool registry (allowlist):\n"
 )
 
@@ -1133,6 +1141,103 @@ def _apply_chat_todos(sess, act, on_event):
         return 0
 
 
+def _resolve_graph_node(graph, step):
+    """Locate a node by id, label or 0-based index (JAG-75)."""
+    node = None
+    if step.get("id") is not None:
+        node = taskgraph.find(graph, node_id=str(step["id"]))
+    if node is None and step.get("label"):
+        node = taskgraph.find(graph, label=step["label"])
+    if node is None and step.get("index") is not None:
+        nodes = graph.get("nodes", [])
+        try:
+            i = int(step["index"])
+        except (TypeError, ValueError):
+            return None
+        if 0 <= i < len(nodes):
+            node = nodes[i]
+    return node
+
+
+def _apply_chat_todo_updates(sess, act, on_event):
+    """Harness action `update_todos`: the MODEL advances its own plan (JAG-75).
+
+    `{"action":"update_todos","steps":[{"index":0,"status":"doing"}]}` marks a
+    step in progress; `{"status":"done","evidence":"..."}` completes it (evidence
+    is mandatory — same rule as the API). This is what let the graph advance on
+    its own: before, only the UI/API could move a node.
+    """
+    try:
+        graph = taskgraph.ensure(sess["id"], session_id=sess["id"])
+        steps = act.get("steps") or act.get("todos") or []
+        if isinstance(steps, dict):
+            steps = [steps]
+        if not isinstance(steps, list):
+            steps = []
+        on_event("tool.call", session=sess["id"], tool="update_todos", args={}, inline=True)
+        changed = []
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            node = _resolve_graph_node(graph, step)
+            if node is None:
+                continue
+            status = str(step.get("status") or "").strip().lower()
+            ev = step.get("evidence")
+            try:
+                if status == "done":
+                    node = taskgraph.complete_node(
+                        graph, node_id=node["id"], evidence=ev, source="model:update_todos")
+                elif status in taskgraph.STATUSES:
+                    node = taskgraph.update_node(
+                        graph, node["id"], status=status, evidence=ev,
+                        source="model:update_todos")
+                else:
+                    continue
+            except (KeyError, ValueError):
+                continue
+            changed.append(node)
+            on_event("graph.node.updated", session=sess["id"], node=node,
+                     index=graph["nodes"].index(node), total=len(graph["nodes"]),
+                     changes=["status"])
+        on_event("tool.result", session=sess["id"], tool="update_todos", ok=True,
+                 exit_code=0, backend="harness",
+                 summary="task list: %d/%d step(s) updated"
+                         % (len(changed), len([s for s in steps if isinstance(s, dict)])))
+        return len(changed)
+    except Exception as e:  # noqa: BLE001 — the task list must never break chat
+        try:
+            on_event("tool.result", session=sess["id"], tool="update_todos",
+                     ok=False, backend="harness", stderr=str(e)[:200])
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+
+
+def _apply_chat_replan(sess, act, on_event):
+    """Harness action `replan_todos`: a brief, controlled re-plan (JAG-75).
+
+    The model asks for the graph to be extended/corrected; only NEW steps are
+    generated, existing nodes are preserved, and the loop then resumes the plan.
+    """
+    try:
+        graph = taskgraph.ensure(sess["id"], session_id=sess["id"])
+        on_event("tool.call", session=sess["id"], tool="replan_todos", args={}, inline=True)
+        added = taskgraph.replan_from_model(
+            graph, act.get("note") or act.get("goal") or "", on_event=on_event) or []
+        on_event("tool.result", session=sess["id"], tool="replan_todos", ok=True,
+                 exit_code=0, backend="harness",
+                 summary="re-plan: +%d step(s)" % len(added))
+        return len(added)
+    except Exception as e:  # noqa: BLE001 — never break chat
+        try:
+            on_event("tool.result", session=sess["id"], tool="replan_todos",
+                     ok=False, backend="harness", stderr=str(e)[:200])
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+
+
 def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=None):
     """Run one streamed router call and persist exactly one assistant message.
 
@@ -1201,6 +1306,21 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          "is in your system state. Now work through it: answer the "
                          "user in plain prose, or call a tool — one step at a time."
                          % n})
+            continue
+        if isinstance(act, dict) and act.get("action") in ("update_todos", "replan_todos"):
+            # JAG-75: the model advances its own plan mid-run (in_progress → done
+            # with evidence), or briefly re-plans. Then it must resume the plan.
+            if act["action"] == "update_todos":
+                _apply_chat_todo_updates(sess, act, on_event)
+                nudge = ("Task list updated. Continue STRICTLY following the plan: mark "
+                         "the next step 'doing' before you start it, and 'done' with "
+                         "evidence when it is finished — then move to the next step.")
+            else:
+                _apply_chat_replan(sess, act, on_event)
+                nudge = ("Plan updated. Now resume following the plan from where you "
+                         "left off; do not re-plan again unless something really changed.")
+            msgs.append({"role": "assistant", "content": answer})
+            msgs.append({"role": "user", "content": nudge})
             continue
         tc = _chat_tool_call(act, api_v02) if tool_ctx else None
         if tc:
