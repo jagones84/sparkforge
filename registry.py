@@ -108,6 +108,16 @@ TOOL_SCHEMAS = {
         "type": "object",
         "properties": {},
     },
+    "skills": {
+        "description": ("Agent skills registry: list available skills (from the "
+                        "skills/ tree, one SKILL.md per skill) or read a full "
+                        "SKILL.md to follow its instructions/entrypoint."),
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["list", "read"], "default": "list"},
+            "name": {"type": "string", "description": "skill name (for action=read)"},
+        },
+    },
 }
 
 

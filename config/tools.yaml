@@ -121,6 +121,12 @@ tools:
     enabled: true
     approval: auto
 
+  # skills registry (v0.7.1): list/read agent skills from skills/<cat>/<name>/
+  # SKILL.md (symlinked skill distribution). Read-only, always safe.
+  skills:
+    enabled: true
+    approval: auto
+
   # external MCP tools appear as <client>__<tool> (config/mcp_clients.yaml);
   # default policy is approval=required. Read-only pmcp gateway probes are
   # auto-approved so the agent can observe real MCP output.

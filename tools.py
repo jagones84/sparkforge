@@ -194,6 +194,36 @@ def _browser(args, run_id):
             "sandboxed": False, "note": "lightweight HTML->text extractor, not a headless browser"}
 
 
+def _skills(args, run_id):
+    """Skills registry: list available skills or read one SKILL.md."""
+    import skills as skills_mod
+    action = str(args.get("action", "list"))
+    if action == "read":
+        name = str(args.get("name", ""))
+        got = skills_mod.get_skill(name)
+        if got is None:
+            avail = ", ".join(s["name"] for s in skills_mod.list_skills())
+            return {"ok": False, "error": "skill %r not found; available: %s"
+                    % (name, avail), "stdout": "", "stderr": ""}
+        content = got.pop("content")
+        return {"ok": True, "exit_code": 0, "stdout": content, "stderr": "",
+                "skill": got, "backend": "host", "sandboxed": False}
+    skills = skills_mod.list_skills()
+    lines = []
+    cats = {}
+    for s in skills:
+        cats.setdefault(s["category"], []).append(s)
+    for cat in sorted(cats):
+        lines.append("[%s]" % cat)
+        for s in cats[cat]:
+            lines.append("  %s :: %s" % (s["name"], (s["description"] or s["title"])[:120]))
+    stdout = ("%d skills from %s (read one with the skills tool, "
+              "action=read):\n%s" % (len(skills), skills_mod.SKILLS_DIR,
+                                       "\n".join(lines)))
+    return {"ok": True, "exit_code": 0, "stdout": stdout, "stderr": "",
+            "count": len(skills), "backend": "host", "sandboxed": False}
+
+
 def _self(args, run_id):
     """v0.5 self-knowledge: paths, config, docs, systemd state, extension recipe."""
     import subprocess as sp
@@ -215,14 +245,27 @@ def _self(args, run_id):
         "service": {"unit": "sparkforge.service", "scope": "user",
                     "unit_file": os.path.join(REPO, "deploy", "sparkforge.service"),
                     "restart_cmd": "systemctl --user restart sparkforge.service"},
-        "install_skill_mcp": (
-            "External MCP servers: add an entry to config/mcp_clients.yaml with "
-            "either command+args (stdio) or url (HTTP); tools are discovered via "
-            "tools/list and exposed as <client>__<tool> in the registry. Harness-"
-            "native tools go in registry.TOOL_SCHEMAS + tools.py with policy in "
-            "config/tools.yaml. Apply with POST /api/tools (reload) or "
-            "`systemctl --user restart sparkforge.service`."),
+        "skills_dir": os.path.join(REPO, "skills"),
+        "install_skill": (
+            "A skill is a directory with a SKILL.md. Drop/clone it into a "
+            "category under skills/ (e.g. skills/ops/<name>/SKILL.md), or symlink "
+            "an existing distribution dir: `ln -sfn <source-dir> skills/<cat>`. "
+            "Skills are picked up automatically by the `skills` tool (no reload "
+            "needed). External MCP servers: add an entry to "
+            "config/mcp_clients.yaml with either command+args (stdio) or url "
+            "(HTTP); tools are discovered via tools/list and exposed as "
+            "<client>__<tool> in the registry. Harness-native tools go in "
+            "registry.TOOL_SCHEMAS + tools.py with policy in config/tools.yaml. "
+            "Apply with POST /api/tools (reload) or `systemctl --user restart "
+            "sparkforge.service`."),
     }
+    try:
+        import skills as skills_mod
+        sk = skills_mod.list_skills()
+        info["skills"] = {"dir": info["skills_dir"], "count": len(sk),
+                          "categories": sorted({s["category"] for s in sk})}
+    except Exception as e:  # noqa: BLE001
+        info["skills"] = {"error": str(e)}
     try:
         out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
                      capture_output=True, text=True, timeout=4).stdout.strip()
@@ -234,7 +277,8 @@ def _self(args, run_id):
 
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
              "fs.edit": _fs_edit,
-             "git": _git, "http": _http, "browser": _browser, "self": _self}
+             "git": _git, "http": _http, "browser": _browser, "self": _self,
+             "skills": _skills}
 
 
 def execute(tool, args, run_id=None):

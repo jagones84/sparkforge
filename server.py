@@ -719,7 +719,9 @@ def self_summary():
         "servers: config/mcp_clients.yaml (add a stdio command or HTTP url entry, "
         "tools appear as <client>__<tool>; then reload via POST /api/tools or "
         "restart with `systemctl --user restart sparkforge.service`, unit file "
-        "deploy/sparkforge.service, port 8790). Harness-native tools: "
+        "deploy/sparkforge.service, port 8790). Skills: the `skills` tool lists and "
+        "reads agent skills from skills/<category>/<name>/SKILL.md. Harness-"
+        "native tools: "
         "registry.TOOL_SCHEMAS + tools.py. Full self report: GET /api/self or "
         "the `self` tool."
     ) % (REPO, DATA_DIR)
@@ -743,14 +745,27 @@ def self_knowledge():
         "service": {"unit": "sparkforge.service", "scope": "user",
                     "unit_file": os.path.join(REPO, "deploy", "sparkforge.service"),
                     "restart_cmd": "systemctl --user restart sparkforge.service"},
-        "install_skill_mcp": (
-            "External MCP servers: add an entry to config/mcp_clients.yaml with "
-            "either command+args (stdio) or url (HTTP); tools are discovered via "
-            "tools/list and exposed as <client>__<tool> in the registry. Harness-"
-            "native tools go in registry.TOOL_SCHEMAS + tools.py with policy in "
-            "config/tools.yaml. Apply with POST /api/tools (reload) or "
-            "`systemctl --user restart sparkforge.service`."),
+        "skills_dir": os.path.join(REPO, "skills"),
+        "install_skill": (
+            "A skill is a directory with a SKILL.md. Drop/clone it into a "
+            "category under skills/ (e.g. skills/ops/<name>/SKILL.md), or symlink "
+            "an existing distribution dir: `ln -sfn <source-dir> skills/<cat>`. "
+            "Skills are picked up automatically by the `skills` tool (no reload "
+            "needed). External MCP servers: add an entry to "
+            "config/mcp_clients.yaml with either command+args (stdio) or url "
+            "(HTTP); tools are discovered via tools/list and exposed as "
+            "<client>__<tool> in the registry. Harness-native tools go in "
+            "registry.TOOL_SCHEMAS + tools.py with policy in config/tools.yaml. "
+            "Apply with POST /api/tools (reload) or `systemctl --user restart "
+            "sparkforge.service`."),
     }
+    try:
+        import skills as skills_mod
+        sk = skills_mod.list_skills()
+        info["skills"] = {"dir": info["skills_dir"], "count": len(sk),
+                          "categories": sorted({s["category"] for s in sk})}
+    except Exception as e:  # noqa: BLE001
+        info["skills"] = {"error": str(e)}
     try:
         out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
                      capture_output=True, text=True, timeout=4).stdout.strip()

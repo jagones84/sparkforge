@@ -1,6 +1,6 @@
 # SparkForge Plan
 
-*Living document — mirrors the in-app PLAN store (`GET /api/plan`). Updated 2026-09-29.*
+*Living document — mirrors the in-app PLAN store (`GET /api/plan`). Updated 2026-09-30.*
 
 ## Goal
 A state-of-the-art, mobile-commandable agent harness on the DGX Spark: local LLM (router :8080) inside a frontier-style harness with visible reasoning, planning, task execution, a live loopback feed, WebUI, CLI — and, from v0.2, **real tools executed in a real sandbox behind approval gates**.
@@ -17,6 +17,27 @@ A state-of-the-art, mobile-commandable agent harness on the DGX Spark: local LLM
 - ✅ CLI `forge.py`: chat/agent/plan/tasks/status/models/feed
 - ✅ Mobile API: `--host 0.0.0.0` for Tailscale exposure, optional bearer token
 - ✅ SparkPulse preserved & backed up: `/home/jagones/Backups/sparkpulse-backup-20260928-231607.tar.gz` (38 MB, 1501 files)
+
+## Done — v0.7.1 "skills usabili + pmcp end-to-end" (2026-09-30, JAG-56)
+
+Feedback utente: skills e pmcp non erano usabili dall'agente. Risolto e
+verificato da `tests/v071_skills_pmcp.py` (13/13 checks) — evidenza in
+`data/v071-acceptance.json` e transcript del run in `data/v071-transcript.json`.
+
+- ✅ **Skills nel harness** — `skills/` contiene le categorie della
+  distribuzione skill utente via symlink (`skills/<cat> -> ../../skills-autodist-skill/<cat>`:
+  android, data, dev, meta, ops, research, tg); il loader `skills.py` scansce
+  `skills/<cat>/<name>/SKILL.md` e trova **123 skill**
+- ✅ **Tool `skills`** — `{"action":"list"}` elenca tutte le skill per categoria
+  con descrizione; `{"action":"read","name":"..."}` restituisce il SKILL.md
+  completo (istruzioni/entrypoint) da seguire; auto-approved, read-only;
+  elencato nel tool registry (quindi visibile all'agente e via MCP tools/list)
+- ✅ **`self` aggiornato** — riporta skills installate (dir, count, categorie) e
+  la ricetta per installarne altre (drop/symlink in `skills/<cat>/`)
+- ✅ **pmcp end-to-end** — run reale `POST /api/agent/run` (LLM router vivo):
+  l'agente esegue `tools/call` `pmcp__gateway.health` (backend `mcp(pmcp)`,
+  exit=0) e l'output MCP finisce come **observation** nel transcript
+  (`data/v071-transcript.json`); regression `tests/v07_mcp_fsedit.py` 14/14
 
 ## Done — v0.2 "safe execution + interop" (2026-09-29)
 
