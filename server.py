@@ -910,7 +910,41 @@ def graph_post(run_id, body):
     return None, {"error": "unknown action %r" % action}, 400
 
 
-def chat_once(sess, message, model=None, on_delta=None, trace=None):
+CHAT_TOOL_MAX_STEPS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_STEPS", "4"))
+CHAT_TOOL_PROMPT = (
+    "\n\n## Tools\nYou are a tool-using agent, not a plain chatbot: you chat with "
+    "the user AND you can act. When a request needs a tool (run a command, read or "
+    "write a file, call an MCP server, list or read a skill), reply with ONLY this "
+    'JSON and nothing else: {"action":"tool","tool":"<name>","args":{...}}. '
+    "After the tool runs you receive its observation and MUST continue: call another "
+    "tool or answer the user in plain text. Never show JSON to the user; the final "
+    "message must be plain prose. Tool registry (allowlist):\n"
+)
+
+
+def _chat_tool_call(act, av02):
+    """Accept the canonical {"action":"tool","tool":X,"args":{...}} and the
+    model's frequent variant {"action":X,"args":{...}} when X is a real tool
+    name. Returns (tool, args) or None."""
+    if not isinstance(act, dict):
+        return None
+    try:
+        names = set(av02.registry.tool_names())
+    except Exception:  # noqa: BLE001
+        return None
+    tool = act.get("tool")
+    if tool not in names and act.get("action") in names:
+        tool = act.get("action")
+    if tool not in names:
+        return None
+    args = dict(act.get("args") or {})
+    for k in ("command", "path", "content", "url"):
+        if k in act and k not in args:
+            args[k] = act[k]
+    return str(tool), args
+
+
+def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=None):
     """Run one streamed router call and persist exactly one assistant message.
 
     Contract (JAG-51): the caller appends the `user` message; this function is
@@ -924,7 +958,17 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None):
     if on_delta is None:
         on_delta = lambda channel, text: publish(
             "chat.delta", session=sess["id"], channel=channel, text=text)
-    sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\nCurrent harness state:\n" + context_summary()
+    if on_event is None:
+        on_event = publish
+    # JAG-58b: the chat IS the agent — same tool registry as the agent loop, so
+    # the model can call tools inline before it answers. Falls back to plain chat
+    # if the tool registry is unavailable.
+    try:
+        tool_ctx = CHAT_TOOL_PROMPT + "\n" + api_v02.tool_context()
+    except Exception:  # noqa: BLE001 — tool registry must never break chat
+        tool_ctx = ""
+    sys = (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
+           + "\n\nCurrent harness state:\n" + context_summary())
     breakdown_tasks(message, model, sess["id"])
     # v0.3 context engineering: compaction + token budget + memory retrieval
     try:
@@ -943,7 +987,57 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None):
         msgs.append({"role": "user", "content": message})
         ctx_stats = None
     model = model or default_model()
-    answer, think, model = stream_with_fallback(msgs, model, "chat", on_delta)
+    # JAG-58b: tool-aware chat loop. The model may answer directly, or ask for a
+    # tool; the tool runs through the same approval gate as the agent loop and
+    # its observation is fed back, then the model continues. Streaming deltas are
+    # buffered per iteration so raw tool-call JSON is never shown to the user.
+    max_steps = CHAT_TOOL_MAX_STEPS if tool_ctx else 1
+    answer, think = "", ""
+    final_answer = ""
+    for _step in range(max_steps):
+        collected = []
+        answer, think, model = stream_with_fallback(
+            msgs, model, "chat",
+            lambda ch, t, _c=collected: _c.append((ch, t)))
+        act = extract_json(answer)
+        tc = _chat_tool_call(act, api_v02) if tool_ctx else None
+        if tc:
+            tool, args = tc
+            on_event("tool.call", session=sess["id"], tool=tool, args=args, inline=True)
+            try:
+                res = api_v02.gated_call(tool, args)
+                obs = res.get("observation") or res.get("error") or res.get("status") or ""
+                ok = res.get("status") == "executed"
+                on_event("tool.result", session=sess["id"], tool=tool, ok=ok, inline=True)
+            except Exception as e:  # noqa: BLE001 — a tool failure must not kill chat
+                obs, ok = "tool error: %s" % e, False
+                on_event("tool.result", session=sess["id"], tool=tool, ok=False,
+                         stderr=str(e)[:200], inline=True)
+            msgs.append({"role": "assistant", "content": answer})
+            msgs.append({"role": "user", "content":
+                         "Observation for tool %s:\n%s\n\n"
+                         "Now answer the user in plain text, or call another tool."
+                         % (tool, str(obs)[:4000])})
+            continue
+        if isinstance(act, dict) and act:
+            # stray JSON the model emitted in a schema we do not recognise: never
+            # show it to the user — nudge it back to a valid tool call or prose.
+            msgs.append({"role": "assistant", "content": answer})
+            msgs.append({"role": "user", "content":
+                         "That was not a valid tool call. Either emit "
+                         '{"action":"tool","tool":"<name>","args":{...}} for a real '
+                         "tool, or answer the user in plain text."})
+            continue
+        for ch, t in collected:
+            on_delta(ch, t)
+        final_answer, think = answer, think
+        break
+    if not final_answer:
+        # the loop ran out of tool steps without a prose answer — force one.
+        msgs.append({"role": "user", "content":
+                     "Answer the user now in plain text. Do not emit JSON."})
+        final_answer, think, model = stream_with_fallback(msgs, model, "chat", on_delta)
+    answer = final_answer or answer
     if trace:
         trace.span("llm.chat", model=model, context=ctx_stats)
         trace.llm_call(msgs, answer + think)
@@ -1462,7 +1556,7 @@ def chat_stream_gen(sess, message, model, mark=None):
                           tool="write_todos", ok=False, backend="harness",
                           stderr=str(e)[:200])
                     publish("graph.error", run=trace.id, error=str(e))
-                chat_once(sess, message, target, on_delta, trace=trace)
+                chat_once(sess, message, target, on_delta, trace=trace, on_event=_emit)
                 finish_run_graph(trace.id, sess["id"], message, on_event=_emit)
                 trace.finish("done")
             except Exception as e:

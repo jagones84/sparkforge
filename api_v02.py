@@ -208,7 +208,8 @@ def tool_action(st, tool, args, on_event):
              stdout=(res.get("stdout") or "")[:2000], stderr=(res.get("stderr") or "")[:1000])
     on_event("tool.result", run=run_id, tool=tool, ok=res.get("ok"),
              exit_code=res.get("exit_code"), backend=res.get("backend"),
-             sandboxed=res.get("sandboxed"))
+             sandboxed=res.get("sandboxed"), duration_ms=res.get("duration_ms"),
+             stdout=(res.get("stdout") or "")[:4000], stderr=(res.get("stderr") or "")[:2000])
     return toolmod.observation(res), meta
 
 
@@ -313,6 +314,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
             srv.start_run_graph(st.id, goal, None, model, on_event=on_event)
         except Exception as e:  # noqa: BLE001 — graph must never break the run
             _publish("graph.error", run=st.id, error=str(e))
+    last_sig, repeated = None, 0
     try:
         for i in range(max_steps):
             checkpoint(st)
@@ -344,6 +346,38 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                 summary = str(act.get("summary", ""))[:600] or "done"
                 st.summary, st.status = summary, "done"
                 on_event("agent.finish", run=st.id, summary=summary)
+                st.trace.append({"i": i + 1, "thought": thought, "action": "finish",
+                                 "summary": summary})
+                return _result(st, goal, model)
+
+            # JAG-58: no-progress guard. A small model can re-emit the identical
+            # action forever and never call `finish`, so the run dies at
+            # max_steps having "worked" but never concluded. If the same action
+            # (tool+args, or step+id+title) repeats, conclude the run instead of
+            # re-executing it — deterministic termination for any model.
+            try:
+                raw_args = dict(act.get("args") or {})
+                for k in ("command", "path", "url", "content"):
+                    if k in act and k not in raw_args:
+                        raw_args[k] = act[k]
+                # volatile keys a small model flips between otherwise-identical
+                # calls (e.g. timeout) must not defeat the guard.
+                norm_args = {k: v for k, v in raw_args.items()
+                             if k not in ("timeout_secs", "timeout", "args")}
+                sig = (action, act.get("tool"),
+                       json.dumps(norm_args, sort_keys=True, default=str),
+                       act.get("id"), act.get("title"))
+            except (TypeError, ValueError):
+                sig = str(action)
+            if sig == last_sig:
+                repeated += 1
+            else:
+                repeated, last_sig = 1, sig
+            if repeated >= 2:
+                summary = "no progress: %r repeated; concluding run" % action
+                st.summary, st.status = summary, "done"
+                on_event("agent.finish", run=st.id, summary=summary, no_progress=True)
+                _publish("agent.no_progress", run=st.id, action=action)
                 st.trace.append({"i": i + 1, "thought": thought, "action": "finish",
                                  "summary": summary})
                 return _result(st, goal, model)
