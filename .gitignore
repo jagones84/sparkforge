@@ -15,3 +15,5 @@ eval/results/
 # Ephemeral agent helpers / temp test harnesses (workspace rule: keep trash out
 # of the repo; official scripts live at the repo root or under scripts/).
 trash/
+
+.superpowers/
