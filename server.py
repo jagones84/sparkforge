@@ -1074,6 +1074,10 @@ CHAT_TOOL_MAX_STEPS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_STEPS", "8"))
 # JAG-84: hard cap on TOTAL loop iterations (bookkeeping + retries included), so
 # that making plan/todo actions "free" can never spin the loop forever.
 CHAT_TOOL_MAX_ITERS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_ITERS", "16"))
+# JAG-88 (harness layer L2 — context budgeting): observations above this many
+# chars are offloaded to a file instead of being flooded into the context (and
+# instead of the old silent 4000-char truncation that LOST the rest).
+CHAT_TOOL_OBS_LIMIT = int(os.environ.get("SPARKFORGE_TOOL_OBS_LIMIT", "6000"))
 CHAT_TOOL_PROMPT = (
     "\n\n## Tools\nYou are a tool-using agent, not a plain chatbot: you chat with "
     "the user AND you can act. When a request needs a tool (run a command, read or "
@@ -1140,6 +1144,55 @@ def _open_plan_steps(sess):
         return sum(c.get(s, 0) for s in taskgraph.OPEN_STATUSES)
     except Exception:  # noqa: BLE001
         return 0
+
+
+# JAG-88: per-session counter for offloaded observation files (001_, 002_, ...).
+_OFFLOAD_SEQ = {}
+_OFFLOAD_HEAD = 1500
+_OFFLOAD_TAIL = 600
+
+
+def _offload_observation(sess, tool, text):
+    """JAG-88 (harness layer L2 — context budgeting): keep big tool outputs OUT
+    of the model's context but NEVER lose them.
+
+    The chat loop used to hard-truncate every observation to 4000 chars: a big
+    web page, a log dump or a `find` over a tree was silently cut and the tail
+    was LOST to the model (and it could not recover it). Now an oversized
+    observation is written verbatim to data/offload/<session>/ and the model
+    receives a compact reference — size, line count, path, a head+tail preview,
+    and the exact call to read the rest (fs.read / shell grep). The context
+    stays bounded; nothing is discarded.
+    """
+    n = len(text)
+    seq = _OFFLOAD_SEQ.get(sess["id"], 0) + 1
+    _OFFLOAD_SEQ[sess["id"]] = seq
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", str(tool))[:40] or "tool"
+    fallback = ("Observation for tool %s:\n%s\n\n"
+                "Now answer the user in plain text, or call another tool."
+                % (tool, text[:CHAT_TOOL_OBS_LIMIT]))
+    try:
+        outdir = os.path.join(DATA_DIR, "offload", sess["id"])
+        os.makedirs(outdir, exist_ok=True)
+        path = os.path.join(outdir, "%03d_%s.txt" % (seq, safe))
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    except Exception:  # noqa: BLE001 — offload must never kill the turn
+        return fallback
+    lines = text.count("\n") + 1
+    head = text[:_OFFLOAD_HEAD]
+    ref = (
+        "Observation for tool %s: output is LARGE (%d chars, %d lines) and was "
+        "saved to a file so it does not flood your context.\n"
+        "FULL OUTPUT FILE: %s\n"
+        "Read more of it with {\"action\":\"tool\",\"tool\":\"fs.read\","
+        "\"args\":{\"path\":\"%s\"}} (or grep it with the shell tool).\n"
+        "Preview — first %d chars:\n%s\n"
+        % (tool, n, lines, path, path, min(_OFFLOAD_HEAD, n), head))
+    if n > _OFFLOAD_HEAD + _OFFLOAD_TAIL:
+        ref += "...\nPreview — last %d chars:\n%s\n" % (_OFFLOAD_TAIL, text[-_OFFLOAD_TAIL:])
+    ref += "\nNow answer the user in plain text, or call another tool."
+    return ref
 
 
 def _chat_tool_call(act, av02):
@@ -1452,11 +1505,17 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 obs, ok = "tool error: %s" % e, False
                 on_event("tool.result", session=sess["id"], tool=tool, ok=False,
                          stderr=str(e)[:200], inline=True)
+            # JAG-88: an oversized observation goes to a file (referenced) rather
+            # than being truncated into the context — nothing is lost.
+            obs = str(obs)
+            if len(obs) > CHAT_TOOL_OBS_LIMIT:
+                note = _offload_observation(sess, tool, obs)
+            else:
+                note = ("Observation for tool %s:\n%s\n\n"
+                        "Now answer the user in plain text, or call another tool."
+                        % (tool, obs))
             msgs.append({"role": "assistant", "content": answer})
-            msgs.append({"role": "user", "content":
-                         "Observation for tool %s:\n%s\n\n"
-                         "Now answer the user in plain text, or call another tool."
-                         % (tool, str(obs)[:4000])})
+            msgs.append({"role": "user", "content": note})
             continue
         if isinstance(act, dict) and act:
             # stray JSON the model emitted in a schema we do not recognise: never
