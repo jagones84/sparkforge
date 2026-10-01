@@ -234,7 +234,12 @@ def tool_spec(name):
     entry = entry or {}
     return {
         "name": name,
-        "enabled": bool(entry.get("enabled", True if ext else False)),
+        # JAG-80: external MCP tools (the pmcp gateway) are OPT-IN. Shipping 26
+        # gateway tools (23 of them approval-gated) into the chat prompt made the
+        # model call `pmcp__gateway.request_capability` instead of its own
+        # tools/skills — and that call froze the turn on the approval gate. Only
+        # tools explicitly enabled in config/tools.yaml are offered.
+        "enabled": bool(entry.get("enabled", False)),
         "approval": entry.get("approval", "required"),
         "auto_approve": list(entry.get("auto_approve") or []),
         "deny": list(entry.get("deny") or []),

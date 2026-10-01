@@ -822,6 +822,11 @@ MEMORY_POLICY = (
 # JAG-79: the model knew the `skills` TOOL existed but the system prompt never
 # told it WHICH skills are installed, so it never used them (e.g. superpowers,
 # brainstorming, tdd). We now inject the live skills list + this directive.
+# JAG-80: how long a chat turn waits for a human approval before moving on.
+# The gate's own timeout is 300s (approvals.timeout_secs) — waiting that long in
+# the chat stream was experienced as "si blocca" and let mobile NAT kill the SSE.
+CHAT_APPROVAL_WAIT = 30
+
 SKILLS_POLICY = (
     "Skills: you have an installed skill library — the SKILLS list below is "
     "live and includes all symlinked distributions. Before solving a task, SCAN "
@@ -1356,9 +1361,25 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             tool, args = tc
             on_event("tool.call", session=sess["id"], tool=tool, args=args, inline=True)
             try:
-                res = api_v02.gated_call(tool, args, run_id=sess["id"])
+                # JAG-80: a `required` tool must never freeze the turn. We wait a
+                # SHORT, bounded time (CHAT_APPROVAL_WAIT) so a quick tap on the
+                # inline Approve card still executes the tool; if nobody decides,
+                # the model gets an observation and continues. The old code waited
+                # the full 300s and the mobile SSE died = "si blocca".
+                res = api_v02.gated_call(tool, args, run_id=sess["id"],
+                                         timeout=CHAT_APPROVAL_WAIT)
+                status = res.get("status")
                 obs = res.get("observation") or res.get("error") or res.get("status") or ""
-                ok = res.get("status") == "executed"
+                if status in ("pending", "expired"):
+                    rec = res.get("approval") or {}
+                    obs = ("Azione '%s' NON eseguita: approvazione %s (id %s). La card e' "
+                           "nella chat: l'utente puo' approvarla e ripetere, oppure dirmi "
+                           "di procedere. NON ripetere la stessa chiamata adesso; prosegui "
+                           "con altro o spiega all'utente cosa serve."
+                           % (tool, status, rec.get("id", "?")))
+                elif status == "denied":
+                    obs = "Azione '%s' NEGATA dall'utente." % tool
+                ok = status == "executed"
                 on_event("tool.result", session=sess["id"], tool=tool, ok=ok, inline=True)
             except Exception as e:  # noqa: BLE001 — a tool failure must not kill chat
                 obs, ok = "tool error: %s" % e, False

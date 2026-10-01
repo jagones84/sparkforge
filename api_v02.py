@@ -213,11 +213,20 @@ def tool_action(st, tool, args, on_event):
     return toolmod.observation(res), meta
 
 
-def gated_call(tool, args, run_id=None, wait=True, by="api"):
-    """One-shot gated tool call used by POST /api/tools/call."""
+def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None):
+    """One-shot gated tool call used by POST /api/tools/call and the chat loop.
+
+    `timeout` (JAG-80) caps how long a `required` tool waits for a human decision.
+    The chat loop passes a short cap so a turn can never freeze for the full
+    approvals.timeout_secs (300s): the request is recorded, the app shows an
+    inline Approve/Deny card, and if nobody decides in time the model continues.
+    """
     spec = registry.tool_spec(tool)
     if spec is None:
         return {"status": "error", "error": "unknown tool %r" % tool}
+    if not spec["enabled"]:
+        _publish("tool.blocked", run=run_id, tool=tool, reason="not enabled")
+        return {"status": "blocked", "reason": "tool %r is disabled (allowlist)" % tool}
     decision, reason = registry.classify(tool, args or {})
     if decision in ("disabled", "denied"):
         _publish("tool.blocked", run=run_id, tool=tool, args=args, reason=reason)
@@ -229,9 +238,13 @@ def gated_call(tool, args, run_id=None, wait=True, by="api"):
         _publish("approval.request", id=rec["id"], run=run_id, tool=tool,
                  summary=rec["summary"], args=args)
         if wait:
-            rec = approvals.wait(rec["id"])
+            rec = approvals.wait(rec["id"], timeout=timeout)
             if rec["status"] != "approved":
+                _publish("approval.resolved", id=rec["id"], run=run_id, tool=tool,
+                         status=rec["status"], by=rec.get("decided_by"))
                 return {"status": rec["status"], "approval": rec, "reason": reason}
+            _publish("approval.resolved", id=rec["id"], run=run_id, tool=tool,
+                     status="approved", by=rec.get("decided_by"))
         else:
             return {"status": "pending", "approval": rec, "reason": reason}
     else:
@@ -266,12 +279,25 @@ AGENT_PROMPT_V2 = (
 
 
 def tool_context():
+    """The tool block for the chat/agent prompt.
+
+    JAG-80: only ENABLED tools are listed as callable. Disabled ones (e.g. the
+    opt-in pmcp gateway surface) are collapsed into one compact footer line — a
+    huge [DISABLED] wall used to drown the real tools and push the model into
+    calling an approval-gated gateway tool.
+    """
     lines = ["Tool registry (allowlist — only enabled tools may be called):"]
+    disabled = []
     for t in registry.catalog():
+        if not t["enabled"]:
+            disabled.append(t["name"])
+            continue
         props = ", ".join((t["inputSchema"].get("properties") or {}).keys())
-        lines.append("  - %-9s(%s) approval=%s%s :: %s"
-                     % (t["name"], props, t["approval"],
-                        "" if t["enabled"] else " [DISABLED]", t["description"]))
+        lines.append("  - %-9s(%s) approval=%s :: %s"
+                     % (t["name"], props, t["approval"], t["description"]))
+    if disabled:
+        lines.append("(present but DISABLED / not callable: %s — only the user can "
+                     "enable one in config/tools.yaml)" % ", ".join(disabled))
     return "\n".join(lines)
 
 
