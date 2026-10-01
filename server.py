@@ -229,6 +229,36 @@ def append_message(sess, role, content, reasoning=None, meta=None):
     return msg
 
 
+def persist_tool_card(sess, tool, ok, args=None, result="", error="",
+                      exit_code=None, backend=None):
+    """JAG-96: persist an inline tool card so cold-start UIs can rebuild it.
+
+    Stored in `sess["tool_cards"]` — NOT in `messages` — so it never reaches the
+    model prompt (`context_engine.build` only reads `messages`). `after` is the
+    number of already-persisted messages the card follows, letting the WebUI and
+    the mobile mirror interleave cards with the transcript on history reload.
+    """
+    try:
+        args_str = args if isinstance(args, str) else json.dumps(args or {},
+                                                                ensure_ascii=False)
+        card = {
+            "tool": str(tool),
+            "ok": bool(ok),
+            "args": args_str[:4000],
+            "result": str(result or "")[:4000],
+            "error": str(error or "")[:2000],
+            "exit_code": exit_code,
+            "backend": backend,
+            "after": len(sess.get("messages", [])),
+            "ts": round(time.time(), 3),
+        }
+        sess.setdefault("tool_cards", []).append(card)
+        save_session(sess)
+        return card
+    except Exception:  # noqa: BLE001 — persisting a card must never break a turn
+        return None
+
+
 # --- JAG-51 session contract: no request without a persisted answer ---------
 ERROR_PREFIX = "⚠️ errore: "
 
@@ -1550,9 +1580,18 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 elif status == "denied":
                     obs = "Azione '%s' NEGATA dall'utente." % tool
                 ok = status == "executed"
+                sub = res.get("result") or {}
+                # JAG-96: persist the card so cold-start UIs rebuild the transcript.
+                persist_tool_card(sess, tool, ok, args=args,
+                                  result=sub.get("stdout") or obs or "",
+                                  error=sub.get("stderr") or "",
+                                  exit_code=sub.get("exit_code"),
+                                  backend=sub.get("backend") or "harness")
                 on_event("tool.result", session=sess["id"], tool=tool, ok=ok, inline=True)
             except Exception as e:  # noqa: BLE001 — a tool failure must not kill chat
                 obs, ok = "tool error: %s" % e, False
+                persist_tool_card(sess, tool, False, args=args, error=str(e)[:200],
+                                  backend="harness")
                 on_event("tool.result", session=sess["id"], tool=tool, ok=False,
                          stderr=str(e)[:200], inline=True)
             # JAG-88: an oversized observation goes to a file (referenced) rather

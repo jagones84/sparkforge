@@ -508,7 +508,22 @@ async function newSession() {
 async function loadHistory() {
   if (!sessionId) return;
   const s = await api("GET", "/api/history?session=" + encodeURIComponent(sessionId));
-  (s.messages || []).forEach(m => {
+  // JAG-96: rebuild the inline tool cards persisted by the harness, interleaved
+  // at the position (`after` = messages already sent) where each call happened.
+  const nMsgs = (s.messages || []).length;
+  const byAfter = {};
+  (s.tool_cards || []).forEach(c => {
+    const k = String(c.after == null ? nMsgs : c.after);
+    (byAfter[k] = byAfter[k] || []).push(c);
+  });
+  const drawCards = (i) => (byAfter[String(i)] || []).forEach(c => {
+    toolCard(c.tool);
+    updateToolCard({ tool: c.tool, ok: c.ok, exit_code: c.exit_code,
+                     backend: c.backend, result: c.result, error: c.error,
+                     args: c.args, summary: c.error ? "errore" : "" });
+  });
+  (s.messages || []).forEach((m, i) => {
+    drawCards(i);
     if (m.role === "user") { who("user", m.content); return; }
     // v1.6.3 (JAG-55): some models inline their chain-of-thought in `content`
     // as a trailing "think: …" tail. The reply must stay the primary text.
@@ -523,6 +538,7 @@ async function loadHistory() {
       d.appendChild(det);
     }
   });
+  drawCards((s.messages || []).length);
 }
 
 /* v1.6.3 (JAG-55): splits a trailing "think: …" block out of a reply. */
