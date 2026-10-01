@@ -1392,27 +1392,43 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         final_answer, think = answer, think
         break
     if not final_answer:
-        # the loop ran out of tool steps without a prose answer — force one.
+        # JAG-78b: the loop ran out of tool steps without a prose answer — force
+        # one, but BUFFER it. Streaming it live leaked raw tool-call JSON into
+        # the user's chat bubble when the model kept acting instead of answering
+        # (the JSON guard below only protected the PERSISTED text, not the stream).
         msgs.append({"role": "user", "content":
                      "Answer the user now in plain text. Do not emit JSON."})
-        final_answer, think, model = stream_with_fallback(msgs, model, "chat", on_delta)
+        forced = []
+
+        def _cap_final(ch, t, _c=forced):
+            if ch == "think":
+                on_delta("think", t)
+            else:
+                _c.append((ch, t))
+
+        final_answer, think, model = stream_with_fallback(msgs, model, "chat", _cap_final)
+        if (final_answer or "").strip() and not _looks_like_json_action(final_answer):
+            for ch, t in forced:  # only a REAL reply reaches the user live
+                on_delta(ch, t)
     answer = final_answer or answer
     if trace:
         trace.span("llm.chat", model=model, context=ctx_stats)
         trace.llm_call(msgs, answer + think)
     meta = {"model": model}
     content = answer.strip()
-    if _looks_like_json_action(content):
-        # JAG-64: last-resort guard — never persist raw tool-call JSON.
-        meta = {"model": model, "error": True,
-                "error_detail": "tool-call JSON leaked instead of a reply"}
-        content = ERROR_PREFIX + "the model returned tool-call JSON, not a reply — retry."
-    if not content:
-        # JAG-51: an empty answer is not a reply — record it explicitly instead
-        # of persisting a silent blank assistant turn.
-        meta = {"model": model, "error": True,
-                "error_detail": "empty reply from the model"}
-        content = ERROR_PREFIX + meta["error_detail"]
+    if _looks_like_json_action(content) or not content:
+        # JAG-64/78b: last-resort guard — never show/persist raw tool-call JSON
+        # (or an empty turn). Summarise the plan state instead of leaking JSON.
+        try:
+            _g = taskgraph.load(sess["id"])
+            _nodes = (_g or {}).get("nodes", [])
+            _done = sum(1 for x in _nodes if x.get("status") == "done")
+        except Exception:  # noqa: BLE001
+            _nodes, _done = [], 0
+        content = (("Piano aggiornato: %d/%d passi completati. Dimmi come procedere "
+                    "o lascia che continui." % (_done, len(_nodes))) if _nodes else "Fatto.")
+        meta = {"model": model, "synthesised": True,
+                "reason": "model emitted JSON instead of a prose reply"}
     reply = append_message(sess, "assistant", content, reasoning=think.strip() or None,
                            meta=meta)
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
