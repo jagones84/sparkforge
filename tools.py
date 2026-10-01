@@ -237,6 +237,7 @@ def _self(args, run_id):
         "entrypoint": os.path.join(REPO, "server.py"), "port": 8790,
         "router": os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080"),
         "config": {"tools": os.path.join(REPO, "config", "tools.yaml"),
+                   "tools_overlay": os.path.join(REPO, "data", "tools.overlay.yaml"),
                    "routing": os.path.join(REPO, "config", "routing.yaml"),
                    "mcp_clients": os.path.join(REPO, "config", "mcp_clients.yaml")},
         "docs": {"plan": os.path.join(REPO, "docs", "PLAN.md"),

@@ -17,6 +17,10 @@ import threading
 REPO = os.path.dirname(os.path.abspath(__file__))
 CONFIG_YAML = os.path.join(REPO, "config", "tools.yaml")
 CONFIG_JSON = os.path.join(REPO, "config", "tools.json")
+# JAG-82: programmatic policy changes (POST /api/tools, the SETTINGS panel) are
+# written to a sparse overlay, never back into the hand-edited tools.yaml.
+OVERLAY_YAML = os.path.join(REPO, "data", "tools.overlay.yaml")
+OVERLAY_JSON = os.path.join(REPO, "data", "tools.overlay.json")
 
 _lock = threading.RLock()
 _cfg = None
@@ -159,6 +163,34 @@ def _load_raw():
     return {}, "defaults"
 
 
+def _merge_into(cfg, data):
+    """Deep-merge a raw config dict into `cfg` (tools merge per-tool, key by key)."""
+    if not isinstance(data, dict):
+        return
+    for key in ("sandbox", "approvals"):
+        if isinstance(data.get(key), dict):
+            cfg[key].update(data[key])
+    for tname, tentry in (data.get("tools") or {}).items():
+        if isinstance(tentry, dict):
+            cur = cfg["tools"].get(tname)
+            if isinstance(cur, dict):
+                cur.update(tentry)
+            else:
+                cfg["tools"][tname] = dict(tentry)
+        else:
+            cfg["tools"][tname] = tentry
+    if "version" in data:
+        cfg["version"] = data["version"]
+
+
+def _merged(base_data, overlay_data=None):
+    """DEFAULT_CONFIG <- base file <- overlay (later layers win)."""
+    cfg = json.loads(json.dumps(DEFAULT_CONFIG))  # deep copy
+    _merge_into(cfg, base_data)
+    _merge_into(cfg, overlay_data or {})
+    return cfg
+
+
 def load_config(reload=False):
     """Return the merged config (cached). reload=True re-reads from disk."""
     global _cfg
@@ -166,66 +198,95 @@ def load_config(reload=False):
         if _cfg is not None and not reload:
             return _cfg
         raw, _src = _load_raw()
-        cfg = json.loads(json.dumps(DEFAULT_CONFIG))  # deep copy
-        for key in ("sandbox", "approvals"):
-            if isinstance(raw.get(key), dict):
-                cfg[key].update(raw[key])
-        cfg["tools"] = raw.get("tools") or {}
-        cfg["version"] = raw.get("version", cfg["version"])
+        cfg = _merged(raw, _load_overlay())
         _cfg = cfg
         return _cfg
 
 
-def _leading_comment(path):
-    """The file's leading comment/blank block, so a rewrite keeps its docs."""
+_OVERLAY_HEADER = (
+    "# SparkForge policy overlay — written automatically by POST /api/tools\n"
+    "# (the SETTINGS panel in SparkPulse). Only the keys that DIFFER from\n"
+    "# config/tools.yaml live here, so that file stays the hand-edited source\n"
+    "# of truth and its comments are never rewritten. Delete this file to fall\n"
+    "# back entirely to config/tools.yaml.\n\n"
+)
+
+
+def _load_overlay():
+    """The programmatic policy overlay (data/tools.overlay.yaml), or {}."""
+    if os.path.exists(OVERLAY_YAML):
+        try:
+            import yaml
+            with open(OVERLAY_YAML, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except Exception:
+            return {}
+    if os.path.exists(OVERLAY_JSON):
+        try:
+            with open(OVERLAY_JSON, "r", encoding="utf-8") as f:
+                return json.load(f) or {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _diff_overlay(cfg, base_data):
+    """Only the keys in `cfg` that differ from the base file's own state."""
+    eff = _merged(base_data)  # what the config would be WITHOUT any overlay
+    out = {}
+    tools_diff = {}
+    eff_tools = eff.get("tools") or {}
+    for tname, tentry in (cfg.get("tools") or {}).items():
+        if not isinstance(tentry, dict):
+            continue
+        e = eff_tools.get(tname) or {}
+        if not isinstance(e, dict):
+            e = {}
+        d = {k: v for k, v in tentry.items() if e.get(k) != v}
+        if d:
+            tools_diff[tname] = d
+    if tools_diff:
+        out["tools"] = tools_diff
+    for key in ("sandbox", "approvals"):
+        e = eff.get(key) or {}
+        d = {k: v for k, v in (cfg.get(key) or {}).items() if e.get(k) != v}
+        if d:
+            out[key] = d
+    return out
+
+
+def _write_overlay(overlay):
+    """Atomically write the sparse overlay (never touches config/tools.yaml)."""
+    os.makedirs(os.path.dirname(OVERLAY_YAML), exist_ok=True)
     try:
-        out = []
-        with open(path, "r", encoding="utf-8") as f:
-            for ln in f:
-                s = ln.strip()
-                if s == "" or s.startswith("#"):
-                    out.append(ln.rstrip("\n"))
-                else:
-                    break
-        return ("\n".join(out).rstrip() + "\n\n") if out else ""
-    except OSError:
-        return ""
+        import yaml
+        tmp = OVERLAY_YAML + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(_OVERLAY_HEADER)
+            if overlay:
+                yaml.safe_dump(overlay, f, sort_keys=False, allow_unicode=True,
+                               default_flow_style=False)
+            else:
+                f.write("{}\n")
+        os.replace(tmp, OVERLAY_YAML)
+    except ImportError:
+        with open(OVERLAY_JSON, "w", encoding="utf-8") as f:
+            json.dump(overlay, f, indent=2)
 
 
 def save_config(cfg):
-    """Persist the OVERLAY (tools + non-default knobs) back to tools.yaml.
+    """Persist ONLY the delta vs config/tools.yaml into data/tools.overlay.yaml.
 
-    JAG-81: the SETTINGS panel flips approval policy per tool, so this file is
-    now rewritten from the app. Instead of dumping the whole merged config (which
-    buried the tools under sandbox/approval defaults and wiped the docs), we write
-    only the overlay and keep the leading comment block. A one-time backup is
-    saved under data/ (gitignored).
+    JAG-82: the SETTINGS panel flips approval policy per tool. Rewriting
+    config/tools.yaml mixed the app's changes with the hand-edited file and
+    destroyed its documentation. Now that file is never touched: we diff the
+    live config against it and store only the changed keys in a gitignored
+    overlay that load_config() merges on top. Delete the overlay to revert.
     """
     global _cfg
     with _lock:
-        overlay = {"version": cfg.get("version", "0.2"),
-                   "tools": cfg.get("tools", {})}
-        for key in ("sandbox", "approvals"):
-            if key in cfg and cfg[key] != DEFAULT_CONFIG.get(key):
-                overlay[key] = cfg[key]
-        bak = os.path.join(REPO, "data", "tools.yaml.bak")
-        try:
-            if os.path.exists(CONFIG_YAML) and not os.path.exists(bak):
-                os.makedirs(os.path.dirname(bak), exist_ok=True)
-                import shutil
-                shutil.copyfile(CONFIG_YAML, bak)
-        except OSError:
-            pass
-        header = _leading_comment(CONFIG_YAML)
-        try:
-            import yaml
-            with open(CONFIG_YAML, "w", encoding="utf-8") as f:
-                f.write(header)
-                yaml.safe_dump(overlay, f, sort_keys=False, allow_unicode=True,
-                               default_flow_style=False)
-        except ImportError:
-            with open(CONFIG_JSON, "w", encoding="utf-8") as f:
-                json.dump(overlay, f, indent=2)
+        base, _src = _load_raw()
+        _write_overlay(_diff_overlay(cfg, base))
         _cfg = cfg
         return cfg
 
