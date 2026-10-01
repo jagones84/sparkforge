@@ -181,7 +181,7 @@ def check_fallback_logic_offline():
 
     calls = []
 
-    def fake_stream(messages, model, on_delta, timeout=300):
+    def fake_stream(messages, model, on_delta, timeout=300, usage=None):
         calls.append(model)
         if model == "primary-broken":
             raise RuntimeError("router: model failed (stub)")

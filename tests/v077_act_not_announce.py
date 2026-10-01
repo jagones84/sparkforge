@@ -49,7 +49,7 @@ seq = [
 calls = {"n": 0}
 
 
-def fake_stream(msgs, model, kind, on_delta):
+def fake_stream(msgs, model, kind, on_delta, timeout=300, usage=None):
     calls["n"] += 1
     return seq.pop(0) if seq else ("Fine.", "", model)
 

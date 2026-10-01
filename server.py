@@ -558,11 +558,16 @@ def _chat_endpoint(model):
             {"Content-Type": "application/json"}, model or "default")
 
 
-def _router_stream(messages, model, on_delta, timeout=300):
+def _router_stream(messages, model, on_delta, timeout=300, usage=None):
     """POST /chat/completions with stream=true; feed deltas to on_delta.
 
     on_delta(channel, text) with channel in {think, answer}. Returns the
     full (answer, think) pair. Falls back to a non-streaming call.
+
+    JAG-86: when `usage` (a dict) is passed we ask the OpenAI-compatible server
+    for its real token accounting (`stream_options.include_usage`) and copy the
+    final `usage` object into it — so the ctx meter can show the model's own
+    prompt_tokens instead of the ~4-chars/token proxy.
     """
     url, headers, model_id = _chat_endpoint(model)
     body = json.dumps({
@@ -570,6 +575,7 @@ def _router_stream(messages, model, on_delta, timeout=300):
         "messages": messages,
         "stream": True,
         "temperature": 0.7,
+        "stream_options": {"include_usage": True},
     }).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=headers)
     answer, think = [], []
@@ -589,6 +595,8 @@ def _router_stream(messages, model, on_delta, timeout=300):
                     chunk = json.loads(payload)
                 except json.JSONDecodeError:
                     continue
+                if usage is not None and isinstance(chunk.get("usage"), dict):
+                    usage.update(chunk["usage"])
                 delta = ((chunk.get("choices") or [{}])[0].get("delta")) or {}
                 rc = delta.get("reasoning_content")
                 c = delta.get("content")
@@ -613,6 +621,8 @@ def _router_stream(messages, model, on_delta, timeout=300):
         req = urllib.request.Request(url, data=body, headers=headers)
         with _open_with_retry(req, timeout) as resp:
             data = json.loads(resp.read().decode("utf-8") or "{}")
+        if usage is not None and isinstance(data.get("usage"), dict):
+            usage.update(data["usage"])
         msg = (data.get("choices") or [{}])[0].get("message") or {}
         rc = msg.get("reasoning_content") or ""
         c = msg.get("content") or ""
@@ -631,7 +641,7 @@ def _router_stream(messages, model, on_delta, timeout=300):
 # ----------------------------------------------------- tracing / cost ----
 
 
-def stream_with_fallback(messages, model, role, on_delta, timeout=300):
+def stream_with_fallback(messages, model, role, on_delta, timeout=300, usage=None):
     """v0.3 multi-model routing with fallback.
 
     Tries `model` (or the role-selected one) first; on a router failure walks
@@ -646,7 +656,9 @@ def stream_with_fallback(messages, model, role, on_delta, timeout=300):
     last_err = None
     for i, alias in enumerate(chain):
         try:
-            answer, think = _router_stream(messages, alias, on_delta, timeout)
+            if usage is not None:
+                usage.clear()  # a failed attempt must not leave stale numbers
+            answer, think = _router_stream(messages, alias, on_delta, timeout, usage)
             if i > 0:
                 publish("model.fallback", role=role, from_model=chain[0],
                         to_model=alias)
@@ -670,6 +682,12 @@ except Exception:
 def count_tokens(text):
     """Cheap proxy: ~4 chars/token (good enough for local accounting)."""
     return max(1, len(text) // 4) if text else 0
+
+
+# JAG-86: the model's REAL prompt tokens per session (from the router's `usage`).
+# The chars/4 proxy under-reports (Italian ≈ 3.5 chars/token) and ignores the
+# chat template, so when the server reports the true count we prefer it.
+_REAL_PROMPT_TOKENS = {}
 
 
 class RunTrace:
@@ -1330,6 +1348,18 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     # acting (session 558d0f0fce6e / run 056347769632: write_todos + skills x3 then
     # "Procedo con la ricerca live…" and stop). Now bookkeeping is free but bounded
     # by CHAT_TOOL_MAX_ITERS.
+    # JAG-86: the model's REAL token accounting for this turn (from the router's
+    # `usage`), so the ctx meter stops being a pure chars/4 proxy.
+    chat_usage = {}
+
+    def _record_usage():
+        pt = chat_usage.get("prompt_tokens")
+        if pt:
+            try:
+                _REAL_PROMPT_TOKENS[sess["id"]] = int(pt)
+            except (TypeError, ValueError):
+                pass
+
     work_steps = 0
     iters = 0
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
@@ -1345,7 +1375,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             else:
                 _c.append((ch, t))
 
-        answer, think, model = stream_with_fallback(msgs, model, "chat", _capture)
+        answer, think, model = stream_with_fallback(msgs, model, "chat", _capture,
+                                                    usage=chat_usage)
+        _record_usage()
         act = extract_json(answer)
         if isinstance(act, dict) and act.get("action") == "write_todos":
             n = _apply_chat_todos(sess, act, on_event)
@@ -1462,7 +1494,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 else:
                     _c.append((ch, t))
 
-            final_answer, think, model = stream_with_fallback(msgs, model, "chat", _cap_final)
+            final_answer, think, model = stream_with_fallback(msgs, model, "chat",
+                                                              _cap_final, usage=chat_usage)
+            _record_usage()
             if ((final_answer or "").strip() and not _looks_like_json_action(final_answer)
                     and not _looks_like_promise(final_answer)):
                 for ch, t in forced:  # only a REAL reply reaches the user live
@@ -2201,15 +2235,24 @@ def context_usage(session_id=None, message=None, model=None):
         sysp, sess.get("messages", []), message,
         budget_tokens=budget, retrieve_memory=True)
     used = int(stats.get("final_tokens") or 0)
-    pct = round(used / budget * 100, 1) if budget else 0.0
-    return {**base, "available": True,
-            "messages": len(sess.get("messages", [])),
-            "tokens_used": used, "pct": pct,
-            "system_tokens": context_engine.count_tokens(sysp),
-            "transcript_tokens": stats.get("compaction", {}).get("input_tokens", 0),
-            "final_messages": stats.get("final_messages"),
-            "over_threshold": pct >= AUTOCOMPACT_PCT,
-            "over_budget": used > budget}
+    # JAG-86: prefer the model's REAL prompt_tokens (reported by the router for the
+    # last turn of this session) over the chars/4 estimate; keep both.
+    real = _REAL_PROMPT_TOKENS.get(session_id) if session_id else None
+    effective = int(real) if real else used
+    pct = round(effective / budget * 100, 1) if budget else 0.0
+    out = {**base, "available": True,
+           "messages": len(sess.get("messages", [])),
+           "tokens_used": effective, "pct": pct,
+           "estimate_tokens_used": used,
+           "system_tokens": context_engine.count_tokens(sysp),
+           "transcript_tokens": stats.get("compaction", {}).get("input_tokens", 0),
+           "final_messages": stats.get("final_messages"),
+           "over_threshold": pct >= AUTOCOMPACT_PCT,
+           "over_budget": effective > budget,
+           "source": "model" if real else "estimate"}
+    if real:
+        out["real_tokens_used"] = int(real)
+    return out
 
 
 def prepare_session_for_turn(sess, model=None):

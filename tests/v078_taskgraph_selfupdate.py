@@ -40,7 +40,7 @@ seq = [
 ]
 
 
-def fake_stream(msgs, model, kind, on_delta):
+def fake_stream(msgs, model, kind, on_delta, timeout=300, usage=None):
     return seq.pop(0) if seq else ("Fine.", "", model)
 
 
