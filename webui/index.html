@@ -11,6 +11,9 @@
     --line: rgba(120,140,255,.14); --txt: #dfe4ff; --dim: #7c86ad;
     --acc: #6c8cff; --acc2: #b56cff; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
     --radius: 12px;
+    /* v0.8 redesign tokens */
+    --accent: #8b7bf0; --you: #8fb6ff; --info: #5ac8fa;
+    --bg-2: #121722; --bg-3: #161b25; --line-2: #1e2431; --ink: #c3cad6; --muted: #7b8494;
   }
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -151,24 +154,47 @@
     #composer button { padding: 11px 16px; }
     #cotDrawer { display: block; }
   }
+
+  /* ---------- v0.8 redesign: 3-column desktop shell ---------- */
+  #app { display: flex; flex: 1; min-height: 0; }
+  [data-col="sessions"] { flex: 0 0 220px; width: 220px; border-right: 1px solid var(--line); overflow-y: auto; }
+  [data-col="chat"]     { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+  [data-col="context"]  { flex: 0 0 238px; width: 238px; border-left: 1px solid var(--line); border-right: 0; overflow-y: auto; }
+  #rail-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line-2); }
+  #rail-tabs button { padding: 4px 9px; font-size: 10px; border-radius: 6px; }
+  #rail-tabs button.active { color: var(--txt); border-color: var(--accent); background: rgba(139,123,240,.14); }
+  .toolcard-head { cursor: pointer; }
+  .toolcard.expanded .toolcard-body { display: block; }
+  .toolcard-body { display: none; margin-top: 6px; }
+  .toolcard-body pre { white-space: pre-wrap; word-break: break-word; color: var(--dim); font-size: 11px; }
+  .thinking { color: var(--info); }
+  #palette { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.5); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
+  #palette[hidden] { display: none; }
+  .pal-item { cursor: pointer; }
+  .pal-item:hover { background: rgba(108,140,255,.1); }
+  @media (max-width: 1100px) { [data-col="context"] { display: none; } }
+  @media (max-width: 820px)  { [data-col="sessions"] { display: none; } }
 </style>
 </head>
 <body>
-<header>
+<header id="topbar">
   <span class="logo">⚡ SPARKFORGE</span>
   <span class="sub">agent harness · dgx spark · local router</span>
   <span style="flex:1"></span>
-  <span class="pill" id="ctxPill" title="context tokens / budget">ctx: …</span>
+  <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
   <button class="ghost" id="compactBtn" title="compact the session transcript now">🗜 compact</button>
-  <span class="pill" id="modelPill">model: …</span>
+  <span class="pill" id="model-chip">model: …</span>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
-  <span class="pill" id="srvPill">server</span>
+  <span class="pill" id="server-badge">server</span>
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
+  <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
 </header>
-<main>
-  <aside id="aside">
+<main id="app">
+  <aside id="aside" data-col="sessions">
     <section>
       <h2>Sessions</h2>
+      <input id="session-search" class="inp" placeholder="cerca sessione…" style="width:100%;margin-bottom:6px;padding:6px 10px;font-size:12px">
+      <label class="remaining" style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><input type="checkbox" id="hide-empty"> nascondi vuote</label>
       <div class="card">
         <div id="sessions"></div>
         <div style="display:flex;gap:6px;margin-top:8px">
@@ -177,55 +203,12 @@
         </div>
       </div>
     </section>
-    <section>
-      <h2>Plan</h2>
-      <div class="card">
-        <div id="planGoal" class="remaining">no goal yet</div>
-        <div id="planSteps" style="margin-top:8px"></div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;padding:6px 10px;font-size:12px">
-          <button class="ghost" onclick="genPlan()">plan it</button>
-        </div>
-      </div>
-    </section>
-    <section>
-      <h2>Tasks <span id="taskCount" class="remaining"></span></h2>
-      <div class="card">
-        <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
-        <div id="tasks"></div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="taskInp" class="inp" placeholder="add a graph node…" style="flex:1;padding:6px 10px;font-size:12px">
-          <button class="ghost" onclick="addTask()" title="POST /graph/nodes {action:add}">+</button>
-          <button class="ghost" onclick="replanGraph()" title="incremental re-plan">↻ replan</button>
-        </div>
-        <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
-        <div id="remaining" class="remaining" style="margin-top:8px"></div>
-      </div>
-    </section>
-    <section>
-      <h2>Context</h2>
-      <div class="card">
-        <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
-        <div class="meter"><i id="ctxBar" style="width:0%"></i></div>
-        <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
-      </div>
-    </section>
-    <section>
-      <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
-      <div class="card">
-        <div id="approvals" class="remaining">no pending approvals</div>
-      </div>
-    </section>
-    <section>
-      <h2>Feed</h2>
-      <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
-    </section>
   </aside>
-  <div id="chat">
+  <div id="chat" data-col="chat">
     <div id="log"></div>
     <div id="cotDrawer">
-      <div class="hd"><span>🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
-      <div class="t"></div>
+      <div class="hd"><span class="thinking">🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
+      <div class="t thinking"></div>
     </div>
     <div id="composer">
       <input id="inp" placeholder="command the forge… (Enter to send)" autofocus>
@@ -240,8 +223,82 @@
       <button data-tab="feed" onclick="openTab('feed')">📡 feed</button>
     </div>
   </div>
+  <aside id="rail" data-col="context">
+    <nav id="rail-tabs">
+      <button data-panel="graph" class="active" onclick="openPanel('graph')">Graph</button>
+      <button data-panel="config" onclick="openPanel('config')">Config</button>
+      <button data-panel="self" onclick="openPanel('self')">Self</button>
+      <button data-panel="settings" onclick="openPanel('settings')">Settings</button>
+      <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
+    </nav>
+    <div id="panel-body">
+      <section data-section="graph">
+        <h2>Plan</h2>
+        <div class="card">
+          <div id="planGoal" class="remaining">no goal yet</div>
+          <div id="planSteps" style="margin-top:8px"></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" onclick="genPlan()">plan it</button>
+          </div>
+        </div>
+        <h2>Tasks <span id="taskCount" class="remaining"></span></h2>
+        <div class="card">
+          <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
+          <div id="tasks"></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input id="taskInp" class="inp" placeholder="add a graph node…" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" onclick="addTask()" title="POST /graph/nodes {action:add}">+</button>
+            <button class="ghost" onclick="replanGraph()" title="incremental re-plan">↻ replan</button>
+          </div>
+          <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
+          <div id="remaining" class="remaining" style="margin-top:8px"></div>
+        </div>
+        <h2>Context</h2>
+        <div class="card">
+          <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
+          <div class="meter"><i id="ctxBar" style="width:0%"></i></div>
+          <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
+        </div>
+        <h2>Feed</h2>
+        <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
+      </section>
+      <section data-section="config" hidden>
+        <h2>Config · tools</h2>
+        <div class="card" id="configPanel"><div class="remaining">caricamento…</div></div>
+      </section>
+      <section data-section="self" hidden>
+        <h2>Self</h2>
+        <div class="card" id="selfPanel"><div class="remaining">caricamento…</div></div>
+      </section>
+      <section data-section="settings" hidden>
+        <h2>Settings · providers</h2>
+        <div class="card" id="settingsPanel"><div class="remaining">caricamento…</div></div>
+        <h2>API token</h2>
+        <div class="card">
+          <div style="display:flex;gap:6px">
+            <input id="token-input" class="inp" placeholder="SPARKFORGE_TOKEN" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" onclick="saveToken()">save</button>
+          </div>
+          <div class="remaining" style="margin-top:6px">salvato in localStorage (chiave sf_token)</div>
+        </div>
+      </section>
+      <section data-section="approvals" hidden>
+        <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
+        <div class="card">
+          <div id="approvals" class="remaining">no pending approvals</div>
+        </div>
+      </section>
+    </div>
+  </aside>
 </main>
 <div class="backdrop" id="backdrop" onclick="closeAside()"></div>
+<div id="palette" hidden>
+  <div class="card" style="width:min(560px,92vw)">
+    <input id="palette-input" class="inp" placeholder="vai a sessione / pannello / azione…" style="width:100%;padding:10px 14px">
+    <ul id="palette-results" style="list-style:none;padding:8px 0 0;margin:0"></ul>
+  </div>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 let sessionId = localStorage.getItem("sf_session") || null;
@@ -286,13 +343,20 @@ function who(role, text) {
   $("log").appendChild(d); scroll(); return d;
 }
 /* v1.6.3 (JAG-55): inline tool-call mini-card, coherent with the run graph nodes */
+/* v0.8: expandable card (head + args/output body) */
 function toolCard(tool) {
-  const d = document.createElement("div");
-  d.className = "toolcard pending"; d.dataset.tool = tool || "tool";
-  d.innerHTML = `<span class="tc-ic">🔧</span><span class="tc-name"></span><span class="tc-meta">running…</span>`;
-  d.querySelector(".tc-name").textContent = d.dataset.tool;
+  const name = tool || "tool";
+  const id = "tc" + Math.random().toString(36).slice(2, 8);
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<div class="toolcard" data-tool="${name}">` +
+    `<div class="toolcard-head" onclick="toggleTool('${id}')"><span class="tc-ic">🔧</span>` +
+    `<span class="tc-name">${name}</span><span class="tc-meta">running…</span><span class="tc-chev">▾</span></div>` +
+    `<div class="toolcard-body" id="${id}"><pre class="tc-args"></pre><pre class="tc-out"></pre></div></div>`;
+  const d = wrap.firstElementChild;
+  d.classList.add("pending");
   $("log").appendChild(d); scroll(); return d;
 }
+function toggleTool(id) { const el = document.getElementById(id); if (el) el.parentElement.classList.toggle("expanded"); }
 function updateToolCard(data) {
   const tool = data.tool || "tool";
   const cards = Array.from($("log").querySelectorAll(".toolcard.pending"));
@@ -303,6 +367,11 @@ function updateToolCard(data) {
   const meta = [(data.exit_code != null ? "exit " + data.exit_code : ""), (data.backend || ""),
                 (data.summary || "")].filter(Boolean).join(" · ");
   card.querySelector(".tc-meta").textContent = meta;
+  const argsEl = card.querySelector(".tc-args");
+  if (argsEl && data.args) argsEl.textContent = typeof data.args === "string" ? data.args : JSON.stringify(data.args);
+  const outEl = card.querySelector(".tc-out");
+  const body = data.output || data.stdout || data.result || "";
+  if (outEl) outEl.textContent = String(body).slice(0, 4000);
   scroll();
 }
 function ensureThink() {
@@ -367,7 +436,9 @@ async function api(method, path, body) {
 async function loadSessions() {
   const out = await api("GET", "/api/sessions");
   const box = $("sessions"); box.innerHTML = "";
-  (out.sessions || []).forEach(s => {
+  const q = ($("session-search") ? $("session-search").value : "").toLowerCase();
+  const hideEmpty = $("hide-empty") ? $("hide-empty").checked : false;
+  (out.sessions || []).filter(s => (!hideEmpty || (s.messages || 0) > 0) && ((s.title || s.id || "").toLowerCase().includes(q))).forEach(s => {
     const d = document.createElement("div");
     d.className = "sess" + (s.id === sessionId ? " active" : "");
     d.innerHTML = `<span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg</span><span class="del" title="delete">✕</span>`;
@@ -436,7 +507,7 @@ function ctxNa(reason) {
   $("ctxBudget").className = "";
   $("ctxBudget").style.color = "var(--dim)";
   $("ctxBar").style.width = "0%"; $("ctxBar").className = "";
-  $("ctxPill").textContent = "ctx: n/d"; $("ctxPill").className = "pill";
+  $("ctx-meter").textContent = "ctx: n/d"; $("ctx-meter").className = "pill";
 }
 async function loadCtx() {
   if (!sessionId) { ctxNa("nessuna sessione"); return; }
@@ -455,8 +526,8 @@ async function loadCtx() {
     $("ctxBudget").style.color = c.over_budget ? "var(--err)" : "var(--dim)";
     const bar = $("ctxBar"); bar.style.width = pct + "%";
     bar.className = pct > 90 ? "hot" : "";
-    $("ctxPill").textContent = "ctx: " + c.tokens_used + "/" + c.budget_tokens;
-    $("ctxPill").className = "pill" + (c.over_budget ? " warn" : "");
+    $("ctx-meter").textContent = "ctx: " + c.tokens_used + "/" + c.budget_tokens;
+    $("ctx-meter").className = "pill" + (c.over_budget ? " warn" : "");
   } catch {}
 }
 async function compactNow() {
@@ -474,12 +545,22 @@ async function loadPlan() {
   const p = await api("GET", "/api/plan");
   $("planGoal").textContent = p.goal || "no goal yet";
   $("planSteps").innerHTML = "";
-  (p.steps || []).forEach(s => {
+  dedupePlan(p.steps || []).forEach(s => {
     const d = document.createElement("div");
     d.className = "step" + (s.done ? " done" : "");
     d.innerHTML = `<span>${s.done ? "☑" : "☐"}</span><span>${s.title}</span>`;
     d.onclick = () => api("POST", "/api/plan/toggle", { id: s.id }).then(loadPlan);
     $("planSteps").appendChild(d);
+  });
+}
+/* v0.8: dedupe identical plan steps (the "say hello" x9 bug) */
+function dedupePlan(steps) {
+  const seen = new Set();
+  return (steps || []).filter(s => {
+    const k = String(s.title || s.text || "").trim().toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
   });
 }
 async function genPlan() {
@@ -595,14 +676,14 @@ async function replanGraph() {
 async function loadStatus() {
   try {
     const s = await api("GET", "/api/status");
-    $("modelPill").textContent = "model: " + (s.default_model || "?");
-    $("srvPill").textContent = "server ok";
-    $("srvPill").className = "pill ok";
+    $("model-chip").textContent = "model: " + (s.default_model || "?");
+    $("server-badge").textContent = "server ok";
+    $("server-badge").className = "pill ok";
     if (s.sandbox) {
       $("sbxPill").textContent = "sandbox: " + s.sandbox.backend + (s.sandbox.isolated ? "" : " (!)");
       $("sbxPill").className = "pill" + (s.sandbox.isolated ? " ok" : "");
     }
-  } catch { $("srvPill").textContent = "server down"; $("srvPill").className = "pill"; }
+  } catch { $("server-badge").textContent = "server down"; $("server-badge").className = "pill"; }
 }
 
 /* ---- approvals (v0.2: HITL gate) ---- */
@@ -717,6 +798,51 @@ function openTab(name) {
 }
 function closeAside() { $("aside").classList.remove("open"); $("backdrop").classList.remove("show"); }
 
+/* ---- v0.8 context rail panels ---- */
+function json_pre(el, d) { el.innerHTML = '<pre style="white-space:pre-wrap;font-size:11px;color:var(--dim)">' + JSON.stringify(d, null, 2).replace(/</g, "&lt;") + '</pre>'; }
+function openPanel(name) {
+  document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
+  document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
+  if (name === "graph") { loadPlan(); loadGraph(); loadCtx(); }
+  else if (name === "approvals") { loadApprovals(); }
+  else if (name === "self") { api("GET", "/api/self").then(d => json_pre($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
+  else if (name === "config") { api("GET", "/api/tools").then(d => json_pre($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
+  else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => json_pre($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
+}
+
+/* ---- v0.8 command palette (Cmd/Ctrl+K) ---- */
+function paletteItems() {
+  const items = [
+    { label: "\uFF0B Nuova sessione", run: () => newSession() },
+    { label: "\u21BB Compatta contesto", run: () => compactNow() },
+  ];
+  ["graph", "config", "self", "settings", "approvals"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
+  return items;
+}
+function renderPalette(q) {
+  const list = paletteItems().filter(i => i.label.toLowerCase().includes((q || "").toLowerCase()));
+  const ul = $("palette-results");
+  ul.innerHTML = list.map((i, n) => '<li class="pal-item" data-i="' + n + '" style="padding:8px 10px;border-radius:8px">' + i.label + '</li>').join("");
+  ul.querySelectorAll(".pal-item").forEach((li, n) => { li.onclick = () => { closePalette(); list[n].run(); }; });
+}
+function openPalette() { $("palette").hidden = false; $("palette-input").value = ""; renderPalette(""); $("palette-input").focus(); }
+function closePalette() { $("palette").hidden = true; }
+function saveToken() {
+  const v = $("token-input").value.trim();
+  if (v) { localStorage.setItem("sf_token", v); } else { localStorage.removeItem("sf_token"); }
+  TOKEN = v || null;
+  location.reload();
+}
+
+$("palette-open").onclick = openPalette;
+$("palette-input").addEventListener("input", e => renderPalette(e.target.value));
+$("palette").addEventListener("click", e => { if (e.target.id === "palette") closePalette(); });
+$("session-search").addEventListener("input", loadSessions);
+$("hide-empty").addEventListener("change", loadSessions);
+addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); openPalette(); }
+  if (e.key === "Escape") closePalette();
+});
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 $("taskInp").addEventListener("keydown", e => { if (e.key === "Enter") addTask(); });
 $("sessInp").addEventListener("keydown", e => { if (e.key === "Enter") newSession(); });
