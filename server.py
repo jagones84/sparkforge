@@ -1238,7 +1238,8 @@ def _apply_chat_replan(sess, act, on_event):
         return 0
 
 
-def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=None):
+def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=None,
+              autonomous=False):
     """Run one streamed router call and persist exactly one assistant message.
 
     Contract (JAG-51): the caller appends the `user` message; this function is
@@ -1262,11 +1263,25 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     tool_ctx = _tool_context()
     sys = _system_prompt(sess, tool_ctx)
     # v0.3 context engineering: compaction + token budget + memory retrieval
+    # JAG-78: `/goal` runs the SAME chat loop in AUTONOMOUS mode — the model must
+    # plan (write_todos), then execute the plan step by step with tools, without
+    # stopping to ask. The directive is added to the prompt ONLY; the stored user
+    # turn stays the clean goal text.
+    eff_message = message
+    if autonomous:
+        eff_message = (
+            "AUTONOMOUS GOAL MODE — accomplish the goal below end to end without "
+            "asking for confirmation. FIRST emit write_todos with 2-8 steps, then "
+            "execute them one by one with tools, marking each 'doing' and then "
+            "'done' with evidence, then finish with a short plain-text summary."
+            "\n\nGOAL: " + str(message))
     try:
         import context_engine
         msgs, ctx_stats = context_engine.build(
-            sys, sess["messages"], message, budget_tokens=context_budget(model))
-        publish("context.built", session=sess["id"], **{
+            sys, sess["messages"], eff_message, budget_tokens=context_budget(model))
+        # JAG-78: `on_event` (not `publish`), so the chat STREAM carries the live
+        # prompt size and the app's ctx meter updates during the turn.
+        on_event("context.built", session=sess["id"], **{
             k: v for k, v in ctx_stats.items() if k in (
                 "budget_tokens", "retrieved_memories", "final_messages",
                 "final_tokens")})
@@ -1858,7 +1873,7 @@ def sse_pump(q, worker, open_comment=": stream open\n\n", terminal="done",
     yield "event: %s\ndata: {}\n\n" % terminal
 
 
-def chat_stream_gen(sess, message, model, mark=None):
+def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
     """SSE producer for one chat request on `sess`.
 
     Contract (JAG-51): the caller has already appended the `user` message and
@@ -1914,7 +1929,8 @@ def chat_stream_gen(sess, message, model, mark=None):
                 _existing = taskgraph.load(gkey)
                 if _existing and taskgraph.all_done(_existing):
                     taskgraph.reset(gkey)  # previous task finished → new task
-                chat_once(sess, message, target, on_delta, trace=trace, on_event=_emit)
+                chat_once(sess, message, target, on_delta, trace=trace, on_event=_emit,
+                          autonomous=autonomous)
                 # JAG-76: guarantee a plan. The model normally authors the list
                 # itself via `write_todos`; when it answers with prose only (which
                 # left the app's 🧩 GRAFO panel empty — "non c'è nessun plan"), we
@@ -1922,7 +1938,8 @@ def chat_stream_gen(sess, message, model, mark=None):
                 # Skipped for one-liners (greetings/chit-chat) where a task list
                 # would be noise.
                 _g = taskgraph.load(gkey)
-                if (not _g or not _g.get("nodes")) and len(str(message).split()) >= 4:
+                if (not _g or not _g.get("nodes")) and (autonomous or
+                                                        len(str(message).split()) >= 4):
                     start_run_graph(gkey, message, gkey, routing.pick("planner"),
                                     on_event=_emit)
                 # JAG-63: do NOT finalize the task list at the end of every
@@ -2283,7 +2300,8 @@ class Handler(BaseHTTPRequestHandler):
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
-            return sse_response(self, chat_stream_gen(sess, message, qs.get("model"), mark))
+            return sse_response(self, chat_stream_gen(sess, message, qs.get("model"), mark,
+                                                      autonomous=qs.get("mode") == "goal"))
         if path == "/api/agent/run":
             goal = qs.get("goal", "")
             if not goal:
@@ -2366,7 +2384,8 @@ class Handler(BaseHTTPRequestHandler):
                 # session finds it. Keying it by the ephemeral trace id made the
                 # two chat paths disagree and the panel look empty.
                 start_run_graph(sess["id"], message, sess["id"], routing.pick("planner"))
-                reply, model = chat_once(sess, message, body.get("model"), trace=trace)
+                reply, model = chat_once(sess, message, body.get("model"), trace=trace,
+                                         autonomous=(body.get("mode") or qs.get("mode")) == "goal")
             except Exception as e:  # noqa: BLE001
                 # JAG-51: persist an explicit assistant error turn *before* the
                 # 502 — the user message must never stay orphaned.
@@ -2397,7 +2416,8 @@ class Handler(BaseHTTPRequestHandler):
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
             return sse_response(self, chat_stream_gen(
-                sess, message, body.get("model") or qs.get("model"), mark))
+                sess, message, body.get("model") or qs.get("model"), mark,
+                autonomous=(body.get("mode") or qs.get("mode")) == "goal"))
         if path == "/api/model/ensure":
             alias = body.get("model") or qs.get("model") or \
                 routing.pick("chat") or default_model()
