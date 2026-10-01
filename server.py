@@ -2552,6 +2552,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         if path == "/api/runs":
             return self._send(200, {"runs": runs_summary(int(qs.get("limit", 50)))})
+        if path.startswith("/api/sessions/") and path.endswith("/graph"):
+            # JAG-91: the chat graph is keyed by SESSION id (one task = one
+            # session), so the WebUI plan panel reads the session graph directly
+            # instead of the orphaned global plan.json.
+            sess_id = path[len("/api/sessions/"):-len("/graph")].strip("/")
+            g = taskgraph.load(sess_id)
+            return self._send(200, taskgraph.public(g)) if g else \
+                self._send(404, {"error": "no graph for session"})
         if path == "/api/eval/tasks":
             return self._send(200, eval_list_tasks())
         if path == "/api/voice/status":

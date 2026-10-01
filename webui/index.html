@@ -200,7 +200,9 @@
   <span style="flex:1"></span>
   <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
   <button class="ghost" id="compactBtn" title="compact the session transcript now">🗜 compact</button>
-  <span class="pill" id="model-chip">model: …</span>
+  <label class="pill" title="modello LLM">model:
+    <select id="model-select" style="background:transparent;border:none;color:inherit;font:inherit;outline:none;cursor:pointer;max-width:180px"></select>
+  </label>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
   <span class="pill" id="server-badge">server</span>
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
@@ -436,7 +438,7 @@ function send(text) {
   const msg = (text !== undefined ? text : inp.value).trim();
   if (!msg) return;
   inp.value = ""; who("user", msg); curThink = curAns = null; cotText = "";
-  const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + (authQS() ? "&" + authQS() : "");
+  const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : "");
   const es = new EventSource(url);
   es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); setRun(d.run_id); });
   es.addEventListener("graph.node.added", e => applyGraphEvent(JSON.parse(e.data)));
@@ -570,15 +572,24 @@ async function compactNow() {
 }
 
 /* ---- plan / tasks ---- */
+/* JAG-91: the plan is the PERSISTENT per-session task graph (the same list the
+ * model owns and re-receives every turn), not the orphaned global plan.json. */
 async function loadPlan() {
-  const p = await api("GET", "/api/plan");
-  $("planGoal").textContent = p.goal || "no goal yet";
+  if (!sessionId) { $("planGoal").textContent = "no session selected"; $("planSteps").innerHTML = ""; return; }
+  let g = null;
+  try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
+  if (!g || !g.nodes || !g.nodes.length) {
+    $("planGoal").textContent = g && g.goal ? g.goal : "no goal yet";
+    $("planSteps").innerHTML = '<div class="remaining">no plan steps — send a request to generate them</div>';
+    return;
+  }
+  $("planGoal").textContent = g.goal || "no goal yet";
   $("planSteps").innerHTML = "";
-  dedupePlan(p.steps || []).forEach(s => {
+  (g.nodes || []).forEach(n => {
     const d = document.createElement("div");
-    d.className = "step" + (s.done ? " done" : "");
-    d.innerHTML = `<span>${s.done ? "☑" : "☐"}</span><span>${s.title}</span>`;
-    d.onclick = () => api("POST", "/api/plan/toggle", { id: s.id }).then(loadPlan);
+    d.className = "step" + (n.status === "done" ? " done" : "");
+    d.innerHTML = `<span>${n.status === "done" ? "☑" : (n.status === "doing" ? "▶" : "☐")}</span><span>${n.label}</span>`;
+    d.onclick = () => api("POST", "/api/runs/" + sessionId + "/graph/nodes", { id: n.id, action: "update", status: n.status === "done" ? "doing" : "done" }).then(loadPlan);
     $("planSteps").appendChild(d);
   });
 }
@@ -595,7 +606,7 @@ function dedupePlan(steps) {
 async function genPlan() {
   const goal = $("planInp").value.trim(); if (!goal) return;
   $("planInp").value = ""; who("user", "⚙ plan: " + goal); curThink = curAns = null;
-  const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6" + (authQS() ? "&" + authQS() : ""));
+  const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6" + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : ""));
   es.addEventListener("agent.think", e => { const d = JSON.parse(e.data);
     if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); scroll(); } });
   es.addEventListener("agent.observation", e => { const d = JSON.parse(e.data);
@@ -702,10 +713,26 @@ async function replanGraph() {
       ((r.added_labels || []).length ? " — " + r.added_labels.join("; ") : ""));
   loadGraph();
 }
+/* JAG-91: populate the LLM selector from the live router roster + persist choice */
+async function loadModels() {
+  try {
+    const d = await api("GET", "/api/models");
+    const models = d.router_models || (d.models || []);
+    const sel = $("model-select");
+    if (!models.length) { sel.innerHTML = '<option value="">—</option>'; return; }
+    const cur = localStorage.getItem("sf_model") || models.find(m => m.loaded)?.alias || models[0].alias || "";
+    sel.innerHTML = models.map(m =>
+      `<option value="${m.alias}" ${m.alias === cur ? "selected" : ""}>${m.alias}${m.loaded ? "" : " (not loaded)"}</option>`).join("");
+    if (!sel.value && cur) { sel.insertAdjacentHTML("afterbegin", `<option value="${cur}" selected>${cur}</option>`); }
+  } catch (e) { /* selector must never break the app */ }
+}
+function currentModel() { return localStorage.getItem("sf_model") || ""; }
+$("model-select").addEventListener("change", e => {
+  localStorage.setItem("sf_model", e.target.value);
+});
 async function loadStatus() {
   try {
     const s = await api("GET", "/api/status");
-    $("model-chip").textContent = "model: " + (s.default_model || "?");
     $("server-badge").textContent = "server ok";
     $("server-badge").className = "pill ok";
     if (s.sandbox) {
@@ -744,6 +771,7 @@ function runAgent(goal) {
   if (!goal) return;
   who("user", "⚡ agent: " + goal); curThink = curAns = null; cotText = "";
   const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6"
+                             + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "")
                              + (authQS() ? "&" + authQS() : ""));
   es.addEventListener("agent.iteration", e => { const d = JSON.parse(e.data);
     const l = document.createElement("div"); l.className = "agentline";
@@ -916,7 +944,7 @@ $("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progres
 $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
-  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadApprovals(); loadCtx(); loadHistory(); connectFeed();
+  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadHistory(); connectFeed();
 });
 setInterval(loadStatus, 5000);
 setInterval(loadApprovals, 4000);

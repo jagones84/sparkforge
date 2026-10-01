@@ -39,7 +39,7 @@ def main():
     check("accent token #8b7bf0", "--accent: #8b7bf0" in src)
     check("shell 3 colonne", all(m in src for m in ('data-col="sessions"', 'data-col="chat"', 'data-col="context"')))
     check("topbar presente", 'id="topbar"' in src)
-    check("model chip", 'id="model-chip"' in src)
+    check("model selector", 'id="model-select"' in src)
     check("ctx meter", 'id="ctx-meter"' in src)
     check("server badge", 'id="server-badge"' in src)
     check("responsive 1100", "@media (max-width: 1100px)" in src)
@@ -69,6 +69,11 @@ def main():
     check("resizer logic", "bindResizer(" in src)
     check("token from url", "searchParams.get(\"token\")" in src)
     check("no Math.max spread (RangeError fix)", "Math.max(feedSince, ..." not in src)
+    # --- Fase 7: selettore LLM + plan per-session (JAG-91) ---
+    check("load model roster", "loadModels(" in src)
+    check("model passed to chat/agent", "currentModel(" in src and "&model=" in src)
+    check("plan reads session graph", '"/api/sessions/" + encodeURIComponent(sessionId) + "/graph"' in src)
+    check("plan graph toggle", '"/graph/nodes"' in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)
