@@ -129,6 +129,14 @@ tools:
     auto_approve: []
     allow_hosts: []
 
+  # public-internet search + fetch (JAG-83): Tavily/Brave when a key is present
+  # (read from ~/.hermes/.env), else keyless DuckDuckGo; pages via r.jina.ai or
+  # direct HTML->text. Read-only, SSRF-guarded (public hosts only).
+  web:
+    enabled: true
+    approval: auto
+    auto_approve: []
+
   # self-knowledge: repo/config paths, skill/MCP install recipe, systemd state
   self:
     enabled: true

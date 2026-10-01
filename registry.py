@@ -140,6 +140,24 @@ TOOL_SCHEMAS = {
         "required": [],
         "subject": "action",
     },
+    "web": {
+        "description": ("Public-internet access (JAG-83). action=search runs a web "
+                        "search and returns titles/urls/snippets (Tavily or Brave "
+                        "when a key is configured, else keyless DuckDuckGo); "
+                        "action=fetch downloads a URL and returns readable text "
+                        "(via r.jina.ai, else direct HTML->text). Read-only: use it "
+                        "for news, docs and facts, then cite the URLs you used."),
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["search", "fetch"], "default": "search"},
+            "query": {"type": "string", "description": "search query (action=search)"},
+            "url": {"type": "string", "description": "page URL (action=fetch)"},
+            "max_results": {"type": "integer", "default": 5},
+            "max_bytes": {"type": "integer", "default": 8192},
+        },
+        "required": [],
+        "subject": "query",
+    },
 }
 
 

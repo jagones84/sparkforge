@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SparkForge tool implementations (shell, fs.read, fs.write, git, http, browser).
+"""SparkForge tool implementations (shell, fs.read, fs.write, git, http, web, browser).
 
 Each `execute(tool, args, run_id)` returns a normalised dict:
     {tool, ok, backend, sandboxed, exit_code, stdout, stderr, duration_ms, ...}
@@ -194,6 +194,174 @@ def _browser(args, run_id):
             "sandboxed": False, "note": "lightweight HTML->text extractor, not a headless browser"}
 
 
+# ------------------------------------------------------------------ web ------
+
+_WEB_UA = "Mozilla/5.0 (X11; Linux aarch64) SparkForge/0.7 (+harness)"
+_HERMES_ENV = os.path.expanduser("~/.hermes/.env")
+
+
+def _secret(name):
+    """Env var, falling back to ~/.hermes/.env (the DGX's shared secret store)."""
+    val = os.environ.get(name)
+    if val and val.strip():
+        return val.strip()
+    try:
+        with open(_HERMES_ENV, "r", encoding="utf-8", errors="replace") as f:
+            for ln in f:
+                m = re.match(r"\s*(?:export\s+)?%s\s*=\s*(.*)$" % re.escape(name), ln)
+                if m:
+                    v = m.group(1).strip().strip('"').strip("'")
+                    if v:
+                        return v
+    except OSError:
+        pass
+    return None
+
+
+def _strip_html(s):
+    s = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", s or "")
+    s = re.sub(r"(?s)<[^>]+>", " ", s)
+    for a, b in (("&nbsp;", " "), ("&amp;", "&"), ("&quot;", '"'),
+                 ("&#x27;", "'"), ("&#39;", "'"), ("&lt;", "<"), ("&gt;", ">")):
+        s = s.replace(a, b)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _public_host(url):
+    """SSRF guard for `web`: only public http(s) hosts are reachable."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:  # noqa: BLE001
+        return False, "unparseable url"
+    if parsed.scheme not in ("http", "https"):
+        return False, "only http/https is allowed"
+    host = parsed.hostname or ""
+    if not host:
+        return False, "no host in url"
+    if host.lower() in ("localhost", "localhost.localdomain"):
+        return False, "localhost is not allowed"
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return False, "private/loopback address %s is not allowed" % host
+    except ValueError:
+        pass  # a DNS name -> allowed
+    return True, host
+
+
+def _web_search(query, n):
+    """Tavily/Brave when a key is present, else the keyless DuckDuckGo HTML page."""
+    n = max(1, min(int(n or 5), 10))
+    if not query.strip():
+        return None, "empty query"
+    tav = _secret("TAVILY_API_KEY")
+    if tav:
+        try:
+            payload = json.dumps({"api_key": tav, "query": query,
+                                  "max_results": n}).encode("utf-8")
+            req = urllib.request.Request("https://api.tavily.com/search", data=payload,
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            res = [{"title": it.get("title", ""), "url": it.get("url", ""),
+                    "snippet": _strip_html(it.get("content", ""))[:300]}
+                   for it in (data.get("results") or [])]
+            if res:
+                return res, "tavily"
+        except Exception:  # noqa: BLE001
+            pass
+    brave = _secret("BRAVE_API_KEY")
+    if brave:
+        try:
+            u = ("https://api.search.brave.com/res/v1/web/search?q="
+                 + urllib.parse.quote(query) + "&count=%d" % n)
+            req = urllib.request.Request(u, headers={"Accept": "application/json",
+                                                     "X-Subscription-Token": brave})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                data = json.loads(r.read().decode("utf-8", "replace"))
+            res = [{"title": it.get("title", ""), "url": it.get("url", ""),
+                    "snippet": _strip_html(it.get("description", ""))[:300]}
+                   for it in ((data.get("web") or {}).get("results") or [])]
+            if res:
+                return res, "brave"
+        except Exception:  # noqa: BLE001
+            pass
+    u = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(query)
+    req = urllib.request.Request(u, headers={"User-Agent": _WEB_UA,
+                                             "Accept-Language": "it,en;q=0.8"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        html = r.read(500000).decode("utf-8", "replace")
+    links = re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', html, re.S)
+    snips = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, re.S)
+    res = []
+    for i, (href, title) in enumerate(links[:n]):
+        if "uddg=" in href:
+            found = re.search(r"uddg=([^&]+)", href)
+            if found:
+                href = urllib.parse.unquote(found.group(1))
+        res.append({"title": _strip_html(title), "url": href,
+                    "snippet": _strip_html(snips[i])[:300] if i < len(snips) else ""})
+    return res, "duckduckgo"
+
+
+def _web_fetch(url, max_bytes):
+    """Readable page text: try the keyless r.jina.ai reader, else direct HTML->text."""
+    if not re.match(r"^https?://", url):
+        url = "https://" + url
+    ok, host = _public_host(url)
+    if not ok:
+        return None, host
+    try:
+        req = urllib.request.Request("https://r.jina.ai/" + url,
+                                     headers={"User-Agent": _WEB_UA})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            text = r.read(max_bytes).decode("utf-8", "replace")
+        if text.strip():
+            return {"url": url, "text": text, "via": "jina", "host": host}, None
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _WEB_UA})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            raw = r.read(max_bytes).decode("utf-8", "replace")
+        return {"url": url, "text": _strip_html(raw), "via": "direct", "host": host}, None
+    except Exception as e:  # noqa: BLE001
+        return None, "fetch failed: %s" % e
+
+
+def _web(args, run_id):
+    """Harness-native public-internet tool: search + fetch (read-only)."""
+    action = (args.get("action") or "search").strip().lower()
+    t0 = time.time()
+    if action in ("fetch", "get", "read"):
+        url = str(args.get("url") or args.get("query") or "").strip()
+        if not url:
+            return {"ok": False, "error": "url required for action=fetch",
+                    "backend": "host(web)", "sandboxed": False}
+        data, err = _web_fetch(url, int(args.get("max_bytes", 8192)))
+        if err:
+            return {"ok": False, "error": err, "backend": "host(web)", "sandboxed": False}
+        return {"ok": True, "exit_code": 0, "stderr": "", "stdout": _truncate(data["text"], 8192),
+                "url": data["url"], "via": data["via"],
+                "duration_ms": int((time.time() - t0) * 1000),
+                "backend": "host(web)", "sandboxed": False}
+    query = str(args.get("query") or "").strip()
+    try:
+        results, engine = _web_search(query, args.get("max_results", 5))
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "search failed: %s" % e,
+                "backend": "host(web)", "sandboxed": False}
+    if not results:
+        return {"ok": False, "error": "no results for %r" % query, "engine": engine,
+                "backend": "host(web)", "sandboxed": False}
+    lines = ["%d. %s\n   %s\n   %s" % (i + 1, r["title"], r["url"], r["snippet"])
+             for i, r in enumerate(results)]
+    return {"ok": True, "exit_code": 0, "stderr": "", "engine": engine,
+            "count": len(results), "stdout": _truncate("\n".join(lines), 8192),
+            "results": results, "duration_ms": int((time.time() - t0) * 1000),
+            "backend": "host(web)", "sandboxed": False}
+
+
 def _skills(args, run_id):
     """Skills registry: list available skills or read one SKILL.md."""
     import skills as skills_mod
@@ -320,7 +488,7 @@ def _memory(args, run_id):
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
              "fs.edit": _fs_edit,
              "git": _git, "http": _http, "browser": _browser, "self": _self,
-             "skills": _skills, "memory": _memory}
+             "skills": _skills, "memory": _memory, "web": _web}
 
 
 def _dispatch_execute(tool, args, run_id=None):
