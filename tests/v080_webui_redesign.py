@@ -74,6 +74,11 @@ def main():
     check("model passed to chat/agent", "currentModel(" in src and "&model=" in src)
     check("plan reads session graph", '"/api/sessions/" + encodeURIComponent(sessionId) + "/graph"' in src)
     check("plan graph toggle", '"/graph/nodes"' in src)
+    # --- Fase 8: tool resize, inline approval, /goal (JAG-92) ---
+    check("toolcard flex column", "flex-direction: column" in src)
+    check("toolcard body resizable", "resize: vertical" in src)
+    check("inline approval card", "approvalCard(" in src)
+    check("goal mode in chat", "/goal" in src and "mode=goal" in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)

@@ -209,7 +209,7 @@ def tool_action(st, tool, args, on_event):
     on_event("tool.result", run=run_id, tool=tool, ok=res.get("ok"),
              exit_code=res.get("exit_code"), backend=res.get("backend"),
              sandboxed=res.get("sandboxed"), duration_ms=res.get("duration_ms"),
-             stdout=(res.get("stdout") or "")[:4000], stderr=(res.get("stderr") or "")[:2000])
+             stdout=(res.get("stdout") or "")[:20000], stderr=(res.get("stderr") or "")[:8000])
     return toolmod.observation(res), meta
 
 

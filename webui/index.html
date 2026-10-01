@@ -106,8 +106,9 @@
   .msg .copy { margin-left: auto; background: transparent; border: 1px solid var(--line); color: var(--dim); font-size: 10px;
     padding: 1px 7px; border-radius: 6px; cursor: pointer; }
   .msg .copy:hover { color: var(--txt); border-color: rgba(108,140,255,.4); }
-  .toolcard { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; padding: 6px 10px;
+  .toolcard { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 2px 0 10px; padding: 6px 10px;
     border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); font-size: 12px; max-width: 640px; }
+  .toolcard-head { display: flex; align-items: center; gap: 8px; }
   .toolcard .tc-name { font-weight: 600; color: var(--txt); }
   .toolcard .tc-meta { color: var(--dim); font-size: 11px; margin-left: auto; }
   .toolcard.pending { opacity: .7; }
@@ -166,8 +167,9 @@
   #rail-tabs button.active { color: var(--txt); border-color: var(--accent); background: rgba(139,123,240,.14); }
   .toolcard-head { cursor: pointer; }
   .toolcard.expanded .toolcard-body { display: block; }
-  .toolcard-body { display: none; margin-top: 6px; }
-  .toolcard-body pre { white-space: pre-wrap; word-break: break-word; color: var(--dim); font-size: 11px; }
+  .toolcard-body { display: none; margin-top: 6px; max-height: 320px; overflow: auto; resize: vertical;
+    border-top: 1px solid var(--line-2); padding-top: 6px; }
+  .toolcard-body pre { white-space: pre-wrap; word-break: break-word; color: var(--dim); font-size: 11px; margin: 0 0 6px; }
   .thinking { color: var(--info); }
   #palette { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.5); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
   #palette[hidden] { display: none; }
@@ -402,7 +404,7 @@ function updateToolCard(data) {
   if (argsEl && data.args) argsEl.textContent = typeof data.args === "string" ? data.args : JSON.stringify(data.args);
   const outEl = card.querySelector(".tc-out");
   const body = data.output || data.stdout || data.result || "";
-  if (outEl) outEl.textContent = String(body).slice(0, 4000);
+  if (outEl) outEl.textContent = String(body);
   scroll();
 }
 function ensureThink() {
@@ -435,10 +437,14 @@ function cotFeed(text) {
 
 function send(text) {
   const inp = $("inp");
-  const msg = (text !== undefined ? text : inp.value).trim();
+  let msg = (text !== undefined ? text : inp.value).trim();
   if (!msg) return;
-  inp.value = ""; who("user", msg); curThink = curAns = null; cotText = "";
-  const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : "");
+  // JAG-92: "/goal <..." runs the SAME chat loop in autonomous mode (JAG-78) —
+  // the model plans (write_todos) then executes end-to-end without asking.
+  let mode = "";
+  if (/^\/goal\b/i.test(msg)) { mode = "&mode=goal"; msg = msg.replace(/^\/goal[\s:]*/i, "").trim(); }
+  inp.value = ""; who("user", (mode ? "🎯 /goal " : "") + msg); curThink = curAns = null; cotText = "";
+  const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + mode + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : "");
   const es = new EventSource(url);
   es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); setRun(d.run_id); });
   es.addEventListener("graph.node.added", e => applyGraphEvent(JSON.parse(e.data)));
@@ -765,6 +771,26 @@ async function decide(id, decision) {
   await api("POST", "/api/approvals/" + id, { decision, by: "webui" });
   loadApprovals();
 }
+/* JAG-92: inline approve/deny card in the chat, so approvals are actionable
+ * from the PC (not only in the hidden rail panel). */
+function approvalCard(d) {
+  const card = document.createElement("div");
+  card.className = "msg ai";
+  const whoEl = document.createElement("div"); whoEl.className = "who"; whoEl.textContent = "SPARKFORGE · approval";
+  const bub = document.createElement("div"); bub.className = "bubble";
+  const title = document.createElement("div"); title.textContent = "🔐 approval needed — " + (d.tool || "tool");
+  const sum = document.createElement("div"); sum.style.cssText = "white-space:pre-wrap;word-break:break-all;font-size:12px;color:var(--dim);margin:4px 0";
+  sum.textContent = d.summary || "";
+  const row = document.createElement("div"); row.style.cssText = "display:flex;gap:6px;margin-top:6px";
+  const ok = document.createElement("button"); ok.className = "ghost"; ok.style.color = "var(--ok)"; ok.textContent = "✅ approve";
+  const no = document.createElement("button"); no.className = "ghost"; no.style.color = "var(--err)"; no.textContent = "⛔ deny";
+  ok.onclick = () => decide(d.id, "approve").then(() => { ok.textContent = "✅ approved"; no.remove(); });
+  no.onclick = () => decide(d.id, "deny").then(() => { no.textContent = "⛔ denied"; ok.remove(); });
+  row.appendChild(ok); row.appendChild(no);
+  bub.appendChild(title); bub.appendChild(sum); bub.appendChild(row);
+  card.appendChild(whoEl); card.appendChild(bub);
+  $("log").appendChild(card); scroll(); return card;
+}
 
 /* ---- agent loop (tool-enabled, SSE) ---- */
 function runAgent(goal) {
@@ -837,7 +863,7 @@ function connectFeed() {
   es.addEventListener("tasks.update", () => push("✅ legacy tasks board updated"));
   es.addEventListener("agent.start", e => { const d = JSON.parse(e.data || "{}"); push("⚡ agent: " + (d.goal || "").slice(0, 60)); });
   es.addEventListener("agent.finish", () => push("🏁 agent finished"));
-  es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); push("🔐 approval needed: " + (d.tool || "") + " " + (d.summary || "").slice(0, 40)); loadApprovals(); });
+  es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); approvalCard(d); loadApprovals(); });
   es.addEventListener("approval.auto", e => { const d = JSON.parse(e.data); push("✅ auto-approved: " + (d.summary || "").slice(0, 50)); });
   es.addEventListener("tool.result", e => { const d = JSON.parse(e.data);
     const bits = [d.tool, (d.exit_code != null ? "exit=" + d.exit_code : ""), (d.backend ? "backend=" + d.backend : ""), (d.ok === false ? "FAILED" : "")].filter(Boolean);
