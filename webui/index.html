@@ -11,6 +11,9 @@
     --line: rgba(120,140,255,.14); --txt: #dfe4ff; --dim: #7c86ad;
     --acc: #6c8cff; --acc2: #b56cff; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
     --radius: 12px;
+    /* v0.8 redesign tokens */
+    --accent: #8b7bf0; --you: #8fb6ff; --info: #5ac8fa;
+    --bg-2: #121722; --bg-3: #161b25; --line-2: #1e2431; --ink: #c3cad6; --muted: #7b8494;
   }
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -151,22 +154,39 @@
     #composer button { padding: 11px 16px; }
     #cotDrawer { display: block; }
   }
+
+  /* ---------- v0.8 redesign: 3-column desktop shell ---------- */
+  #app { display: flex; flex: 1; min-height: 0; }
+  [data-col="sessions"] { flex: 0 0 220px; width: 220px; border-right: 1px solid var(--line); overflow-y: auto; }
+  [data-col="chat"]     { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+  [data-col="context"]  { flex: 0 0 238px; width: 238px; border-left: 1px solid var(--line); border-right: 0; overflow-y: auto; }
+  #rail-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line-2); }
+  #rail-tabs button { padding: 4px 9px; font-size: 10px; border-radius: 6px; }
+  #rail-tabs button.active { color: var(--txt); border-color: var(--accent); background: rgba(139,123,240,.14); }
+  .toolcard-head { cursor: pointer; }
+  .toolcard.expanded .toolcard-body { display: block; }
+  .toolcard-body { display: none; margin-top: 6px; }
+  .toolcard-body pre { white-space: pre-wrap; word-break: break-word; color: var(--dim); font-size: 11px; }
+  .thinking { color: var(--info); }
+  @media (max-width: 1100px) { [data-col="context"] { display: none; } }
+  @media (max-width: 820px)  { [data-col="sessions"] { display: none; } }
 </style>
 </head>
 <body>
-<header>
+<header id="topbar">
   <span class="logo">⚡ SPARKFORGE</span>
   <span class="sub">agent harness · dgx spark · local router</span>
   <span style="flex:1"></span>
-  <span class="pill" id="ctxPill" title="context tokens / budget">ctx: …</span>
+  <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
   <button class="ghost" id="compactBtn" title="compact the session transcript now">🗜 compact</button>
-  <span class="pill" id="modelPill">model: …</span>
+  <span class="pill" id="model-chip">model: …</span>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
-  <span class="pill" id="srvPill">server</span>
+  <span class="pill" id="server-badge">server</span>
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
+  <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
 </header>
-<main>
-  <aside id="aside">
+<main id="app">
+  <aside id="aside" data-col="sessions">
     <section>
       <h2>Sessions</h2>
       <div class="card">
@@ -177,6 +197,27 @@
         </div>
       </div>
     </section>
+  </aside>
+  <div id="chat" data-col="chat">
+    <div id="log"></div>
+    <div id="cotDrawer">
+      <div class="hd"><span>🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
+      <div class="t thinking"></div>
+    </div>
+    <div id="composer">
+      <input id="inp" placeholder="command the forge… (Enter to send)" autofocus>
+      <button onclick="send()">send</button>
+      <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
+    </div>
+    <div id="tabbar">
+      <button data-tab="chat" class="active" onclick="openTab('chat')">💬 chat</button>
+      <button data-tab="sessions" onclick="openTab('sessions')">🗂 sessions</button>
+      <button data-tab="tasks" onclick="openTab('tasks')">✅ tasks</button>
+      <button data-tab="context" onclick="openTab('context')">📊 context</button>
+      <button data-tab="feed" onclick="openTab('feed')">📡 feed</button>
+    </div>
+  </div>
+  <aside id="rail" data-col="context">
     <section>
       <h2>Plan</h2>
       <div class="card">
@@ -221,25 +262,6 @@
       <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
     </section>
   </aside>
-  <div id="chat">
-    <div id="log"></div>
-    <div id="cotDrawer">
-      <div class="hd"><span>🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
-      <div class="t"></div>
-    </div>
-    <div id="composer">
-      <input id="inp" placeholder="command the forge… (Enter to send)" autofocus>
-      <button onclick="send()">send</button>
-      <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
-    </div>
-    <div id="tabbar">
-      <button data-tab="chat" class="active" onclick="openTab('chat')">💬 chat</button>
-      <button data-tab="sessions" onclick="openTab('sessions')">🗂 sessions</button>
-      <button data-tab="tasks" onclick="openTab('tasks')">✅ tasks</button>
-      <button data-tab="context" onclick="openTab('context')">📊 context</button>
-      <button data-tab="feed" onclick="openTab('feed')">📡 feed</button>
-    </div>
-  </div>
 </main>
 <div class="backdrop" id="backdrop" onclick="closeAside()"></div>
 <script>
@@ -436,7 +458,7 @@ function ctxNa(reason) {
   $("ctxBudget").className = "";
   $("ctxBudget").style.color = "var(--dim)";
   $("ctxBar").style.width = "0%"; $("ctxBar").className = "";
-  $("ctxPill").textContent = "ctx: n/d"; $("ctxPill").className = "pill";
+  $("ctx-meter").textContent = "ctx: n/d"; $("ctx-meter").className = "pill";
 }
 async function loadCtx() {
   if (!sessionId) { ctxNa("nessuna sessione"); return; }
@@ -455,8 +477,8 @@ async function loadCtx() {
     $("ctxBudget").style.color = c.over_budget ? "var(--err)" : "var(--dim)";
     const bar = $("ctxBar"); bar.style.width = pct + "%";
     bar.className = pct > 90 ? "hot" : "";
-    $("ctxPill").textContent = "ctx: " + c.tokens_used + "/" + c.budget_tokens;
-    $("ctxPill").className = "pill" + (c.over_budget ? " warn" : "");
+    $("ctx-meter").textContent = "ctx: " + c.tokens_used + "/" + c.budget_tokens;
+    $("ctx-meter").className = "pill" + (c.over_budget ? " warn" : "");
   } catch {}
 }
 async function compactNow() {
@@ -595,14 +617,14 @@ async function replanGraph() {
 async function loadStatus() {
   try {
     const s = await api("GET", "/api/status");
-    $("modelPill").textContent = "model: " + (s.default_model || "?");
-    $("srvPill").textContent = "server ok";
-    $("srvPill").className = "pill ok";
+    $("model-chip").textContent = "model: " + (s.default_model || "?");
+    $("server-badge").textContent = "server ok";
+    $("server-badge").className = "pill ok";
     if (s.sandbox) {
       $("sbxPill").textContent = "sandbox: " + s.sandbox.backend + (s.sandbox.isolated ? "" : " (!)");
       $("sbxPill").className = "pill" + (s.sandbox.isolated ? " ok" : "");
     }
-  } catch { $("srvPill").textContent = "server down"; $("srvPill").className = "pill"; }
+  } catch { $("server-badge").textContent = "server down"; $("server-badge").className = "pill"; }
 }
 
 /* ---- approvals (v0.2: HITL gate) ---- */
