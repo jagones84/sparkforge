@@ -1124,6 +1124,24 @@ def _looks_like_promise(text):
     return bool(t) and len(t) <= 400 and bool(_PROMISE_RE.match(t))
 
 
+def _open_plan_steps(sess):
+    """How many plan nodes are still OPEN (todo/doing/blocked) for this session.
+
+    JAG-87 ("verify before you finish", harness layer L7): the persistent plan is
+    the execution state; a turn that ends with open steps and no explanation is a
+    silent abandonment. Returns 0 when there is no plan at all.
+    """
+    try:
+        import taskgraph
+        g = taskgraph.load(sess["id"])
+        if not g or not g.get("nodes"):
+            return 0
+        c = taskgraph.counts(g)
+        return sum(c.get(s, 0) for s in taskgraph.OPEN_STATUSES)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _chat_tool_call(act, av02):
     """Accept the canonical {"action":"tool","tool":X,"args":{...}} and the
     model's frequent variant {"action":X,"args":{...}} when X is a real tool
@@ -1341,6 +1359,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     answer, think = "", ""
     final_answer = ""
     announce_nudged = False
+    verify_nudged = False  # JAG-87: the "verify before you finish" gate fired once
     # JAG-84: only REAL tool calls consume the work budget. Plan/todo bookkeeping
     # (write_todos / update_todos / replan_todos) and invalid-JSON retries used to
     # eat the same 4-step budget, so a "plan then work" turn ran out of steps right
@@ -1470,6 +1489,25 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          "or — if there is nothing left to do — reply with the final "
                          "result in plain prose. Do not just repeat the announcement."})
             continue
+        if not verify_nudged and tool_ctx:
+            # JAG-87 — VERIFICATION GATE before finishing (harness layer L7).
+            # The plan is execution state: if steps are still OPEN, the turn must
+            # not end silently. Nudge ONCE (bounded) to either close them with
+            # evidence, re-plan them away, or justify why they are done. This is
+            # the "verify before you declare done" rule the best harnesses ship
+            # (Devin/Codex: run the checks; Anthropic: no completion without proof).
+            _open_n = _open_plan_steps(sess)
+            if _open_n:
+                verify_nudged = True
+                msgs.append({"role": "assistant", "content": answer})
+                msgs.append({"role": "user", "content": (
+                    "VERIFICATION GATE: your task list still has %d open step(s). Do "
+                    "NOT just reply. Do one of these: (a) finish them NOW and mark "
+                    "each 'done' with evidence; (b) if they are no longer needed, "
+                    'emit {"action":"replan_todos","note":"<why>"}; or (c) if the '
+                    "work really is complete, reply explaining step by step why each "
+                    "open item is done or irrelevant." % _open_n)})
+                continue
         for ch, t in collected:
             on_delta(ch, t)
         final_answer, think = answer, think
