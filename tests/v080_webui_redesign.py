@@ -79,6 +79,12 @@ def main():
     check("toolcard body resizable", "resize: vertical" in src)
     check("inline approval card", "approvalCard(" in src)
     check("goal mode in chat", "/goal" in src and "mode=goal" in src)
+    # --- Fase 9: stop button + pannelli azionabili (JAG-93/JAG-94) ---
+    check("stop button", 'id="stopBtn"' in src)
+    check("stop logic", "stopRun(" in src)
+    check("tools renderer", "renderTools(" in src)
+    check("self renderer", "renderSelf(" in src)
+    check("providers renderer", "renderProviders(" in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)

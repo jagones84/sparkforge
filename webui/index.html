@@ -238,6 +238,7 @@
       <input id="inp" placeholder="command the forge… (Enter to send)" autofocus>
       <button onclick="send()">send</button>
       <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
+      <button class="ghost" id="stopBtn" onclick="stopRun()" title="interrompi agent / chat">⏹ stop</button>
     </div>
     <div id="tabbar">
       <button data-tab="chat" class="active" onclick="openTab('chat')">💬 chat</button>
@@ -446,6 +447,7 @@ function send(text) {
   inp.value = ""; who("user", (mode ? "🎯 /goal " : "") + msg); curThink = curAns = null; cotText = "";
   const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + mode + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : "");
   const es = new EventSource(url);
+  activeSSE = es; activeRunId = null;
   es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); setRun(d.run_id); });
   es.addEventListener("graph.node.added", e => applyGraphEvent(JSON.parse(e.data)));
   es.addEventListener("graph.node.updated", e => applyGraphEvent(JSON.parse(e.data)));
@@ -459,8 +461,8 @@ function send(text) {
   // v1.6.3 (JAG-55): tool calls happen inline in the chat when the turn runs a tool
   es.addEventListener("tool.call", e => toolCard(JSON.parse(e.data).tool));
   es.addEventListener("tool.result", e => updateToolCard(JSON.parse(e.data)));
-  es.addEventListener("done", () => { es.close(); endStream(); loadPlan(); loadGraph(); loadCtx(); });
-  es.addEventListener("error", () => { es.close(); endStream(); });
+  es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); });
+  es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); });
 }
 
 async function api(method, path, body) {
@@ -793,12 +795,22 @@ function approvalCard(d) {
 }
 
 /* ---- agent loop (tool-enabled, SSE) ---- */
+let activeRunId = null;
+let activeSSE = null;
+function stopRun() {
+  if (activeRunId) api("POST", "/api/agent/control", { runId: activeRunId, action: "abort" }).catch(() => {});
+  if (activeSSE) { try { activeSSE.close(); } catch (e) {} activeSSE = null; }
+  activeRunId = null;
+  who("ai", "⏹ stop richiesto");
+}
 function runAgent(goal) {
   if (!goal) return;
   who("user", "⚡ agent: " + goal); curThink = curAns = null; cotText = "";
   const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6"
                              + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "")
                              + (authQS() ? "&" + authQS() : ""));
+  activeSSE = es; activeRunId = null;
+  es.addEventListener("agent.start", e => { try { activeRunId = JSON.parse(e.data).run; } catch (err) {} });
   es.addEventListener("agent.iteration", e => { const d = JSON.parse(e.data);
     const l = document.createElement("div"); l.className = "agentline";
     l.innerHTML = `── iteration <b>${d.i}/${d.of}</b> ──`; $("log").appendChild(l); scroll(); });
@@ -822,8 +834,8 @@ function runAgent(goal) {
   es.addEventListener("agent.aborted", e => { const d = JSON.parse(e.data);
     who("ai", "⛔ aborted: " + (d.summary || "")); });
   es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
-    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadGraph(); loadCtx(); });
-  es.addEventListener("error", () => es.close());
+    who("ai", "🏁 " + (d.summary || "done")); es.close(); activeSSE = null; activeRunId = null; loadPlan(); loadGraph(); loadCtx(); });
+  es.addEventListener("error", () => { es.close(); activeSSE = null; activeRunId = null; });
 }
 
 /* ---- feed ---- */
@@ -888,14 +900,57 @@ function closeAside() { $("aside").classList.remove("open"); $("backdrop").class
 
 /* ---- v0.8 context rail panels ---- */
 function json_pre(el, d) { el.innerHTML = '<pre style="white-space:pre-wrap;font-size:11px;color:var(--dim)">' + JSON.stringify(d, null, 2).replace(/</g, "&lt;") + '</pre>'; }
+
+function renderTools(el, d) {
+  const tools = (d && d.tools) || d || [];
+  if (!Array.isArray(tools)) { json_pre(el, d); return; }
+  if (!tools.length) { el.innerHTML = '<div class="remaining">no tools</div>'; return; }
+  el.innerHTML = tools.map(t => {
+    const on = t.enabled !== false;
+    const ap = t.approval || "auto";
+    return `<div class="card" style="padding:6px 8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">` +
+      `<span style="color:${on ? "var(--ok)" : "var(--dim)"}">${on ? "●" : "○"}</span>` +
+      `<span style="font-weight:600">${t.name || t.id || "?"}</span>` +
+      `<span class="remaining" style="margin-left:auto">${ap}</span>` +
+      `<button class="ghost" style="font-size:10px" data-tool="${t.name || t.id}" data-on="${on}">${on ? "disable" : "enable"}</button></div>` +
+      (t.description ? `<div class="remaining" style="margin:-4px 0 8px 22px">${t.description}</div>` : "");
+  }).join("");
+  el.querySelectorAll("button[data-tool]").forEach(b =>
+    b.onclick = () => api("POST", "/api/tools", { tool: b.dataset.tool, enabled: b.dataset.on !== "true" })
+      .then(() => api("GET", "/api/tools")).then(d2 => renderTools(el, d2)));
+}
+
+function renderSelf(el, d) {
+  if (!d || typeof d !== "object") { json_pre(el, d); return; }
+  const rows = [];
+  const pick = (k, label) => { if (d[k] != null && d[k] !== "") rows.push([label, d[k]]); };
+  pick("name", "name"); pick("version", "version"); pick("repo_path", "repo"); pick("data_dir", "data");
+  pick("router", "router"); pick("port", "port");
+  if (d.service && d.service.restart_cmd) rows.push(["restart", d.service.restart_cmd]);
+  if (!rows.length) { json_pre(el, d); return; }
+  el.innerHTML = rows.map(([l, v]) =>
+    `<div class="remaining" style="margin-bottom:6px"><b>${l}</b><br><code style="word-break:break-all">${String(v).replace(/</g, "&lt;")}</code></div>`).join("");
+}
+
+function renderProviders(el, d) {
+  const provs = (d && d.providers) || [];
+  if (!Array.isArray(provs) || !provs.length) { json_pre(el, d); return; }
+  el.innerHTML = provs.map(p => {
+    const models = (p.models || []).map(m => m.loaded ? `<b>${m.id}</b>` : m.id).join(", ");
+    return `<div class="card" style="padding:6px 8px;margin-bottom:6px"><div style="font-weight:600">${p.name || p.id || "?"}</div>` +
+      `<div class="remaining">${p.base_url || ""}</div>` +
+      (models ? `<div class="remaining" style="word-break:break-all">${models.replace(/</g, "&lt;")}</div>` : "") + `</div>`;
+  }).join("");
+}
+
 function openPanel(name) {
   document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
   document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
   if (name === "graph") { loadPlan(); loadGraph(); loadCtx(); }
   else if (name === "approvals") { loadApprovals(); }
-  else if (name === "self") { api("GET", "/api/self").then(d => json_pre($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
-  else if (name === "config") { api("GET", "/api/tools").then(d => json_pre($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
-  else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => json_pre($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
+  else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
+  else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
+  else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
 }
 
 /* ---- v0.8 command palette (Cmd/Ctrl+K) ---- */
