@@ -59,6 +59,9 @@ def main():
     check("hide empty filter", 'id="hide-empty"' in src)
     check("command palette", 'id="palette"' in src)
     check("palette shortcut", "metaKey" in src and '"k"' in src)
+    # --- Fase 5: bug fix plan + token UI ---
+    check("plan dedupe", "dedupePlan(" in src)
+    check("token field", 'id="token-input"' in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)

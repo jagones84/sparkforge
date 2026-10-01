@@ -274,6 +274,14 @@
       <section data-section="settings" hidden>
         <h2>Settings · providers</h2>
         <div class="card" id="settingsPanel"><div class="remaining">caricamento…</div></div>
+        <h2>API token</h2>
+        <div class="card">
+          <div style="display:flex;gap:6px">
+            <input id="token-input" class="inp" placeholder="SPARKFORGE_TOKEN" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" onclick="saveToken()">save</button>
+          </div>
+          <div class="remaining" style="margin-top:6px">salvato in localStorage (chiave sf_token)</div>
+        </div>
       </section>
       <section data-section="approvals" hidden>
         <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
@@ -537,12 +545,22 @@ async function loadPlan() {
   const p = await api("GET", "/api/plan");
   $("planGoal").textContent = p.goal || "no goal yet";
   $("planSteps").innerHTML = "";
-  (p.steps || []).forEach(s => {
+  dedupePlan(p.steps || []).forEach(s => {
     const d = document.createElement("div");
     d.className = "step" + (s.done ? " done" : "");
     d.innerHTML = `<span>${s.done ? "☑" : "☐"}</span><span>${s.title}</span>`;
     d.onclick = () => api("POST", "/api/plan/toggle", { id: s.id }).then(loadPlan);
     $("planSteps").appendChild(d);
+  });
+}
+/* v0.8: dedupe identical plan steps (the "say hello" x9 bug) */
+function dedupePlan(steps) {
+  const seen = new Set();
+  return (steps || []).filter(s => {
+    const k = String(s.title || s.text || "").trim().toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
   });
 }
 async function genPlan() {
@@ -789,7 +807,7 @@ function openPanel(name) {
   else if (name === "approvals") { loadApprovals(); }
   else if (name === "self") { api("GET", "/api/self").then(d => json_pre($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => json_pre($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
-  else if (name === "settings") { api("GET", "/api/providers").then(d => json_pre($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
+  else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => json_pre($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
 }
 
 /* ---- v0.8 command palette (Cmd/Ctrl+K) ---- */
@@ -809,6 +827,12 @@ function renderPalette(q) {
 }
 function openPalette() { $("palette").hidden = false; $("palette-input").value = ""; renderPalette(""); $("palette-input").focus(); }
 function closePalette() { $("palette").hidden = true; }
+function saveToken() {
+  const v = $("token-input").value.trim();
+  if (v) { localStorage.setItem("sf_token", v); } else { localStorage.removeItem("sf_token"); }
+  TOKEN = v || null;
+  location.reload();
+}
 
 $("palette-open").onclick = openPalette;
 $("palette-input").addEventListener("input", e => renderPalette(e.target.value));
