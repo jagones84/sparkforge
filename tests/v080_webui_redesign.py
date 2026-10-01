@@ -54,6 +54,11 @@ def main():
     check("tool card expand", "toggleTool(" in src)
     check("thinking live", 'class="thinking"' in src)
     check("tool card body", 'class="toolcard-body"' in src)
+    # --- Fase 4: sessioni + command palette ---
+    check("session search", 'id="session-search"' in src)
+    check("hide empty filter", 'id="hide-empty"' in src)
+    check("command palette", 'id="palette"' in src)
+    check("palette shortcut", "metaKey" in src and '"k"' in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)
