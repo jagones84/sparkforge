@@ -90,7 +90,9 @@ TOOL_SCHEMAS = {
         "subject": "args",
     },
     "http": {
-        "description": "Fetch a URL (GET) and return status + body head. Host allowlist enforced.",
+        "description": ("Fetch a URL from the LOCAL allowlist only (default: "
+                        "127.0.0.1/localhost). For anything on the public internet "
+                        "use the `web` tool instead. Host allowlist enforced."),
         "type": "object",
         "properties": {"url": {"type": "string"}, "method": {"type": "string", "default": "GET"},
                        "max_bytes": {"type": "integer", "default": 32768}},
@@ -386,12 +388,22 @@ def catalog():
     return out
 
 
+_ENV_ASSIGN_RE = re.compile(
+    r"^\s*(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|\"[^\"]*\"|\S*)\s+)+")
+
+
 def _subject(tool, args):
     """The string a policy regex is matched against for this action."""
     spec = TOOL_SCHEMAS.get(tool) or {}
     key = spec.get("subject")
     if tool == "git":
         return str(args.get("args", ""))
+    if tool == "shell":
+        # JAG-85: `TZ=Europe/Rome date '…'` is still a read-only `date`. Drop the
+        # leading `VAR=value` assignments so the auto-approve patterns (and the
+        # hard-deny list) match the REAL command. A pointless approval gate here
+        # cost a 30s wait and made a simple "what day is it" turn look stuck.
+        return _ENV_ASSIGN_RE.sub("", str(args.get("command", "")))
     if key:
         return str(args.get(key, ""))
     return json.dumps(args, sort_keys=True)
