@@ -482,8 +482,25 @@ def _result(st, goal, model):
         hooks.run("Stop", run_id=st.id, observation=st.summary)
     except Exception:  # noqa: BLE001
         pass
+    # JAG-95: deterministic process-reward / verification report over the trace.
+    # Pure function (no model) — never breaks a run on failure.
+    prm_report = None
+    try:
+        import prm
+        import taskgraph as _tg
+        _g = _tg.load(st.id)
+        open_n = sum(1 for n in (_g or {}).get("nodes", [])
+                     if n.get("status") in ("todo", "doing", "blocked"))
+        ev = prm.evaluate(st.trace, open_nodes=open_n)
+        prm_report = {"score": ev["score"], "issues": [i["code"] for i in ev["issues"]],
+                      "feedback": ev["feedback"]}
+        if ev["feedback"]:
+            _publish("prm.feedback", run=st.id, score=ev["score"],
+                     issues=[i["code"] for i in ev["issues"]], feedback=ev["feedback"])
+    except Exception:  # noqa: BLE001
+        prm_report = None
     return {"run_id": st.id, "goal": goal, "model": model, "status": st.status,
-            "summary": st.summary, "trace": st.trace}
+            "summary": st.summary, "trace": st.trace, "prm": prm_report}
 
 
 def agent_stream_gen_v2(goal, max_steps, model, run_id, script=None):

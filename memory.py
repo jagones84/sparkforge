@@ -65,11 +65,13 @@ def store(kind, content, **meta):
     Returns the record dict.
     """
     global _writes_since_index
+    score = float(meta.pop("score", 1.0))
     with _lock:
         rec = {
             "ts": round(time.time(), 3),
             "kind": kind,
             "content": str(content)[:8000],
+            "score": score,
             **{k: str(v)[:500] for k, v in meta.items()},
         }
         md = _render_md(rec)
@@ -85,7 +87,7 @@ def store(kind, content, **meta):
 def _render_md(rec):
     """Render a record as a multi-line markdown block."""
     lines = ["---"]
-    for key in ("ts", "kind", "session", "run_id", "tags", "model", "tool"):
+    for key in ("ts", "kind", "session", "run_id", "tags", "model", "tool", "score"):
         val = rec.get(key)
         if val is not None:
             lines.append("%s: %s" % (key, val))
@@ -343,6 +345,68 @@ def search(query_text, kind=None, limit=10, semantic=False):
     if semantic:
         return semantic_query(query_text, kind, limit)
     return [(1.0, r) for r in query(query_text, kind, limit)]
+
+
+# JAG-95: governed recall — score + time-decay + dedupe. The score is harness-
+# set (the agent never rates its own memory), which guards against "memory
+# reward inflation" (arXiv 2608.00017); decay keeps stale lessons from crowding
+# fresh ones; dedupe prevents context collapse from repeated near-identical
+# lessons (arXiv 2609.33013).
+HALFLIFE_SECS = 7 * 86400.0
+
+
+def effective_score(rec, now=None, halflife=None):
+    """Time-decayed score: score * 0.5 ** (age / halflife)."""
+    now = now if now is not None else time.time()
+    hl = halflife if halflife is not None else HALFLIFE_SECS
+    try:
+        s = float(rec.get("score") or 1.0)
+    except (TypeError, ValueError):
+        s = 1.0
+    try:
+        age = max(0.0, now - float(rec.get("ts") or now))
+    except (TypeError, ValueError):
+        age = 0.0
+    return s * (0.5 ** (age / max(hl, 1.0)))
+
+
+def _norm(content):
+    return re.sub(r"\W+", " ", str(content).lower()).strip()
+
+
+def dedupe(records, threshold=0.85):
+    """Drop near-duplicate records by token-overlap (Jaccard-like)."""
+    seen = []
+    for r in records:
+        rt = set(filter(None, _norm(r.get("content", "")).split()))
+        if not rt:
+            seen.append(r)
+            continue
+        dup = False
+        for s in seen:
+            st = set(filter(None, _norm(s.get("content", "")).split()))
+            if not st:
+                continue
+            inter = len(rt & st)
+            if inter / max(1, min(len(rt), len(st))) >= threshold:
+                dup = True
+                break
+        if not dup:
+            seen.append(r)
+    return seen
+
+
+def rank(records, now=None, halflife=None):
+    """Sort records by effective (decayed + scored) relevance, best first."""
+    return sorted(records,
+                  key=lambda r: effective_score(r, now=now, halflife=halflife),
+                  reverse=True)
+
+
+def governed_query(kind=None, limit=6, halflife=None, threshold=0.85):
+    """Retrieve deduped, score+decay-ranked records (governed recall)."""
+    recs = query(None, kind, limit=500)
+    return dedupe(rank(recs, halflife=halflife), threshold)[:limit]
 
 
 def stats():

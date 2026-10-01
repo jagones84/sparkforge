@@ -805,7 +805,19 @@ SYSTEM_PROMPT = (
     "You are SparkForge, the reasoning core of a frontier-style agent harness "
     "running locally on a DGX Spark (GB10, ARM64, unified memory) behind a "
     "llama.cpp router. Be direct, concrete and useful. When asked to plan or "
-    "act, produce compact, actionable output."
+    "act, produce compact, actionable output.\n\n"
+    "## MCP gateway (PMCP)\n"
+    "Besides your native tools you can reach ~140 downstream MCP servers through "
+    "the PMCP gateway (tools named `pmcp__gateway.*`). To use a capability you do "
+    "not have natively:\n"
+    "1. `pmcp__gateway.catalog_search` {query} - find the server/tool for a task.\n"
+    "2. `pmcp__gateway.describe` {tool_id} - get the exact arguments.\n"
+    "3. `pmcp__gateway.invoke` {tool_id:\"server::tool\", arguments:{...}} - run it.\n"
+    "Downstream servers are lazy: `invoke` starts them on its own, so NEVER call "
+    "`connect_server` first and never assume a server is offline. `invoke` is "
+    "approval-gated, so prefer your native tools/skills for local work and use the "
+    "gateway only when a capability is genuinely missing. A tool_id is prefixed by "
+    "the server name, e.g. `core-time::get_current_time`."
 )
 
 PLANNER_PROMPT = (
@@ -2352,7 +2364,7 @@ def _system_prompt(sess, tool_ctx=None):
     lesson_block = ""
     try:
         import memory
-        lessons = memory.query(kind="agent.note", limit=6)
+        lessons = memory.governed_query(kind="agent.note", limit=6)
         instr = ["- " + str(r.get("content", "")).strip()
                  for r in lessons if str(r.get("content", "")).strip()]
         if instr:
