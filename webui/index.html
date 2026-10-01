@@ -218,49 +218,64 @@
     </div>
   </div>
   <aside id="rail" data-col="context">
-    <section>
-      <h2>Plan</h2>
-      <div class="card">
-        <div id="planGoal" class="remaining">no goal yet</div>
-        <div id="planSteps" style="margin-top:8px"></div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;padding:6px 10px;font-size:12px">
-          <button class="ghost" onclick="genPlan()">plan it</button>
+    <nav id="rail-tabs">
+      <button data-panel="graph" class="active" onclick="openPanel('graph')">Graph</button>
+      <button data-panel="config" onclick="openPanel('config')">Config</button>
+      <button data-panel="self" onclick="openPanel('self')">Self</button>
+      <button data-panel="settings" onclick="openPanel('settings')">Settings</button>
+      <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
+    </nav>
+    <div id="panel-body">
+      <section data-section="graph">
+        <h2>Plan</h2>
+        <div class="card">
+          <div id="planGoal" class="remaining">no goal yet</div>
+          <div id="planSteps" style="margin-top:8px"></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" onclick="genPlan()">plan it</button>
+          </div>
         </div>
-      </div>
-    </section>
-    <section>
-      <h2>Tasks <span id="taskCount" class="remaining"></span></h2>
-      <div class="card">
-        <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
-        <div id="tasks"></div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="taskInp" class="inp" placeholder="add a graph node…" style="flex:1;padding:6px 10px;font-size:12px">
-          <button class="ghost" onclick="addTask()" title="POST /graph/nodes {action:add}">+</button>
-          <button class="ghost" onclick="replanGraph()" title="incremental re-plan">↻ replan</button>
+        <h2>Tasks <span id="taskCount" class="remaining"></span></h2>
+        <div class="card">
+          <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
+          <div id="tasks"></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input id="taskInp" class="inp" placeholder="add a graph node…" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" onclick="addTask()" title="POST /graph/nodes {action:add}">+</button>
+            <button class="ghost" onclick="replanGraph()" title="incremental re-plan">↻ replan</button>
+          </div>
+          <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
+          <div id="remaining" class="remaining" style="margin-top:8px"></div>
         </div>
-        <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
-        <div id="remaining" class="remaining" style="margin-top:8px"></div>
-      </div>
-    </section>
-    <section>
-      <h2>Context</h2>
-      <div class="card">
-        <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
-        <div class="meter"><i id="ctxBar" style="width:0%"></i></div>
-        <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
-      </div>
-    </section>
-    <section>
-      <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
-      <div class="card">
-        <div id="approvals" class="remaining">no pending approvals</div>
-      </div>
-    </section>
-    <section>
-      <h2>Feed</h2>
-      <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
-    </section>
+        <h2>Context</h2>
+        <div class="card">
+          <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
+          <div class="meter"><i id="ctxBar" style="width:0%"></i></div>
+          <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
+        </div>
+        <h2>Feed</h2>
+        <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
+      </section>
+      <section data-section="config" hidden>
+        <h2>Config · tools</h2>
+        <div class="card" id="configPanel"><div class="remaining">caricamento…</div></div>
+      </section>
+      <section data-section="self" hidden>
+        <h2>Self</h2>
+        <div class="card" id="selfPanel"><div class="remaining">caricamento…</div></div>
+      </section>
+      <section data-section="settings" hidden>
+        <h2>Settings · providers</h2>
+        <div class="card" id="settingsPanel"><div class="remaining">caricamento…</div></div>
+      </section>
+      <section data-section="approvals" hidden>
+        <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
+        <div class="card">
+          <div id="approvals" class="remaining">no pending approvals</div>
+        </div>
+      </section>
+    </div>
   </aside>
 </main>
 <div class="backdrop" id="backdrop" onclick="closeAside()"></div>
@@ -738,6 +753,18 @@ function openTab(name) {
   $("backdrop").classList.add("show");
 }
 function closeAside() { $("aside").classList.remove("open"); $("backdrop").classList.remove("show"); }
+
+/* ---- v0.8 context rail panels ---- */
+function json_pre(el, d) { el.innerHTML = '<pre style="white-space:pre-wrap;font-size:11px;color:var(--dim)">' + JSON.stringify(d, null, 2).replace(/</g, "&lt;") + '</pre>'; }
+function openPanel(name) {
+  document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
+  document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
+  if (name === "graph") { loadPlan(); loadGraph(); loadCtx(); }
+  else if (name === "approvals") { loadApprovals(); }
+  else if (name === "self") { api("GET", "/api/self").then(d => json_pre($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
+  else if (name === "config") { api("GET", "/api/tools").then(d => json_pre($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
+  else if (name === "settings") { api("GET", "/api/providers").then(d => json_pre($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
+}
 
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 $("taskInp").addEventListener("keydown", e => { if (e.key === "Enter") addTask(); });
