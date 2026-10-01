@@ -819,6 +819,20 @@ MEMORY_POLICY = (
     "Never store ephemeral chatter, and never store secrets."
 )
 
+# JAG-79: the model knew the `skills` TOOL existed but the system prompt never
+# told it WHICH skills are installed, so it never used them (e.g. superpowers,
+# brainstorming, tdd). We now inject the live skills list + this directive.
+SKILLS_POLICY = (
+    "Skills: you have an installed skill library — the SKILLS list below is "
+    "live and includes all symlinked distributions. Before solving a task, SCAN "
+    "it: if a skill matches (e.g. using-superpowers, brainstorming, "
+    "writing-plans, tdd, systematic-debugging, research, mcp-builder, "
+    "code-review), LOAD it with the `skills` tool "
+    '({\"action\":\"read\",\"name\":\"<name>\"}) and FOLLOW its instructions '
+    "step by step instead of improvising. Use {\"action\":\"list\"} for the "
+    "full list with descriptions."
+)
+
 
 def self_summary():
     """Compact self-knowledge block injected into the system prompt (v0.5)."""
@@ -1876,7 +1890,9 @@ def sse_pump(q, worker, open_comment=": stream open\n\n", terminal="done",
             if not worker.is_alive():
                 break  # producer gone without a sentinel: never hang the client
             idle_s += 1.0
-            if idle_s >= 10.0:
+            # JAG-79: shorter heartbeat (5s) so mobile NAT/proxies don't idle-abort
+            # a chat stream during a silent gap (a tool call, an MCP recovery).
+            if idle_s >= 5.0:
                 idle_s = 0.0
                 yield ": ping\n\n"  # heartbeat: keeps the SSE channel alive
             continue
@@ -2097,7 +2113,14 @@ def _system_prompt(sess, tool_ctx=None):
     """
     if tool_ctx is None:
         tool_ctx = _tool_context()
+    # JAG-79: inject the LIVE skills list, so the model knows what it has.
+    try:
+        import skills as skills_mod
+        sk_block = skills_mod.skills_context(max_chars=3600)
+    except Exception:  # noqa: BLE001 — skills must never break the prompt
+        sk_block = ""
     return (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
+            + "\n\n" + SKILLS_POLICY + ("\n" + sk_block if sk_block else "")
             + "\n\n" + MEMORY_POLICY
             + "\n\nHarness state (your persistent task list):\n"
             + context_summary(session_id=(sess or {}).get("id")))
