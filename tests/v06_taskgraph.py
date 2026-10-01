@@ -294,11 +294,19 @@ def part_c_live():
     if not run_id:
         return
     _st, g = http("GET", "/api/runs/%s/graph" % sess_live, timeout=20)
-    _open = sum(g.get("counts", {}).get(k, 0) for k in ("todo", "doing", "blocked"))
+    _nodes = g.get("nodes") or []
+    _done_no_ev = [n.get("label") for n in _nodes
+                   if n.get("status") == "done" and not (n.get("evidence") or [])]
+    # JAG-84: a plan may now be FULLY completed inside one turn (the old
+    # `_open >= 1` assertion only encoded the chat loop running out of steps
+    # mid-plan and stopping = the "announce then stop" bug). The real requirements
+    # are: the list is persistent, keyed by the SESSION, model-authored (>=3
+    # nodes), and every `done` node carries EVIDENCE.
     check("C2 live request → persistent SESSION task list (keyed by session)",
-          g.get("node_count", 0) >= 3 and g.get("session_id") == sess_live and _open >= 1,
-          "nodes=%s counts=%s session=%s" % (
-              g.get("node_count"), g.get("counts"), g.get("session_id")))
+          g.get("node_count", 0) >= 3 and g.get("session_id") == sess_live
+          and not _done_no_ev,
+          "nodes=%s counts=%s session=%s done_without_evidence=%s" % (
+              g.get("node_count"), g.get("counts"), g.get("session_id"), _done_no_ev))
 
 
 def main():

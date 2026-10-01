@@ -1052,7 +1052,10 @@ def graph_post(run_id, body):
     return None, {"error": "unknown action %r" % action}, 400
 
 
-CHAT_TOOL_MAX_STEPS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_STEPS", "4"))
+CHAT_TOOL_MAX_STEPS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_STEPS", "8"))
+# JAG-84: hard cap on TOTAL loop iterations (bookkeeping + retries included), so
+# that making plan/todo actions "free" can never spin the loop forever.
+CHAT_TOOL_MAX_ITERS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_ITERS", "16"))
 CHAT_TOOL_PROMPT = (
     "\n\n## Tools\nYou are a tool-using agent, not a plain chatbot: you chat with "
     "the user AND you can act. When a request needs a tool (run a command, read or "
@@ -1091,7 +1094,9 @@ def _looks_like_json_action(text):
 # tool ran this turn we nudge the model once to actually do it (or conclude).
 _PROMISE_RE = re.compile(
     r"^\s*(?:\*\*)?(?:carico|procedo|eseguo|lancio|creo|installo|avvio|aggiorno|"
-    r"verifico|controllo|continuo|i'?ll|i will|i'?m going to|let me|loading|running)\b",
+    r"verifico|controllo|continuo|cerco|consulto|analizzo|recupero|preparo|"
+    r"inizio|comincio|elaboro|determino|sintetizzo|organizzo|accedo|scarico|"
+    r"i'?ll|i will|i'?m going to|let me|loading|running)\b",
     re.IGNORECASE)
 
 
@@ -1318,7 +1323,17 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     answer, think = "", ""
     final_answer = ""
     announce_nudged = False
-    for _step in range(max_steps):
+    # JAG-84: only REAL tool calls consume the work budget. Plan/todo bookkeeping
+    # (write_todos / update_todos / replan_todos) and invalid-JSON retries used to
+    # eat the same 4-step budget, so a "plan then work" turn ran out of steps right
+    # after the plan, was forced to "answer in plain text" and announced instead of
+    # acting (session 558d0f0fce6e / run 056347769632: write_todos + skills x3 then
+    # "Procedo con la ricerca live…" and stop). Now bookkeeping is free but bounded
+    # by CHAT_TOOL_MAX_ITERS.
+    work_steps = 0
+    iters = 0
+    while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
+        iters += 1
         collected = []
 
         def _capture(ch, t, _c=collected):
@@ -1359,6 +1374,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         tc = _chat_tool_call(act, api_v02) if tool_ctx else None
         if tc:
             tool, args = tc
+            work_steps += 1
             on_event("tool.call", session=sess["id"], tool=tool, args=args, inline=True)
             try:
                 # JAG-80: a `required` tool must never freeze the turn. We wait a
@@ -1431,20 +1447,36 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         # one, but BUFFER it. Streaming it live leaked raw tool-call JSON into
         # the user's chat bubble when the model kept acting instead of answering
         # (the JSON guard below only protected the PERSISTED text, not the stream).
+        # JAG-84: a forced "final" that is only an ANNOUNCEMENT ("Procedo con…") is
+        # not an answer — retry (bounded) asking for the RESULT, not a promise.
         msgs.append({"role": "user", "content":
-                     "Answer the user now in plain text. Do not emit JSON."})
-        forced = []
+                     "Answer the user now in plain text. Do not emit JSON, and do NOT "
+                     "announce future work: report the RESULT you already have (what "
+                     "you did, what you found, what is still missing)."})
+        for _try in range(3):
+            forced = []
 
-        def _cap_final(ch, t, _c=forced):
-            if ch == "think":
-                on_delta("think", t)
-            else:
-                _c.append((ch, t))
+            def _cap_final(ch, t, _c=forced):
+                if ch == "think":
+                    on_delta("think", t)
+                else:
+                    _c.append((ch, t))
 
-        final_answer, think, model = stream_with_fallback(msgs, model, "chat", _cap_final)
-        if (final_answer or "").strip() and not _looks_like_json_action(final_answer):
-            for ch, t in forced:  # only a REAL reply reaches the user live
-                on_delta(ch, t)
+            final_answer, think, model = stream_with_fallback(msgs, model, "chat", _cap_final)
+            if ((final_answer or "").strip() and not _looks_like_json_action(final_answer)
+                    and not _looks_like_promise(final_answer)):
+                for ch, t in forced:  # only a REAL reply reaches the user live
+                    on_delta(ch, t)
+                break
+            msgs.append({"role": "assistant", "content": final_answer or ""})
+            msgs.append({"role": "user", "content":
+                         "That was still an announcement/JSON, not a result. Give the "
+                         "final RESULT in plain prose now."})
+        else:
+            # last resort: stream whatever prose we have (never leak JSON)
+            if final_answer and not _looks_like_json_action(final_answer):
+                for ch, t in forced:
+                    on_delta(ch, t)
     answer = final_answer or answer
     if trace:
         trace.span("llm.chat", model=model, context=ctx_stats)
