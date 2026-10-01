@@ -85,6 +85,7 @@ def main():
     check("tools renderer", "renderTools(" in src)
     check("self renderer", "renderSelf(" in src)
     check("providers renderer", "renderProviders(" in src)
+    check("prm feedback surfaced", "prm.feedback" in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)

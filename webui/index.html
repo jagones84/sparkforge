@@ -875,6 +875,7 @@ function connectFeed() {
   es.addEventListener("tasks.update", () => push("✅ legacy tasks board updated"));
   es.addEventListener("agent.start", e => { const d = JSON.parse(e.data || "{}"); push("⚡ agent: " + (d.goal || "").slice(0, 60)); });
   es.addEventListener("agent.finish", () => push("🏁 agent finished"));
+  es.addEventListener("prm.feedback", e => { const d = JSON.parse(e.data || "{}"); push("📉 verify: score " + d.score + " — " + (d.feedback || "").slice(0, 90)); });
   es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); approvalCard(d); loadApprovals(); });
   es.addEventListener("approval.auto", e => { const d = JSON.parse(e.data); push("✅ auto-approved: " + (d.summary || "").slice(0, 50)); });
   es.addEventListener("tool.result", e => { const d = JSON.parse(e.data);
