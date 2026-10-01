@@ -176,18 +176,56 @@ def load_config(reload=False):
         return _cfg
 
 
+def _leading_comment(path):
+    """The file's leading comment/blank block, so a rewrite keeps its docs."""
+    try:
+        out = []
+        with open(path, "r", encoding="utf-8") as f:
+            for ln in f:
+                s = ln.strip()
+                if s == "" or s.startswith("#"):
+                    out.append(ln.rstrip("\n"))
+                else:
+                    break
+        return ("\n".join(out).rstrip() + "\n\n") if out else ""
+    except OSError:
+        return ""
+
+
 def save_config(cfg):
-    """Persist a partial config overlay back to tools.yaml (keeps it human-editable)."""
+    """Persist the OVERLAY (tools + non-default knobs) back to tools.yaml.
+
+    JAG-81: the SETTINGS panel flips approval policy per tool, so this file is
+    now rewritten from the app. Instead of dumping the whole merged config (which
+    buried the tools under sandbox/approval defaults and wiped the docs), we write
+    only the overlay and keep the leading comment block. A one-time backup is
+    saved under data/ (gitignored).
+    """
     global _cfg
     with _lock:
+        overlay = {"version": cfg.get("version", "0.2"),
+                   "tools": cfg.get("tools", {})}
+        for key in ("sandbox", "approvals"):
+            if key in cfg and cfg[key] != DEFAULT_CONFIG.get(key):
+                overlay[key] = cfg[key]
+        bak = os.path.join(REPO, "data", "tools.yaml.bak")
+        try:
+            if os.path.exists(CONFIG_YAML) and not os.path.exists(bak):
+                os.makedirs(os.path.dirname(bak), exist_ok=True)
+                import shutil
+                shutil.copyfile(CONFIG_YAML, bak)
+        except OSError:
+            pass
+        header = _leading_comment(CONFIG_YAML)
         try:
             import yaml
             with open(CONFIG_YAML, "w", encoding="utf-8") as f:
-                yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True,
+                f.write(header)
+                yaml.safe_dump(overlay, f, sort_keys=False, allow_unicode=True,
                                default_flow_style=False)
         except ImportError:
             with open(CONFIG_JSON, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=2)
+                json.dump(overlay, f, indent=2)
         _cfg = cfg
         return cfg
 
