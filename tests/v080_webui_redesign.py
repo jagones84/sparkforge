@@ -62,6 +62,13 @@ def main():
     # --- Fase 5: bug fix plan + token UI ---
     check("plan dedupe", "dedupePlan(" in src)
     check("token field", 'id="token-input"' in src)
+    # --- Fase 6: pannelli ridimensionabili + toggle + fix feed ---
+    check("resizer present", 'class="resizer"' in src)
+    check("toggle left", 'id="toggle-left"' in src)
+    check("toggle right", 'id="toggle-right"' in src)
+    check("resizer logic", "bindResizer(" in src)
+    check("token from url", "searchParams.get(\"token\")" in src)
+    check("no Math.max spread (RangeError fix)", "Math.max(feedSince, ..." not in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)

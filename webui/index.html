@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#06070c">
 <title>⚡ SparkForge — DGX Harness</title>
+<link rel="icon" href="data:,">
 <style>
   :root {
     --bg: #06070c; --panel: rgba(16,20,34,.72); --panel2: rgba(12,16,30,.8);
@@ -132,14 +133,14 @@
   .backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 8; }
   @media (max-width: 900px) {
     main { grid-template-columns: 1fr; }
-    aside {
+    #aside {
       position: fixed; z-index: 9; inset: 0 0 0 auto; width: min(92vw, 400px);
       transform: translateX(105%); transition: transform .28s ease;
       background: rgba(10,12,24,.96); backdrop-filter: blur(14px);
       padding-top: max(14px, env(safe-area-inset-top));
     }
-    aside.open { transform: translateX(0); }
-    aside.show { display: block !important; }
+    #aside.open { transform: translateX(0); }
+    #aside.show { display: block !important; }
     .backdrop.show { display: block; }
     #tabbar {
       display: flex; border-top: 1px solid var(--line); background: rgba(8,10,20,.85); backdrop-filter: blur(12px);
@@ -172,8 +173,24 @@
   #palette[hidden] { display: none; }
   .pal-item { cursor: pointer; }
   .pal-item:hover { background: rgba(108,140,255,.1); }
-  @media (max-width: 1100px) { [data-col="context"] { display: none; } }
-  @media (max-width: 820px)  { [data-col="sessions"] { display: none; } }
+  /* v0.8.1 resizable columns + panel toggles */
+  .resizer { flex: 0 0 5px; width: 5px; cursor: col-resize; background: transparent; }
+  .resizer:hover, .resizer.active { background: var(--accent); }
+  #toggle-left, #toggle-right, #palette-open { color: var(--txt); border-color: var(--accent); }
+  /* keep rail content inside the card (no clipped buttons) */
+  [data-col="context"] .inp { min-width: 0; }
+  [data-col="context"] .card > div { flex-wrap: wrap; }
+  body.collapsed-left [data-col="sessions"] { display: none; }
+  body.collapsed-right [data-col="context"] { display: none; }
+  @media (max-width: 1100px) {
+    [data-col="context"] { display: none; }
+    .resizer { display: none; }
+    body.show-right [data-col="context"] { display: flex !important; position: fixed; right: 0; top: 44px; bottom: 0; width: 300px; transform: none; z-index: 15; box-shadow: -12px 0 30px rgba(0,0,0,.5); }
+  }
+  @media (max-width: 820px) {
+    [data-col="sessions"] { display: none; }
+    body.show-left [data-col="sessions"] { display: flex !important; position: fixed; left: 0; top: 44px; bottom: 0; width: 260px; transform: none; z-index: 15; box-shadow: 12px 0 30px rgba(0,0,0,.5); }
+  }
 </style>
 </head>
 <body>
@@ -187,6 +204,8 @@
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
   <span class="pill" id="server-badge">server</span>
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
+  <button class="ghost" id="toggle-left" title="mostra/nascondi sessioni">▤</button>
+  <button class="ghost" id="toggle-right" title="mostra/nascondi pannelli">▥</button>
   <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
 </header>
 <main id="app">
@@ -204,6 +223,7 @@
       </div>
     </section>
   </aside>
+  <div class="resizer" id="resize-left" title="trascina per ridimensionare"></div>
   <div id="chat" data-col="chat">
     <div id="log"></div>
     <div id="cotDrawer">
@@ -223,6 +243,7 @@
       <button data-tab="feed" onclick="openTab('feed')">📡 feed</button>
     </div>
   </div>
+  <div class="resizer" id="resize-right" title="trascina per ridimensionare"></div>
   <aside id="rail" data-col="context">
     <nav id="rail-tabs">
       <button data-panel="graph" class="active" onclick="openPanel('graph')">Graph</button>
@@ -307,9 +328,17 @@ let curThink = null, curAns = null, feedSince = 0, cotText = "";
 let cursorEl = null;
 
 async function ensureToken() {
+  try {
+    const u = new URL(location.href);
+    const qt = u.searchParams.get("token");
+    if (qt) {
+      TOKEN = qt; localStorage.setItem("sf_token", qt);
+      return TOKEN;
+    }
+  } catch (e) {}
   if (TOKEN) return TOKEN;
-  const s = await fetch("/api/status").then(r => r.ok);
-  if (s) return null;
+  const ok = await fetch("/api/status", { headers: authHeaders() }).then(r => r.ok).catch(() => false);
+  if (ok) return null;
   TOKEN = prompt("SparkForge API token:") || "";
   localStorage.setItem("sf_token", TOKEN);
   return TOKEN;
@@ -754,7 +783,10 @@ function connectFeed() {
     while (f.children.length > 60) f.removeChild(f.firstChild);
   };
   es.addEventListener("backlog", e => {
-    const arr = JSON.parse(e.data); feedSince = Math.max(feedSince, ...arr.map(x => x.id));
+    let arr = []; try { arr = JSON.parse(e.data) || []; } catch (_) {}
+    // v0.8.2: iterate instead of Math.max(...arr) — the spread overflows the
+    // stack when the feed backlog is large ("Maximum call stack size exceeded").
+    arr.forEach(x => { if (x && typeof x.id === "number" && x.id > feedSince) feedSince = x.id; });
     arr.slice(-15).forEach(x => push(`${x.kind}`));
   });
   es.addEventListener("chat.user", e => { const d = JSON.parse(e.data); push("💬 user: " + (d.text || "").slice(0, 60)); });
@@ -779,7 +811,9 @@ function connectFeed() {
   es.addEventListener("agent.finish", () => push("🏁 agent finished"));
   es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); push("🔐 approval needed: " + (d.tool || "") + " " + (d.summary || "").slice(0, 40)); loadApprovals(); });
   es.addEventListener("approval.auto", e => { const d = JSON.parse(e.data); push("✅ auto-approved: " + (d.summary || "").slice(0, 50)); });
-  es.addEventListener("tool.result", e => { const d = JSON.parse(e.data); push("🛠 " + d.tool + " exit=" + d.exit_code + " backend=" + d.backend); });
+  es.addEventListener("tool.result", e => { const d = JSON.parse(e.data);
+    const bits = [d.tool, (d.exit_code != null ? "exit=" + d.exit_code : ""), (d.backend ? "backend=" + d.backend : ""), (d.ok === false ? "FAILED" : "")].filter(Boolean);
+    push("🛠 " + bits.join(" ")); });
   es.addEventListener("tool.blocked", e => { const d = JSON.parse(e.data); push("⛔ blocked " + d.tool + ": " + (d.reason || "").slice(0, 50)); });
   es.addEventListener("agent.paused", () => push("⏸ run paused"));
   es.addEventListener("agent.aborted", () => push("⛔ run aborted"));
@@ -835,6 +869,38 @@ function saveToken() {
 }
 
 $("palette-open").onclick = openPalette;
+
+/* ---- v0.8.1 resizable columns + panel toggles ---- */
+function bindResizer(handle, colSel, sign, key) {
+  const col = document.querySelector(colSel);
+  if (!handle || !col) return;
+  const saved = parseInt(localStorage.getItem(key) || "", 10);
+  if (saved) { col.style.width = saved + "px"; col.style.flex = "0 0 " + saved + "px"; }
+  handle.addEventListener("mousedown", e => {
+    e.preventDefault(); handle.classList.add("active");
+    const startX = e.clientX, startW = col.getBoundingClientRect().width;
+    const move = ev => {
+      const w = Math.max(170, Math.min(560, startW + sign * (ev.clientX - startX)));
+      col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+      handle.classList.remove("active");
+      localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width)));
+    };
+    document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+  });
+}
+bindResizer($("resize-left"), '[data-col="sessions"]', 1, "sf_w_left");
+bindResizer($("resize-right"), '[data-col="context"]', -1, "sf_w_right");
+$("toggle-left").onclick = () => {
+  if (innerWidth <= 820) document.body.classList.toggle("show-left");
+  else document.body.classList.toggle("collapsed-left");
+};
+$("toggle-right").onclick = () => {
+  if (innerWidth <= 1100) document.body.classList.toggle("show-right");
+  else document.body.classList.toggle("collapsed-right");
+};
 $("palette-input").addEventListener("input", e => renderPalette(e.target.value));
 $("palette").addEventListener("click", e => { if (e.target.id === "palette") closePalette(); });
 $("session-search").addEventListener("input", loadSessions);
