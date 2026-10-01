@@ -49,6 +49,11 @@ def main():
         check("panel tab %s" % p, ('data-panel="%s"' % p) in src)
     check("panel body", 'id="panel-body"' in src)
     check("open panel fn", "openPanel(" in src)
+    # --- Fase 3: tool card + thinking ---
+    check("tool card markup", 'class="toolcard"' in src)
+    check("tool card expand", "toggleTool(" in src)
+    check("thinking live", 'class="thinking"' in src)
+    check("tool card body", 'class="toolcard-body"' in src)
     # --- Anti-regressione: logica esistente preservata ---
     for fn in PRESERVED_FUNCS:
         check("kept func %s" % fn, fn in src)

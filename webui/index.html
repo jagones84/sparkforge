@@ -201,7 +201,7 @@
   <div id="chat" data-col="chat">
     <div id="log"></div>
     <div id="cotDrawer">
-      <div class="hd"><span>🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
+      <div class="hd"><span class="thinking">🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
       <div class="t thinking"></div>
     </div>
     <div id="composer">
@@ -323,13 +323,20 @@ function who(role, text) {
   $("log").appendChild(d); scroll(); return d;
 }
 /* v1.6.3 (JAG-55): inline tool-call mini-card, coherent with the run graph nodes */
+/* v0.8: expandable card (head + args/output body) */
 function toolCard(tool) {
-  const d = document.createElement("div");
-  d.className = "toolcard pending"; d.dataset.tool = tool || "tool";
-  d.innerHTML = `<span class="tc-ic">🔧</span><span class="tc-name"></span><span class="tc-meta">running…</span>`;
-  d.querySelector(".tc-name").textContent = d.dataset.tool;
+  const name = tool || "tool";
+  const id = "tc" + Math.random().toString(36).slice(2, 8);
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<div class="toolcard" data-tool="${name}">` +
+    `<div class="toolcard-head" onclick="toggleTool('${id}')"><span class="tc-ic">🔧</span>` +
+    `<span class="tc-name">${name}</span><span class="tc-meta">running…</span><span class="tc-chev">▾</span></div>` +
+    `<div class="toolcard-body" id="${id}"><pre class="tc-args"></pre><pre class="tc-out"></pre></div></div>`;
+  const d = wrap.firstElementChild;
+  d.classList.add("pending");
   $("log").appendChild(d); scroll(); return d;
 }
+function toggleTool(id) { const el = document.getElementById(id); if (el) el.parentElement.classList.toggle("expanded"); }
 function updateToolCard(data) {
   const tool = data.tool || "tool";
   const cards = Array.from($("log").querySelectorAll(".toolcard.pending"));
@@ -340,6 +347,11 @@ function updateToolCard(data) {
   const meta = [(data.exit_code != null ? "exit " + data.exit_code : ""), (data.backend || ""),
                 (data.summary || "")].filter(Boolean).join(" · ");
   card.querySelector(".tc-meta").textContent = meta;
+  const argsEl = card.querySelector(".tc-args");
+  if (argsEl && data.args) argsEl.textContent = typeof data.args === "string" ? data.args : JSON.stringify(data.args);
+  const outEl = card.querySelector(".tc-out");
+  const body = data.output || data.stdout || data.result || "";
+  if (outEl) outEl.textContent = String(body).slice(0, 4000);
   scroll();
 }
 function ensureThink() {
