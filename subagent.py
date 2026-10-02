@@ -27,13 +27,23 @@ import api_v02  # for the RunState / agent_run_v2 machinery
 import approvals
 import registry
 import sandbox
+import taskgraph  # per-run task graph (child gets its own todo list)
 import tools as toolmod
 
 _lock = threading.RLock()
 _running = {}     # subagent_id -> {state, parent_run_id, goal, result}
 
 
-def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None):
+def depth_allowed(depth, max_depth=None):
+    """True se si puo' ancora annidare (matrioska) sotto `depth` livelli."""
+    import keepgoing
+    md = int(keepgoing.cfg()["subagent_max_depth"])
+    if max_depth is not None:
+        md = int(max_depth)
+    return int(depth) < md
+
+
+def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None, depth=0):
     """Spawn a subagent run and return its id.
 
     The subagent runs asynchronously in a background thread. Call
@@ -41,9 +51,13 @@ def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None):
 
     Returns a dict with subagent_id (caller should store it).
     """
+    if not depth_allowed(depth):
+        return {"subagent_id": None, "run_id": None, "goal": goal,
+                "error": "subagent depth limit reached (depth=%d)" % depth}
     sid = "sub_%s" % uuid.uuid4().hex[:10]
     st = api_v02.new_run("%s (subagent %s)" % (goal[:80], sid), model, max_steps)
     st.parent_run_id = parent_run_id
+    taskgraph.ensure(st.id, session_id=st.id, goal=goal)
 
     entry = {
         "id": sid,

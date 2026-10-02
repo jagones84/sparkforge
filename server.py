@@ -2267,6 +2267,28 @@ def apply_agent_action(act, run_id=None, session=None):
         return "task not found"
     if action == "write_todos":
         return _mirror_graph(run_id, act, "write_todos: graph updated", session)
+    if action == "subagent":
+        goal = str(act.get("goal") or act.get("detail") or "").strip()
+        if not goal:
+            return "subagent error: goal required"
+        try:
+            max_steps = int(act.get("max_steps", 4))
+        except (TypeError, ValueError):
+            max_steps = 4
+        import subagent as _sub
+        result = _sub.spawn(goal, parent_run_id=run_id, max_steps=max_steps,
+                            model=act.get("model"))
+        if result.get("error"):
+            return "subagent error: %s" % result["error"]
+        if run_id:
+            try:
+                graph = taskgraph.ensure(run_id, session_id=session)
+                taskgraph.add_node(graph, goal, source="subagent",
+                                   child_run_id=result["subagent_id"])
+            except Exception as e:  # noqa: BLE001 — linking must never break a run
+                publish("graph.error", run=run_id, error=str(e))
+        return "subagent spawned: %s (goal: %s, max_steps=%d)" % (
+            result["subagent_id"], goal[:80], max_steps)
     if action == "note":
         publish("agent.note", text=str(act.get("detail") or act.get("title") or "")[:400])
         return "noted"
