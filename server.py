@@ -2591,12 +2591,19 @@ def compact_session(session, budget_tokens=None):
         room = max(1024, budget - context_engine.count_tokens(_system_prompt(sess)))
     else:
         # JAG-102: manual action — target a fraction of the CURRENT transcript.
+        # JAG-104: the floor is small (256) so the ratio also applies to short
+        # sessions; a 1024 floor made the button a near no-op under ~1k tokens.
         budget = current
-        room = max(1024, int(current * COMPACT_FORCE_RATIO))
+        room = max(256, int(current * COMPACT_FORCE_RATIO))
     msgs, stats = context_engine.compact(
         messages, room, summarizer=lambda old: _summarize_with_llm(old))
     sess["messages"] = msgs
     save_session(sess)
+    # JAG-104: the cached "real" prompt size belongs to the turn BEFORE the
+    # compaction; keeping it made /api/context report the OLD number, so the ctx
+    # meter did not move and the button looked like a no-op even though the
+    # transcript had shrunk. Drop it so the meter falls back to the fresh estimate.
+    _REAL_PROMPT_TOKENS.pop(session, None)
     stats.update({"session": session, "budget_tokens": budget,
                   "transcript_room": room,
                   "tokens_after": sum(context_engine.count_tokens(m.get("content", ""))
