@@ -3220,7 +3220,10 @@ class Handler(BaseHTTPRequestHandler):
             # keep-alive is a /api/feed-only privilege (v0.6.1, JAG-48)
             return sse_response(self, feed_gen(since), keepalive=True)
         if path == "/api/plan":
-            return self._send(200, load_plan())
+            # JAG-129B: alias di lettura della task list persistente.
+            sid = qs.get("session") or ""
+            _g = taskgraph.load(sid) if sid else None
+            return self._send(200, taskgraph.public(_g) or {"nodes": [], "counts": {}})
         if path == "/api/tasks":
             tasks = load_tasks()
             remaining = ["%s: %s" % (t["status"], t["title"]) for t in tasks.get("tasks", [])
@@ -3433,10 +3436,11 @@ class Handler(BaseHTTPRequestHandler):
             res = ensure_model(alias, on_event=lambda k, **d: publish(k, **d))
             return self._send(200 if res.get("loaded") else 502, res)
         if path == "/api/plan":
-            goal = body.get("goal", "")
-            plan = {"goal": goal, "steps": body.get("steps", load_plan().get("steps", []))}
-            save_plan(plan)
-            return self._send(200, plan)
+            # JAG-129B: il "plan" legacy E' la task list persistente (una sola
+            # fonte di verita': il taskgraph della sessione).
+            sid = body.get("session") or qs.get("session") or ""
+            _g = taskgraph.load(sid) if sid else None
+            return self._send(200, taskgraph.public(_g) or {"nodes": [], "counts": {}})
         if path == "/api/plan/generate":
             goal = body.get("goal", "")
             if not goal:
@@ -3447,14 +3451,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(502, {"error": "planner failed: %s" % e})
             return self._send(200, {"plan": plan, "raw": answer[:800], "run_id": run_id})
         if path == "/api/plan/toggle":
-            sid = body.get("id")
-            plan = load_plan()
-            for s in plan.get("steps", []):
-                if s["id"] == sid:
-                    s["done"] = not s.get("done")
-                    save_plan(plan)
-                    return self._send(200, plan)
-            return self._send(404, {"error": "step not found"})
+            # JAG-129B: il toggle legacy agisce sulla task list persistente
+            # (una sola fonte di verita'), non piu' su plan.json.
+            node_id = str(body.get("id") or qs.get("id") or "")
+            _g = taskgraph.load(body.get("session") or qs.get("session") or "")
+            node = taskgraph.find(_g, node_id=node_id) if _g else None
+            if not node:
+                return self._send(404, {"error": "step not found"})
+            if node.get("status") == "done":
+                taskgraph.update_node(_g, node_id, status="todo")
+            else:
+                taskgraph.complete_node(_g, node_id,
+                                        evidence="manual toggle (legacy /api/plan/toggle)")
+            return self._send(200, taskgraph.public(_g))
         if path == "/api/tasks":
             title = body.get("title", "")
             if not title:
