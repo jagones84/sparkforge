@@ -127,6 +127,20 @@ check("S11 api helper present",
       "install_skill_raw" in open(os.path.join(REPO, "api_v02.py"),
                                   encoding="utf-8").read())
 
+# S9 /nome inietta la SKILL.md nel prompt assemblato (una sola volta)
+z = make_zip({"demo-skill/SKILL.md": SKILL_MD})
+skills.install_zip(z, name="demo", overwrite=True)
+import server  # noqa: E402
+sess = server.get_or_create_session("skill-inject")
+server.append_message(sess, "user", "/demo spiegami")
+msgs, _ = server.assemble_turn(sess, "/demo spiegami")
+joined = "\n".join(m.get("content", "") for m in msgs)
+check("S9 skill content injected", "Do the thing." in joined)
+check("S9 skill directive present", "SKILL ACTIVATION" in joined)
+msgs2, _ = server.assemble_turn(sess, "ciao normale")
+joined2 = "\n".join(m.get("content", "") for m in msgs2)
+check("S9 no inject without slash", "SKILL ACTIVATION" not in joined2)
+
 total = len(results)
 passed = sum(results)
 print("%d/%d" % (passed, total))

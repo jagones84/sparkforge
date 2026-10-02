@@ -1439,6 +1439,30 @@ def maybe_reflect(sess, message, answer, used_tools, model=None):
         return None
 
 
+def _apply_skill_slash(message):
+    """JAG-109: `/nome resto` → inietta la SKILL.md nel prompt del turno.
+
+    Non modifica la history salvata (resta `/nome resto`); l'iniezione è
+    transitoria e vale solo per questo turno. `/goal` non è toccato.
+    """
+    if not message or not message.startswith("/"):
+        return message
+    token, _, rest = message[1:].partition(" ")
+    token = token.strip().lower()
+    if not token or token == "goal":
+        return message
+    try:
+        import skills as skills_mod
+        sk = skills_mod.get_skill(token)
+    except Exception:  # noqa: BLE001 — l'iniezione non deve mai rompere un turno
+        return message
+    if not sk:
+        return message
+    body = (sk.get("content") or "")[:20000]
+    return ("SKILL ACTIVATION — '%s' (follow these instructions for this turn)\n\n"
+            "%s\n\n---\nUSER: %s" % (token, body, rest.strip()))
+
+
 def assemble_turn(sess, message, tool_ctx=None, model=None, autonomous=False):
     """Assemble the exact message list SENT to the router for one chat turn.
 
@@ -1453,7 +1477,7 @@ def assemble_turn(sess, message, tool_ctx=None, model=None, autonomous=False):
     if tool_ctx is None:
         tool_ctx = _tool_context()
     sys = _system_prompt(sess, tool_ctx)
-    eff_message = message
+    eff_message = _apply_skill_slash(message)
     if autonomous:
         eff_message = (
             "AUTONOMOUS GOAL MODE — accomplish the goal below end to end without "
