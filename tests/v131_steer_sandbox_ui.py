@@ -91,6 +91,8 @@ check("Q8 queue flushed on done/error",
 check("Q9 chat stream handles approval + steer",
       'es.addEventListener("approval.request", e => { approvalCard(JSON.parse(e.data)); loadApprovals(); });' in html
       and 'es.addEventListener("chat.steer"' in html, "")
+check("U5 native controls use a dark color-scheme (no white select popup)",
+      "color-scheme: dark;" in html and "#qmode option { background: #121722;" in html, "")
 
 total = len(results)
 passed = sum(results)
