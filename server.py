@@ -1908,6 +1908,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     used_tools = []
     # JAG-129A: stato del loop di completamento (vedi keepgoing.decide).
     import keepgoing as _kg
+    clear_abort(sess["id"])
     _kg_rounds = 0
     _kg_prev = None
     _kg_stale = 0
@@ -3396,6 +3397,14 @@ class Handler(BaseHTTPRequestHandler):
             depth = push_steer(sid, text)
             publish("chat.steer", session=sid, text=text, queued=depth)
             return self._send(200, {"ok": True, "queued": depth})
+        if path == "/api/chat/abort":
+            # JAG-129A: ferma il turno in corso (l'agente non deve continuare).
+            sid = body.get("session") or qs.get("session")
+            if not sid:
+                return self._send(400, {"error": "session required"})
+            push_abort(sid)
+            publish("chat.abort", session=sid)
+            return self._send(200, {"ok": True, "aborted": sid})
         if path == "/api/improve":
             # JAG-128B: approva/rifiuta una proposta di self-improvement.
             import improve as improve_mod
