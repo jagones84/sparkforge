@@ -787,11 +787,17 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, workspace_get(qs))
         if path == "/api/fs/dirs":  # JAG-121: folder picker for a new session
             return _r(handler, 200, fs_dirs(qs))
+        if path == "/api/fs/list":  # JAG-124: workspace file tree
+            return _r(handler, 200, fs_list(qs))
+        if path == "/api/fs/read":  # JAG-124: read a text file into the editor
+            return _r(handler, 200, fs_read(qs))
 
         return False
 
     if method == "POST":
         # v0.2 core POST routes
+        if path == "/api/fs/write":  # JAG-124: save the editor buffer to disk
+            return _r(handler, 200, fs_write(body))
         if path == "/api/tools":
             return _r(handler, 200, update_policy(body))
         if path == "/api/tools/call":
@@ -1129,6 +1135,130 @@ def fs_dirs(qs=None):
     if not any(parent == r or parent.startswith(r + _os.sep) for r in roots):
         parent = None
     return {"path": p, "parent": parent, "roots": roots, "dirs": dirs[:500], "count": len(dirs)}
+
+
+# ---------------------------------------------------------------------------
+# JAG-124: workspace file tree + editor (GET /api/fs/list, /api/fs/read,
+# POST /api/fs/write). All paths are sandboxed to the browse roots; the tree is
+# rooted at the SESSION's workspace so it follows the folder the user opened.
+# ---------------------------------------------------------------------------
+FS_TEXT_MAX = 1024 * 1024  # 1 MiB: files above this are shown read-only (truncated)
+
+
+def _ws_root(qs=None) -> str:
+    """Root to browse: explicit ?root=, else the session workspace, else browse[0]."""
+    import os as _os
+    q = qs or {}
+    explicit = q.get("root")
+    if explicit:
+        return _os.path.realpath(_os.path.expanduser(explicit))
+    sid = q.get("session")
+    if sid:
+        ws, _sess = _session_ws(sid)
+        if ws:
+            return _os.path.realpath(_os.path.expanduser(ws))
+    return _browse_roots()[0]
+
+
+def _safe_fs_path(path, roots=None):
+    """Resolve `path` and return it only if inside an allowed root, else None."""
+    import os as _os
+    roots = roots or _browse_roots()
+    p = _os.path.realpath(_os.path.expanduser(path or ""))
+    if not any(p == r or p.startswith(r + _os.sep) for r in roots):
+        return None
+    return p
+
+
+def fs_list(qs=None) -> dict:
+    """GET /api/fs/list — list one directory (dirs first, then files).
+
+    `?session=` roots the browse at that session's workspace; `?path=` selects
+    the directory. Hidden dotfiles are skipped. Read-only, never mutates.
+    """
+    import os as _os
+    q = qs or {}
+    root = _ws_root(q)
+    p = _safe_fs_path(q.get("path") or root, [root] + _browse_roots())
+    if not p:
+        return {"error": "path outside allowed roots", "root": root}
+    if not _os.path.isdir(p):
+        return {"error": "not a directory: %s" % p, "root": root, "path": p}
+    dirs, files = [], []
+    try:
+        with _os.scandir(p) as it:
+            for e in it:
+                try:
+                    if e.name.startswith("."):
+                        continue
+                    if e.is_dir(follow_symlinks=False):
+                        dirs.append({"name": e.name, "path": e.path, "type": "dir"})
+                    elif e.is_file(follow_symlinks=False):
+                        files.append({"name": e.name, "path": e.path, "type": "file",
+                                      "size": e.stat().st_size})
+                except OSError:
+                    continue
+    except OSError as e:
+        return {"error": str(e), "root": root, "path": p}
+    dirs.sort(key=lambda d: d["name"].lower())
+    files.sort(key=lambda d: d["name"].lower())
+    return {"root": root, "path": p, "dirs": dirs[:1000], "files": files[:2000],
+            "count": len(dirs) + len(files)}
+
+
+def fs_read(qs=None) -> dict:
+    """GET /api/fs/read — return a text file's content for the editor.
+
+    Binary files report `binary: True` with empty text; files over FS_TEXT_MAX
+    are truncated and flagged so the UI can lock the editor.
+    """
+    import os as _os
+    q = qs or {}
+    p = _safe_fs_path(q.get("path"), _browse_roots() + [_ws_root(q)])
+    if not p:
+        return {"error": "path outside allowed roots"}
+    if not _os.path.isfile(p):
+        return {"error": "not a file: %s" % p}
+    size = _os.path.getsize(p)
+    if size > FS_TEXT_MAX:
+        with open(p, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read(FS_TEXT_MAX)
+        return {"path": p, "text": text, "size": size, "truncated": True, "binary": False}
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            text = f.read()
+    except (UnicodeDecodeError, ValueError):
+        return {"path": p, "text": "", "size": size, "truncated": False, "binary": True}
+    return {"path": p, "text": text, "size": size, "truncated": False, "binary": False}
+
+
+def fs_write(body) -> dict:
+    """POST /api/fs/write — overwrite an EXISTING text file with `content`.
+
+    Overwrite-only (never creates new files) and length-capped, so the editor
+    cannot be used to plant files or blow up the disk. Publishes `fs.write` so
+    the app/UI can react to on-disk changes.
+    """
+    import os as _os
+    b = body or {}
+    p = _safe_fs_path(b.get("path"), _browse_roots() + [_ws_root(b)])
+    if not p:
+        return {"error": "path outside allowed roots"}
+    if not _os.path.isfile(p):
+        return {"error": "not a file (create is not allowed): %s" % p}
+    content = b.get("content")
+    if not isinstance(content, str):
+        return {"error": "content (string) required"}
+    raw = content.encode("utf-8")
+    if len(raw) > FS_TEXT_MAX:
+        return {"error": "content too large (%d bytes > %d)" % (len(raw), FS_TEXT_MAX)}
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(content)
+    except OSError as e:
+        return {"error": str(e)}
+    _publish("fs.write", path=p, bytes=len(raw))
+    return {"ok": True, "path": p, "bytes": len(raw)}
 
 
 def _session_ws(session_id):

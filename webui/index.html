@@ -240,6 +240,16 @@
     [data-col="sessions"] { display: none; }
     body.show-left [data-col="sessions"] { display: flex !important; position: fixed; left: 0; top: 44px; bottom: 0; width: 260px; transform: none; z-index: 15; box-shadow: 12px 0 30px rgba(0,0,0,.5); }
   }
+  /* JAG-124: workspace file tree + editor */
+  #fileTree { max-height: 300px; overflow: auto; font-family: monospace; }
+  .ftrow { cursor: pointer; padding: 3px 6px; border-radius: 6px; font-size: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ftrow:hover { background: rgba(108,140,255,.12); }
+  .ftrow.active { background: rgba(139,123,240,.18); }
+  #fileText { width: 100%; min-height: 280px; resize: vertical; font-family: monospace;
+    font-size: 12px; padding: 8px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg2); color: var(--txt); }
+  #fileText:disabled { opacity: .6; }
 </style>
 </head>
 <body>
@@ -309,6 +319,7 @@
       <button data-panel="providers" onclick="openPanel('providers')">Providers</button>
       <button data-panel="keys" onclick="openPanel('keys')">Keys</button>
       <button data-panel="rules" onclick="openPanel('rules')">Rules</button>
+      <button data-panel="files" onclick="openPanel('files')">Files</button>
     </nav>
     <div id="panel-body">
       <section data-section="graph">
@@ -451,6 +462,27 @@
           <div class="remaining" id="keysSummary">loading…</div>
           <div id="keysList" style="margin-top:8px"></div>
           <div class="remaining" style="margin-top:8px">Values are NOT in the repo: put them in <code>.env</code> or <code>~/.hermes/.env</code> (gitignored). Providers and MCP reference the key by NAME only.</div>
+        </div>
+      </section>
+      <section data-section="files" hidden>
+        <h2>Files · workspace</h2>
+        <div class="card">
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="remaining" id="filesRoot" style="flex:1;word-break:break-all">…</span>
+            <button class="ghost" onclick="loadFiles()" title="reload tree">↻</button>
+          </div>
+          <div id="fileTree" style="margin-top:8px"><div class="remaining">open a session, then ↻</div></div>
+        </div>
+        <h2>Editor <span id="fileDirty" class="remaining"></span></h2>
+        <div class="card">
+          <div class="remaining" id="filePath" style="word-break:break-all">no file open</div>
+          <textarea id="fileText" spellcheck="false" oninput="fileChanged()" placeholder="click a file in the tree to open it…"></textarea>
+          <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+            <button class="ghost" onclick="saveFile()" title="Ctrl/Cmd+S">save</button>
+            <button class="ghost" onclick="revertFile()" title="discard changes">revert</button>
+            <span class="remaining" id="fileMsg" style="margin-left:auto"></span>
+          </div>
+          <div class="remaining" style="margin-top:6px">overwrite-only · paths sandboxed to the workspace · 1 MiB cap</div>
         </div>
       </section>
       <section data-section="rules" hidden>
@@ -1634,9 +1666,117 @@ function openPanel(name) {
   else if (name === "providers") { loadProviders(); }
   else if (name === "keys") { loadKeys(); }
   else if (name === "rules") { loadRules(); }
+  else if (name === "files") { loadFiles(); }
   else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
+}
+
+/* ---- JAG-124: workspace file tree + editor ---- */
+let _filesRoot = null, _openFile = null;
+
+function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+function _fmtSize(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " kB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+
+async function loadFiles() {
+  const tree = $("fileTree");
+  tree.innerHTML = '<div class="remaining">loading…</div>';
+  try {
+    const d = await api("GET", "/api/fs/list?session=" + encodeURIComponent(sessionId || ""));
+    if (d.error) { tree.innerHTML = '<div class="remaining">' + esc(d.error) + '</div>'; return; }
+    _filesRoot = d.path;
+    $("filesRoot").textContent = d.path;
+    tree.innerHTML = "";
+    _renderDir(tree, d, 0);
+    if (!d.count) tree.innerHTML = '<div class="remaining">empty folder</div>';
+  } catch (e) { tree.innerHTML = '<div class="remaining">' + esc(e) + '</div>'; }
+}
+
+function _renderDir(container, d, depth) {
+  (d.dirs || []).forEach(dir => {
+    const row = document.createElement("div");
+    row.className = "ftrow";
+    row.style.paddingLeft = (6 + depth * 14) + "px";
+    row.textContent = "▸ 📁 " + dir.name;
+    const kids = document.createElement("div");
+    kids.hidden = true;
+    let loaded = false;
+    row.onclick = async () => {
+      kids.hidden = !kids.hidden;
+      row.textContent = (kids.hidden ? "▸" : "▾") + " 📁 " + dir.name;
+      if (!kids.hidden && !loaded) {
+        loaded = true;
+        const sub = await api("GET", "/api/fs/list?session=" + encodeURIComponent(sessionId || "") + "&path=" + encodeURIComponent(dir.path));
+        if (sub.error) { kids.innerHTML = '<div class="remaining" style="margin-left:' + (20 + depth * 14) + 'px">' + esc(sub.error) + '</div>'; }
+        else { _renderDir(kids, sub, depth + 1); }
+      }
+    };
+    container.appendChild(row);
+    container.appendChild(kids);
+  });
+  (d.files || []).forEach(f => {
+    const row = document.createElement("div");
+    row.className = "ftrow";
+    row.style.paddingLeft = (20 + depth * 14) + "px";
+    row.innerHTML = "📄 " + esc(f.name) + ' <span class="remaining">' + _fmtSize(f.size) + "</span>";
+    row.title = f.path;
+    if (_openFile && _openFile.path === f.path) row.classList.add("active");
+    row.onclick = () => openFile(f.path);
+    container.appendChild(row);
+  });
+}
+
+async function openFile(path) {
+  $("fileMsg").textContent = "";
+  try {
+    const d = await api("GET", "/api/fs/read?path=" + encodeURIComponent(path));
+    if (d.error) { $("fileMsg").textContent = d.error; return; }
+    if (d.binary) {
+      _openFile = null;
+      $("filePath").textContent = d.path;
+      $("fileText").value = "";
+      $("fileText").disabled = true;
+      $("fileDirty").textContent = "";
+      $("fileMsg").textContent = "binary file — not editable";
+      return;
+    }
+    _openFile = { path: d.path, saved: d.text };
+    $("filePath").textContent = d.path + (d.truncated ? " · truncated (read-only)" : "");
+    $("fileText").disabled = !!d.truncated;
+    $("fileText").value = d.text;
+    document.querySelectorAll("#fileTree .ftrow.active").forEach(x => x.classList.remove("active"));
+    fileChanged();
+  } catch (e) { $("fileMsg").textContent = String(e); }
+}
+
+function fileChanged() {
+  const dirty = _openFile && $("fileText").value !== _openFile.saved;
+  const b = $("fileDirty");
+  b.textContent = dirty ? "● modified" : "";
+  b.style.color = dirty ? "var(--warn)" : "";
+}
+
+async function saveFile() {
+  if (!_openFile) { $("fileMsg").textContent = "no file open"; return; }
+  try {
+    const r = await api("POST", "/api/fs/write", { path: _openFile.path, content: $("fileText").value });
+    if (r.error) { $("fileMsg").textContent = r.error; return; }
+    _openFile.saved = $("fileText").value;
+    fileChanged();
+    $("fileMsg").textContent = "saved · " + r.bytes + " bytes";
+  } catch (e) { $("fileMsg").textContent = String(e); }
+}
+
+function revertFile() {
+  if (!_openFile) return;
+  $("fileText").value = _openFile.saved;
+  fileChanged();
+  $("fileMsg").textContent = "reverted";
 }
 
 /* ---- v0.8 command palette (Cmd/Ctrl+K) ---- */
@@ -1645,7 +1785,7 @@ function paletteItems() {
     { label: "\uFF0B New session", run: () => newSession() },
     { label: "\u21BB Compact context", run: () => compactNow() },
   ];
-  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers", "keys", "rules"].forEach(p => items.push({ label: "\u25B8 Panel " + p, run: () => openPanel(p) }));
+  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers", "keys", "rules", "files"].forEach(p => items.push({ label: "\u25B8 Panel " + p, run: () => openPanel(p) }));
   return items;
 }
 function renderPalette(q) {
@@ -1702,6 +1842,9 @@ $("session-search").addEventListener("input", loadSessions);
 $("hide-empty").addEventListener("change", loadSessions);
 addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); openPalette(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === "s" && document.activeElement === $("fileText")) {
+    e.preventDefault(); saveFile();
+  }
   if (e.key === "Escape") { closePalette(); closeNewSess(); closeDirPicker(); }
 });
 /* JAG-121c: Enter = newline, Ctrl/Cmd+Enter = send (chat textarea) */
