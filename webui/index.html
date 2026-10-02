@@ -266,6 +266,7 @@
       <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
       <button data-panel="mcp" onclick="openPanel('mcp')">MCP</button>
       <button data-panel="skills" onclick="openPanel('skills')">Skills</button>
+      <button data-panel="providers" onclick="openPanel('providers')">Providers</button>
     </nav>
     <div id="panel-body">
       <section data-section="graph">
@@ -373,6 +374,33 @@
           <button class="ghost" onclick="installSkillZip()" style="margin-top:8px">installa</button>
           <div id="skillResult" class="remaining" style="margin-top:6px"></div>
           <div class="remaining" style="margin-top:6px">installate in skills/local/ (fuori dal repo)</div>
+        </div>
+      </section>
+      <section data-section="providers" hidden>
+        <h2>Providers · LLM</h2>
+        <div class="card">
+          <div class="remaining" id="provSummary">caricamento…</div>
+          <div id="provList" style="margin-top:8px"></div>
+        </div>
+        <h2>Aggiungi / modifica provider</h2>
+        <div class="card">
+          <input id="provId" class="inp" placeholder="id (es. openrouter) *" style="width:100%;padding:6px 10px;font-size:12px">
+          <input id="provName" class="inp" placeholder="nome" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <select id="provKind" class="inp" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+            <option value="openai">openai-compatible</option>
+            <option value="llamacpp">llama.cpp</option>
+            <option value="openrouter">openrouter</option>
+            <option value="deepseek">deepseek</option>
+            <option value="anthropic">anthropic</option>
+            <option value="custom">custom</option>
+          </select>
+          <input id="provUrl" class="inp" placeholder="base_url (https://…/v1)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <input id="provKeyEnv" class="inp" placeholder="api_key_env = NOME variabile (non la chiave)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <input id="provModels" class="inp" placeholder="modelli (separati da virgola)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="provLocal"> locale (senza chiave)</label>
+          <button class="ghost" onclick="saveProvider()" style="margin-top:8px">salva provider</button>
+          <div id="provResult" class="remaining" style="margin-top:6px"></div>
+          <div class="remaining" style="margin-top:6px">salvati in config/providers.local.yaml (fuori dal repo)</div>
         </div>
       </section>
     </div>
@@ -1234,6 +1262,92 @@ async function installSkillZip() {
   $("skillResult").textContent = r.error ? ("errore: " + r.error) : ("installata: " + r.name);
   if (!r.error) { loadSkills(); loadCtx(); }
 }
+/* ---- providers (JAG-112) ---- */
+let _provCache = [];
+async function loadProviders() {
+  try {
+    const d = await api("GET", "/api/providers");
+    _provCache = d.providers || [];
+    $("provSummary").textContent = _provCache.length + " provider · " +
+      _provCache.reduce((n, p) => n + (p.models || []).length, 0) + " modelli · default: " +
+      (d.default || "—");
+    const box = $("provList"); box.innerHTML = "";
+    _provCache.forEach(p => {
+      const row = document.createElement("div");
+      row.className = "card";
+      row.style.cssText = "padding:6px 8px;margin-bottom:6px";
+      const head = document.createElement("div");
+      head.style.cssText = "display:flex;gap:8px;align-items:center";
+      const dot = document.createElement("span"); dot.textContent = p.available ? "🟢" : "🟠";
+      const name = document.createElement("div"); name.style.cssText = "flex:1;min-width:0";
+      const t = document.createElement("div"); t.style.fontWeight = "600";
+      t.textContent = p.id + (p.local ? " · locale" : "");
+      const sub = document.createElement("div"); sub.className = "remaining";
+      sub.textContent = (p.name || "") + " · " + (p.kind || "") + " · " + (p.base_url || "");
+      name.append(t, sub);
+      const edit = document.createElement("button"); edit.className = "ghost"; edit.textContent = "✎";
+      edit.title = "carica nel form";
+      edit.onclick = () => editProvider(p);
+      const del = document.createElement("button"); del.className = "ghost"; del.textContent = "🗑";
+      del.onclick = async () => {
+        if (!(await confirmDelete("rimuovere il provider '" + p.id + "'?"))) return;
+        const r = await api("DELETE", "/api/providers?id=" + encodeURIComponent(p.id));
+        $("provResult").textContent = r.error ? ("errore: " + r.error) : ("rimosso: " + p.id);
+        loadProviders();
+      };
+      head.append(dot, name, edit, del);
+      row.appendChild(head);
+      (p.models || []).forEach(m => {
+        const ml = document.createElement("div");
+        ml.className = "remaining";
+        ml.style.cssText = "display:flex;gap:6px;align-items:center;margin-top:4px";
+        const mid = document.createElement("span"); mid.style.flex = "1";
+        mid.textContent = "• " + m.id + (m.context_length ? (" (" + m.context_length + ")") : "");
+        const setdef = document.createElement("button"); setdef.className = "ghost"; setdef.textContent = "★";
+        setdef.title = "imposta come default";
+        setdef.onclick = async () => {
+          const r = await api("POST", "/api/providers/default", { ref: m.ref });
+          $("provResult").textContent = r.error ? ("errore: " + r.error) : ("default: " + m.ref);
+          loadProviders();
+        };
+        const rmdel = document.createElement("button"); rmdel.className = "ghost"; rmdel.textContent = "✕";
+        rmdel.title = "rimuovi modello";
+        rmdel.onclick = async () => {
+          const r = await api("DELETE", "/api/providers/models?provider=" +
+            encodeURIComponent(p.id) + "&model=" + encodeURIComponent(m.id));
+          $("provResult").textContent = r.error ? ("errore: " + r.error) : ("modello rimosso: " + m.id);
+          loadProviders();
+        };
+        ml.append(mid, setdef, rmdel);
+        row.appendChild(ml);
+      });
+      box.appendChild(row);
+    });
+  } catch (e) { $("provSummary").textContent = "errore: " + e; }
+}
+function editProvider(p) {
+  $("provId").value = p.id || "";
+  $("provName").value = p.name || "";
+  $("provKind").value = p.kind || "openai";
+  $("provUrl").value = p.base_url || "";
+  $("provKeyEnv").value = p.key_env || "";
+  $("provLocal").checked = !!p.local;
+  $("provModels").value = (p.models || []).map(m => m.id).join(", ");
+  $("provResult").textContent = "modifica '" + p.id + "' — premi salva provider";
+}
+async function saveProvider() {
+  const id = $("provId").value.trim();
+  if (!id) { $("provResult").textContent = "id obbligatorio"; return; }
+  const body = { id, kind: $("provKind").value, local: $("provLocal").checked };
+  if ($("provName").value.trim()) body.name = $("provName").value.trim();
+  if ($("provUrl").value.trim()) body.base_url = $("provUrl").value.trim();
+  if ($("provKeyEnv").value.trim()) body.api_key_env = $("provKeyEnv").value.trim();
+  const models = $("provModels").value.split(",").map(s => s.trim()).filter(Boolean).map(s => ({ id: s }));
+  if (models.length) body.models = models;
+  const r = await api("POST", "/api/providers", body);
+  $("provResult").textContent = r.error ? ("errore: " + r.error) : ("salvato: " + r.id);
+  if (!r.error) loadProviders();
+}
 function skillsAutocomplete() {
   const inp = $("inp"); if (!inp) return;
   const box = $("slashMenu");
@@ -1260,6 +1374,7 @@ function openPanel(name) {
   else if (name === "approvals") { loadApprovals(); }
   else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); }
   else if (name === "skills") { loadSkills(); }
+  else if (name === "providers") { loadProviders(); }
   else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
@@ -1271,7 +1386,7 @@ function paletteItems() {
     { label: "\uFF0B Nuova sessione", run: () => newSession() },
     { label: "\u21BB Compatta contesto", run: () => compactNow() },
   ];
-  ["graph", "config", "self", "settings", "approvals", "mcp", "skills"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
+  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
   return items;
 }
 function renderPalette(q) {

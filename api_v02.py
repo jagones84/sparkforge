@@ -628,7 +628,7 @@ class LocalApi:
 _LAZY_MODS = {"memory": "_MEMORY", "mcp_client": "_MCP_CLIENT", "subagent": "_SUBAGENT",
               "meta": "_META", "swarm": "_SWARM", "acp": "_ACP",
               "checkpoints": "_CHECKPOINTS", "context_engine": "_CONTEXT",
-              "routing": "_ROUTING"}
+              "routing": "_ROUTING", "providers": "_PROVIDERS"}
 
 
 def _lazy(name):
@@ -937,6 +937,18 @@ def handle(handler, method, path, qs, body):
                                    int(body.get("budget_tokens",
                                                 _CONTEXT.DEFAULT_BUDGET)))
             return _r(handler, 200 if "error" not in res else 404, res)
+        # --- JAG-112: user-editable providers / models -------------------------
+        if path == "/api/providers":
+            res = provider_upsert(body)
+            return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/providers/models":
+            res = provider_add_model(body)
+            return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/providers/default":
+            res = provider_set_default(body)
+            return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/providers/reload":
+            return _r(handler, 200, provider_reload())
         if path == "/api/routing":
             _lazy('routing')
             return _r(handler, 200, _ROUTING.update(body))
@@ -958,6 +970,14 @@ def handle(handler, method, path, qs, body):
             nm = path[len("/api/skills/"):]
             res = skills_mod.remove(nm)
             _publish("skills.remove", name=nm, ok=bool(res.get("ok")))
+            return _r(handler, 200 if res.get("ok") else 400, res)
+
+        # JAG-112: remove a provider / a model.
+        if path == "/api/providers":
+            res = provider_remove(qs.get("id"))
+            return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/providers/models":
+            res = provider_remove_model(qs.get("provider"), qs.get("model"))
             return _r(handler, 200 if res.get("ok") else 400, res)
         return False
     return False
@@ -1001,6 +1021,59 @@ def update_policy(body):
     _publish("tools.update", tool=name, enabled=entry.get("enabled"),
              approval=entry.get("approval"))
     return {"ok": True, "tools": registry.catalog()}
+
+
+def provider_upsert(body):
+    """POST /api/providers — add/update a provider (engine: providers.upsert_provider)."""
+    _lazy('providers')
+    res = _PROVIDERS.upsert_provider(body or {})
+    _publish("providers.update", action="upsert", id=(body or {}).get("id"),
+             ok=bool(res.get("ok")))
+    return res
+
+
+def provider_remove(pid):
+    """DELETE /api/providers?id= — remove or disable a provider."""
+    _lazy('providers')
+    res = _PROVIDERS.remove_provider(pid)
+    _publish("providers.update", action="remove", id=pid, ok=bool(res.get("ok")))
+    return res
+
+
+def provider_add_model(body):
+    """POST /api/providers/models — add a model to a provider."""
+    _lazy('providers')
+    body = body or {}
+    res = _PROVIDERS.add_model(body.get("provider"), body.get("model"),
+                               body.get("context_length"))
+    _publish("providers.update", action="add_model", id=body.get("provider"),
+             model=body.get("model"), ok=bool(res.get("ok")))
+    return res
+
+
+def provider_remove_model(pid, mid):
+    """DELETE /api/providers/models?provider=&model= — remove a model."""
+    _lazy('providers')
+    res = _PROVIDERS.remove_model(pid, mid)
+    _publish("providers.update", action="remove_model", id=pid, model=mid,
+             ok=bool(res.get("ok")))
+    return res
+
+
+def provider_set_default(body):
+    """POST /api/providers/default — set the default model reference."""
+    _lazy('providers')
+    body = body or {}
+    res = _PROVIDERS.set_default(body.get("ref") or body.get("default"))
+    _publish("providers.update", action="default", ok=bool(res.get("ok")))
+    return res
+
+
+def provider_reload():
+    """POST /api/providers/reload — re-read providers + .env (hot reload)."""
+    _lazy('providers')
+    _PROVIDERS.reload()
+    return {"ok": True}
 
 
 def install_skill_raw(data, name=None, overwrite=False):

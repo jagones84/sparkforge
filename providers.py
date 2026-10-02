@@ -21,6 +21,9 @@ import time
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.environ.get("SPARKFORGE_PROVIDERS") or os.path.join(REPO, "config", "providers.yaml")
+# JAG-112: user additions/overrides live in a gitignored overlay (never the repo).
+LOCAL_CONFIG = os.environ.get("SPARKFORGE_PROVIDERS_LOCAL") or \
+    os.path.join(REPO, "config", "providers.local.yaml")
 
 DEFAULTS = {"version": "1", "env_files": [".env", "~/.hermes/.env"],
             "providers": [], "default": None}
@@ -64,34 +67,252 @@ def load_env(reload=False):
 
 # ----------------------------------------------------------------- config -----
 
+_PROVIDER_KINDS = ("llamacpp", "openai", "openrouter", "deepseek", "anthropic", "custom")
+_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+_ENVNAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _read_yaml(path):
+    """Read a small YAML (or JSON) doc; None when missing/invalid (never fatal)."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    try:
+        import yaml
+        data = yaml.safe_load(text)
+    except Exception:  # noqa: BLE001 — fall back to JSON
+        try:
+            data = json.loads(text)
+        except Exception:  # noqa: BLE001
+            return None
+    return data if isinstance(data, dict) else None
+
+
+def _merge(base, local):
+    """Merge the local overlay over the base config (JAG-112).
+
+    Providers match by `id`: local scalars override, model lists are unioned by
+    id, and `disabled: true` on a provider or a model is a tombstone (excluded).
+    A local `default` wins.
+    """
+    out = dict(base or {})
+    order, by_id = [], {}
+    for p in out.get("providers") or []:
+        if isinstance(p, dict) and p.get("id"):
+            by_id[p["id"]] = dict(p)
+            order.append(p["id"])
+    for lp in (local or {}).get("providers") or []:
+        if not isinstance(lp, dict) or not lp.get("id"):
+            continue
+        pid = lp["id"]
+        if pid not in by_id:
+            by_id[pid] = dict(lp)
+            order.append(pid)
+            continue
+        cur = by_id[pid]
+        for k, v in lp.items():
+            if k != "models":
+                cur[k] = v
+        if "models" in lp:
+            m_by, m_order = {}, []
+            for m in cur.get("models") or []:
+                spec = m if isinstance(m, dict) else {"id": str(m)}
+                m_by[spec.get("id")] = dict(spec)
+                m_order.append(spec.get("id"))
+            for lm in lp["models"] or []:
+                spec = dict(lm) if isinstance(lm, dict) else {"id": str(lm)}
+                mid = spec.get("id")
+                if mid in m_by:
+                    m_by[mid].update(spec)
+                else:
+                    m_by[mid] = spec
+                    m_order.append(mid)
+            cur["models"] = [m_by[i] for i in m_order]
+    res = dict(out)
+    res["providers"] = [by_id[i] for i in order if not by_id[i].get("disabled")]
+    if (local or {}).get("default"):
+        res["default"] = local["default"]
+    return res
+
+
 def load(reload=False):
-    """Cached providers config (dict). Falls back to built-in defaults."""
+    """Cached providers config: base merged with the local overlay (JAG-112)."""
     try:
         mt = os.stat(CONFIG).st_mtime
     except OSError:
-        return dict(DEFAULTS)
-    if not reload and _cache["ts"] == mt and _cache["cfg"] is not None:
-        return _cache["cfg"]
-    cfg = None
+        mt = 0
     try:
-        import yaml
-        with open(CONFIG, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        if isinstance(data, dict):
-            cfg = data
-    except Exception:  # noqa: BLE001 — a bad file must not break the harness
-        cfg = None
-    if cfg is None:
+        lmt = os.stat(LOCAL_CONFIG).st_mtime
+    except OSError:
+        lmt = 0
+    stamp = (mt, lmt)
+    if not reload and _cache["ts"] == stamp and _cache["cfg"] is not None:
+        return _cache["cfg"]
+    base = _read_yaml(CONFIG)
+    local = _read_yaml(LOCAL_CONFIG)
+    if base is None and local is None:
         cfg = json.loads(os.environ.get("SPARKFORGE_PROVIDERS_JSON", "{}")) or dict(DEFAULTS)
+    else:
+        cfg = _merge(base or {}, local or {})
     # normalise
     cfg.setdefault("providers", [])
     for p in cfg["providers"]:
         p.setdefault("kind", "openai")
         p.setdefault("local", False)
         p.setdefault("models", [])
-        p["models"] = [m if isinstance(m, dict) else {"id": str(m)} for m in p["models"]]
-    _cache.update(ts=mt, cfg=cfg)
+        p["models"] = [m if isinstance(m, dict) else {"id": str(m)}
+                       for m in p["models"]
+                       if not (isinstance(m, dict) and m.get("disabled"))]
+    _cache.update(ts=stamp, cfg=cfg)
     return cfg
+
+
+# ------------------------------------------------------------ user edits -----
+
+def _local_doc():
+    return _read_yaml(LOCAL_CONFIG) or {"providers": []}
+
+
+def _write_local(doc):
+    """Atomic write of the overlay (never the versioned base file)."""
+    os.makedirs(os.path.dirname(LOCAL_CONFIG), exist_ok=True)
+    tmp = LOCAL_CONFIG + ".tmp"
+    try:
+        import yaml
+        text = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+    except Exception:  # noqa: BLE001
+        text = json.dumps(doc, indent=2, ensure_ascii=False)
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, LOCAL_CONFIG)
+    return LOCAL_CONFIG
+
+
+def _local_provider(doc, pid):
+    for p in doc.setdefault("providers", []):
+        if isinstance(p, dict) and p.get("id") == pid:
+            return p
+    return None
+
+
+def _validate_provider(spec):
+    if not _ID_RE.match((spec.get("id") or "").strip()):
+        return "id non valido (usa [a-z0-9._-])"
+    kind = spec.get("kind") or "openai"
+    if kind not in _PROVIDER_KINDS:
+        return "kind non valido: %s" % kind
+    url = spec.get("base_url")
+    if url and not str(url).startswith(("http://", "https://")):
+        return "base_url deve iniziare con http(s)://"
+    env = spec.get("api_key_env")
+    if env and not _ENVNAME_RE.match(env):
+        return "api_key_env deve essere il NOME della variabile (es. OPENROUTER_API_KEY)"
+    return None
+
+
+def upsert_provider(spec):
+    """Add or update a provider (only `id` is required). Writes the overlay."""
+    spec = dict(spec or {})
+    if not spec.get("models"):
+        spec.pop("models", None)
+    err = _validate_provider(spec)
+    if err:
+        return {"ok": False, "error": err}
+    pid = spec["id"].strip()
+    spec["id"] = pid
+    doc = _local_doc()
+    cur = _local_provider(doc, pid)
+    if cur is None:
+        cur = {"id": pid}
+        doc["providers"].append(cur)
+    cur.pop("disabled", None)
+    for k, v in spec.items():
+        if k == "id":
+            continue
+        cur[k] = [dict(m) for m in v] if k == "models" else v
+    _write_local(doc)
+    _cache.update(ts=None, cfg=None)
+    return {"ok": True, "id": pid, "config": LOCAL_CONFIG}
+
+
+def remove_provider(pid):
+    """Remove a local-only provider, or disable (tombstone) a base one."""
+    doc = _local_doc()
+    cur = _local_provider(doc, pid)
+    in_base = any(isinstance(p, dict) and p.get("id") == pid
+                  for p in ((_read_yaml(CONFIG) or {}).get("providers") or []))
+    if in_base:
+        if cur is None:
+            cur = {"id": pid}
+            doc["providers"].append(cur)
+        cur["disabled"] = True
+    elif cur is not None:
+        doc["providers"] = [p for p in doc["providers"] if p is not cur]
+    _write_local(doc)
+    _cache.update(ts=None, cfg=None)
+    return {"ok": True, "id": pid, "disabled": in_base}
+
+
+def add_model(pid, model_id, context_length=None):
+    mid = (model_id or "").strip()
+    if not mid:
+        return {"ok": False, "error": "model id richiesto"}
+    doc = _local_doc()
+    cur = _local_provider(doc, pid)
+    if cur is None:
+        cur = {"id": pid, "models": []}
+        doc["providers"].append(cur)
+    cur.setdefault("models", [])
+    cur["models"] = [m for m in cur["models"]
+                     if (m.get("id") if isinstance(m, dict) else m) != mid]
+    entry = {"id": mid}
+    if context_length:
+        entry["context_length"] = int(context_length)
+    cur["models"].append(entry)
+    _write_local(doc)
+    _cache.update(ts=None, cfg=None)
+    return {"ok": True, "id": pid, "model": mid}
+
+
+def remove_model(pid, model_id):
+    mid = (model_id or "").strip()
+    doc = _local_doc()
+    cur = _local_provider(doc, pid)
+    base_p = next((p for p in ((_read_yaml(CONFIG) or {}).get("providers") or [])
+                   if isinstance(p, dict) and p.get("id") == pid), None)
+    in_base = bool(base_p and any((m.get("id") if isinstance(m, dict) else m) == mid
+                                  for m in (base_p.get("models") or [])))
+    if cur is None:
+        cur = {"id": pid, "models": []}
+        doc["providers"].append(cur)
+    cur.setdefault("models", [])
+    cur["models"] = [m for m in cur["models"]
+                     if (m.get("id") if isinstance(m, dict) else m) != mid]
+    if in_base:
+        cur["models"].append({"id": mid, "disabled": True})
+    _write_local(doc)
+    _cache.update(ts=None, cfg=None)
+    return {"ok": True, "id": pid, "model": mid}
+
+
+def set_default(ref):
+    ref = (ref or "").strip()
+    if not ref:
+        return {"ok": False, "error": "ref richiesto"}
+    doc = _local_doc()
+    doc["default"] = ref
+    _write_local(doc)
+    _cache.update(ts=None, cfg=None)
+    return {"ok": True, "default": ref}
+
+
+def reload():
+    """Drop caches and re-read providers config + .env (hot reload)."""
+    load_env(reload=True)
+    _cache.update(ts=None, cfg=None)
+    return load(reload=True)
 
 
 def providers():

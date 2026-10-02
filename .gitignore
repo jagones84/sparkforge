@@ -24,4 +24,7 @@ config/mcp_clients.local.json
 # JAG-109: user-installed skills (zip upload) — never in the repo.
 skills/local/
 
+# JAG-112: user-added/overridden providers land here (never the tracked base).
+config/providers.local.yaml
+
 .superpowers/
