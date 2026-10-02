@@ -351,6 +351,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
     # app"). We carry assistant actions + observations across the whole run.
     hist = []
     rb = srv.rules_context(ws=workspace)  # JAG-114/115: standing rules for this run
+    import prompt as prompt_mod  # JAG-128A: prompt-map + capability in the agent loop too
     try:
         for i in range(max_steps):
             checkpoint(st)
@@ -363,7 +364,8 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                 on_event("agent.thought", run=st.id, i=i + 1, thought=thought,
                          action=action, scripted=True)
             else:
-                sysp = (srv.SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT_V2 + "\n\n"
+                sysp = (prompt_mod.prompt_map_text() + "\n\n" + prompt_mod.capability_text()
+                        + "\n\n" + srv.SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT_V2 + "\n\n"
                         + srv.RULES_POLICY + ("\n" + rb if rb else "") + "\n\n"
                         + tool_context() + "\n\nHarness state (your persistent task list):\n"
                         + srv.context_summary(graph_key=st.id))

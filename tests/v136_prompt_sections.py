@@ -73,11 +73,14 @@ check("D11 default is NOT removed (additive)",
       "Capability questions" in out2, "")
 
 import server  # noqa: E402
-sp = server._system_prompt({"id": "sX"})
-check("D12 _system_prompt delegates to render_sections",
-      "prompt map" in sp and "Tool registry" in sp, "")
-
 import rules  # noqa: E402
+_sess = {"id": "eqX"}
+with mock.patch.object(server, "context_summary", lambda **k: "STATE_FIXED"):
+    _a = server._system_prompt(_sess, tool_ctx="TC_FIXED")
+    _b = prompt.render_sections(_sess, ws=rules.resolve_workspace(_sess), tool_ctx="TC_FIXED")
+check("D12 _system_prompt == render_sections (equality)", _a == _b,
+      "%d vs %d" % (len(_a), len(_b)))
+
 wsdir = tempfile.mkdtemp()
 os.makedirs(os.path.join(wsdir, ".sparkforge"), exist_ok=True)
 with open(os.path.join(wsdir, ".sparkforge", "RULES.md"), "w", encoding="utf-8") as f:
@@ -87,6 +90,12 @@ with open(os.path.join(wsdir, "AGENTS.md"), "w", encoding="utf-8") as f:
 blk = rules.rules_prompt_block(ws=wsdir)
 check("E1 RULES.md read", "RULES_SENTINEL" in blk, "")
 check("E2 AGENTS.md is ALSO read (additive, not excluded)", "AGENTS_SENTINEL" in blk, "")
+
+srv_src = read(os.path.join(REPO, "server.py"))
+api_src = read(os.path.join(REPO, "api_v02.py"))
+check("D13 agent loop injects prompt map + capability",
+      "prompt_map_text()" in srv_src and "capability_text()" in srv_src
+      and "prompt_map_text()" in api_src and "capability_text()" in api_src, "")
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))

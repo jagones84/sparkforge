@@ -2259,10 +2259,12 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_stat
     actions = []
     aborted = False
     rb = rules_context(ws=workspace)  # JAG-114/115: the agent loop honours the same rules
+    import prompt as prompt_mod  # JAG-128A: prompt-map + capability in the agent loop too
     try:
         for i in range(max_steps):
             api_v02.checkpoint(st)  # JAG-111: honour pause / abort between steps
-            sys = (SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT
+            sys = (prompt_mod.prompt_map_text() + "\n\n" + prompt_mod.capability_text()
+                   + "\n\n" + SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT
                    + "\n\n" + RULES_POLICY + ("\n" + rb if rb else "")
                    + "\n\nHarness state (your persistent task list):\n"
                    + context_summary(graph_key=trace.id))

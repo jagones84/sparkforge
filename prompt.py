@@ -64,6 +64,16 @@ def _manifest_text():
     )
 
 
+def prompt_map_text():
+    """Public wrapper: the prompt-map (manifest) section text."""
+    return _manifest_text()
+
+
+def capability_text():
+    """Public wrapper: the capability rule section text."""
+    return CAPABILITY_RULE
+
+
 def project_ddir(ws):
     return os.path.join(ws or "", ".sparkforge", "prompt.d")
 
