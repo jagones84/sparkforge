@@ -73,11 +73,17 @@
   .sess .del:hover { opacity: 1; background: rgba(248,113,113,.12); }
 
   /* context meter */
-  .meter { height: 8px; border-radius: 999px; background: rgba(120,140,255,.12); overflow: hidden; margin: 8px 0 4px; }
-  .meter > i { display: block; height: 100%; border-radius: 999px;
+  .meter { height: 14px; border-radius: 999px; background: rgba(120,140,255,.12);
+    overflow: hidden; margin: 6px 0 8px; box-shadow: inset 0 0 0 1px var(--line); }
+  .meter > i { display: block; height: 100%; border-radius: 999px; min-width: 6px;
     background: linear-gradient(90deg, var(--acc), var(--acc2)); transition: width .4s ease; }
   .meter > i.hot { background: linear-gradient(90deg, var(--warn), var(--err)); }
   .meter > i.near { background: linear-gradient(90deg, var(--warn), var(--acc2)); }
+  .ctxbig { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .ctxpct { font-size: 24px; font-weight: 800; letter-spacing: -.5px; color: var(--txt); font-variant-numeric: tabular-nums; }
+  .ctxstate { font-size: 11px; color: var(--dim); }
+  .ctxstate.near { color: var(--warn); }
+  .ctxstate.over { color: var(--err); }
   .ctxrow { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
 
   /* approvals */
@@ -286,8 +292,9 @@
         </div>
         <h2>Context</h2>
         <div class="card">
+          <div class="ctxbig"><span id="ctxPct" class="ctxpct">–</span><span id="ctxState" class="ctxstate">–</span></div>
+          <div class="meter"><i id="ctxBar" style="width:0%;min-width:0"></i></div>
           <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
-          <div class="meter"><i id="ctxBar" style="width:0%"></i></div>
           <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
         </div>
         <h2>Feed</h2>
@@ -609,12 +616,14 @@ function splitThinkTail(content) {
 function ctxNa(reason) {
   // v1.6.3 (JAG-55): no session (or a session the server cannot measure) → the
   // indicator must read n/d, never a fake "budget 6000 / 0 messages".
+  $("ctxPct").textContent = "–";
+  $("ctxState").textContent = reason || "n/d"; $("ctxState").className = "ctxstate";
   $("ctxTok").textContent = "n/d";
   $("ctxMsgs").textContent = reason || "nessuna sessione";
   $("ctxBudget").textContent = "n/d";
   $("ctxBudget").className = "";
   $("ctxBudget").style.color = "var(--dim)";
-  $("ctxBar").style.width = "0%"; $("ctxBar").className = "";
+  $("ctxBar").style.width = "0%"; $("ctxBar").style.minWidth = "0px"; $("ctxBar").className = "";
   $("ctx-meter").textContent = "ctx: n/d"; $("ctx-meter").className = "pill";
 }
 async function loadCtx() {
@@ -628,11 +637,17 @@ async function loadCtx() {
     if (c.available === false) { ctxNa("sessione non trovata"); return; }
     const d = c.display || {};
     const state = d.state || "na";
+    $("ctxPct").textContent = (d.pct != null ? d.pct : 0) + "%";
     $("ctxTok").textContent = d.tokens || "n/d";
     $("ctxMsgs").textContent = d.messages || "n/d";
     $("ctxBudget").textContent = d.budget || "n/d";
     $("ctxBudget").style.color = state === "over" ? "var(--err)" : "var(--dim)";
+    const st = $("ctxState");
+    st.textContent = state === "over" ? "sopra soglia"
+      : state === "near" ? "vicino soglia" : "normale";
+    st.className = "ctxstate " + state;
     const bar = $("ctxBar"); bar.style.width = (d.bar_pct != null ? d.bar_pct : 0) + "%";
+    bar.style.minWidth = (d.bar_pct > 0 ? 6 : 0) + "px";
     bar.className = d.bar_hot ? "hot" : (state === "near" ? "near" : "");
     const pill = $("ctx-meter");
     pill.textContent = d.short || d.meter || "ctx: n/d";
@@ -647,7 +662,8 @@ async function compactNow() {
   const r = await api("POST", "/api/context/compact", { session: sessionId });
   btn.textContent = "🗜 compact";
   if (r.error) { alert(r.error); return; }
-  who("ai", `🗜 compacted: ${r.input_messages} → ${r.input_messages - r.compacted} messages (${r.compacted} compacted, ${r.tokens_after} tok after)`);
+  const kind = r.summary === "llm" ? ("llm:" + (r.summarizer || "?")) : (r.summary || "—");
+  who("ai", `🗜 compacted: ${r.input_messages} → ${r.input_messages - r.compacted} messages (${r.compacted} compacted · ${kind} · ${r.tokens_after} tok after)`);
   $("log").innerHTML = ""; loadHistory(); loadCtx();
 }
 
@@ -938,7 +954,8 @@ function connectFeed() {
   es.addEventListener("tasks.breakdown", e => { const d = JSON.parse(e.data);
     push("✅ todo breakdown: " + (d.tasks || []).length + " tasks"); loadGraphSoon(); });
   es.addEventListener("context.compact", e => { const d = JSON.parse(e.data);
-    push(`🗜 compact: ${d.compacted} msgs compacted, ${d.tokens_after} tok`); loadCtx(); });
+    const kind = d.summary === "llm" ? ("llm:" + (d.summarizer || "?")) : (d.summary || "—");
+    push(`🗜 compact: ${d.compacted} msgs · ${kind} · ${d.tokens_after} tok`); loadCtx(); });
   es.addEventListener("context.built", e => { const d = JSON.parse(e.data);
     push(`📊 context: ${d.final_tokens}/${d.budget_tokens} tok`); loadCtxSoon(); });
   es.addEventListener("session.created", e => { const d = JSON.parse(e.data); push("🗂 session created"); loadSessions(); });
