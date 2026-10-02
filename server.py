@@ -1681,8 +1681,19 @@ def _apply_skill_slash(message):
     if not sk:
         return message
     body = (sk.get("content") or "")[:20000]
-    return ("SKILL ACTIVATION — '%s' (follow these instructions for this turn)\n\n"
-            "%s\n\n---\nUSER: %s" % (token, body, rest.strip()))
+    rel = sk.get("path") or ""
+    skill_dir = (os.path.dirname(os.path.abspath(os.path.join(REPO, rel)))
+                 if rel else "")
+    hint = ""
+    if skill_dir:
+        hint = (
+            "SKILL_DIR (absolute path of this skill \u2014 use it as the skill ROOT; "
+            "replace ${CLAUDE_SKILL_DIR} / ${SKILL_DIR} / $SKILL_DIR with it, and "
+            "resolve every relative path in the instructions below against it). "
+            "DO NOT search the filesystem for the script: it is right here.\n"
+            "SKILL_DIR: %s\n\n" % skill_dir)
+    return ("SKILL ACTIVATION \u2014 '%s' (follow these instructions for this turn)\n\n"
+            "%s%s\n\n---\nUSER: %s" % (token, hint, body, rest.strip()))
 
 
 def assemble_turn(sess, message, tool_ctx=None, model=None, autonomous=False):
