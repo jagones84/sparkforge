@@ -82,8 +82,8 @@ check("A1 api helpers present",
 sid = "sesswstest"
 server.get_or_create_session(sid, "t")
 sess = server.load_session(sid)
-check("A2 new session has no pinned workspace",
-      not sess.get("workspace"), str(sess.get("workspace")))
+check("A2 new session is pinned to the default folder",
+      sess.get("workspace") == A, str(sess.get("workspace")))
 
 r = api_v02.workspace_set({"session": sid, "path": B})
 check("A3 workspace_set(session) ok", r.get("ok") is True, str(r))

@@ -234,13 +234,50 @@ def list_sessions():
     return sorted(out, key=lambda s: s.get("updated") or 0, reverse=True)
 
 
-def get_or_create_session(sid, title=None):
+def ensure_session_workspace(sess, workspace=None):
+    """JAG-117: every session is linked to a folder.
+
+    Precedence: the explicit `workspace` argument, else the session's existing
+    folder, else the global default. Returns True when it changed `sess`.
+    """
+    try:
+        import rules as rules_mod
+        want = rules_mod.check_dir(workspace) or sess.get("workspace") or rules_mod.get_workspace()
+    except Exception:  # noqa: BLE001 — never break session loading
+        want = workspace or sess.get("workspace") or REPO
+    if want and sess.get("workspace") != want:
+        sess["workspace"] = want
+        return True
+    return False
+
+
+def backfill_session_workspaces():
+    """JAG-117: pin a folder on any stored session that has none yet."""
+    n = 0
+    try:
+        for fn in sorted(os.listdir(SESSIONS_DIR)):
+            if not fn.endswith(".json"):
+                continue
+            s = _read_json(os.path.join(SESSIONS_DIR, fn), None)
+            if s and ensure_session_workspace(s):
+                save_session(s)
+                n += 1
+    except FileNotFoundError:
+        pass
+    return n
+
+
+def get_or_create_session(sid, title=None, workspace=None):
     if sid:
         s = load_session(sid)
         if s:
+            if ensure_session_workspace(s, workspace):
+                save_session(s)
             return s
     sid = sid or uuid.uuid4().hex[:12]
-    s = {"id": sid, "title": title or "session " + sid[:6], "created": round(time.time(), 3), "messages": []}
+    s = {"id": sid, "title": title or "session " + sid[:6],
+         "created": round(time.time(), 3), "messages": []}
+    ensure_session_workspace(s, workspace)
     save_session(s)
     return s
 
@@ -1457,7 +1494,8 @@ def _apply_chat_todos(sess, act, on_event):
         todos = act.get("todos")
         if isinstance(todos, str):
             todos, _ = taskgraph.parse_todos(todos)
-        on_event("tool.call", session=sess["id"], tool="write_todos", args={},
+        todo_args = {"todos": todos if isinstance(todos, list) else []}
+        on_event("tool.call", session=sess["id"], tool="write_todos", args=todo_args,
                  inline=True)
         base = len(graph.get("nodes", []))
         added = taskgraph.apply_write_todos(
@@ -1468,8 +1506,12 @@ def _apply_chat_todos(sess, act, on_event):
         for i, node in enumerate(added):
             on_event("graph.node.added", session=sess["id"], node=node,
                      index=base + i, total=total)
+        # JAG-116: the card must show in AND out, not an empty body.
+        out = "\n".join("- [%s] %s" % (n.get("status", "open"), n.get("label", ""))
+                        for n in graph.get("nodes", []))
         on_event("tool.result", session=sess["id"], tool="write_todos", ok=True,
-                 exit_code=0, backend="harness",
+                 exit_code=0, backend="harness", args=todo_args,
+                 output=out[:2000] or ("+%d node(s)" % len(added)),
                  summary="task list: %d node(s), +%d" % (total, len(added)))
         return len(added)
     except Exception as e:  # noqa: BLE001 — the task list must never break chat
@@ -1514,7 +1556,8 @@ def _apply_chat_todo_updates(sess, act, on_event):
             steps = [steps]
         if not isinstance(steps, list):
             steps = []
-        on_event("tool.call", session=sess["id"], tool="update_todos", args={}, inline=True)
+        on_event("tool.call", session=sess["id"], tool="update_todos",
+                 args={"steps": steps}, inline=True)
         changed = []
         for step in steps:
             if not isinstance(step, dict):
@@ -1541,7 +1584,9 @@ def _apply_chat_todo_updates(sess, act, on_event):
                      index=graph["nodes"].index(node), total=len(graph["nodes"]),
                      changes=["status"])
         on_event("tool.result", session=sess["id"], tool="update_todos", ok=True,
-                 exit_code=0, backend="harness",
+                 exit_code=0, backend="harness", args={"steps": steps},
+                 output="\n".join("- [%s] %s" % (n.get("status", "open"), n.get("label", ""))
+                                  for n in changed)[:2000] or "nessun passo modificato",
                  summary="task list: %d/%d step(s) updated"
                          % (len(changed), len([s for s in steps if isinstance(s, dict)])))
         return len(changed)
@@ -3043,7 +3088,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sessions":
             return self._send(200, {"sessions": list_sessions()})
         if path == "/api/sessions/new":
-            sess = get_or_create_session(None, qs.get("title"))
+            sess = get_or_create_session(None, qs.get("title"), qs.get("workspace"))
             publish("session.created", session=sess["id"], title=sess["title"])
             return self._send(200, sess)
         if path == "/api/history":
@@ -3335,6 +3380,7 @@ def main():
         providers.warm()  # JAG-72: fetch remote model windows off the request path
     except Exception:  # noqa: BLE001 — provider metadata is optional
         pass
+    backfill_session_workspaces()  # JAG-117: every session gets a folder
     publish("service.start", host=args.host, port=args.port, router=ROUTER_BASE)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.host, server.port = args.host, args.port

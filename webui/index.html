@@ -35,7 +35,11 @@
   .pill.ok { color: var(--ok); border-color: rgba(74,222,128,.35); }
   .pill.warn { color: var(--warn); border-color: rgba(251,191,36,.4); }
   /* JAG-113: custom model picker (no native <select>) */
-  .model-btn { cursor: pointer; }
+  /* JAG-116: the selector must be legible — not the dim .pill default */
+  .model-btn { cursor: pointer; color: var(--txt); font-weight: 600; max-width: 340px;
+    overflow: hidden; text-overflow: ellipsis; border-color: rgba(108,140,255,.5);
+    background: rgba(108,140,255,.12); }
+  .model-btn:hover { background: rgba(108,140,255,.2); }
   .model-btn .mc { color: var(--dim); margin-left: 2px; }
   #modelMenu { position: fixed; top: 47px; right: 12px; width: 360px; max-height: 62vh; overflow-y: auto; z-index: 30;
     padding: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
@@ -110,7 +114,14 @@
   .feed-dot.off { background: var(--dim); box-shadow: none; }
 
   /* ---------------- chat ---------------- */
-  #chat { display: flex; flex-direction: column; min-height: 0; }
+  #chat { display: flex; flex-direction: column; min-height: 0; position: relative; }
+  /* JAG-116: "jump to bottom" — appears only when the reader scrolled up */
+  #jumpBtn { position: absolute; right: 22px; bottom: 96px; z-index: 6; width: 34px; height: 34px;
+    padding: 0; border-radius: 999px; font-size: 16px; line-height: 1; color: var(--txt);
+    background: var(--panel2); border: 1px solid rgba(108,140,255,.5);
+    box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+  #jumpBtn[hidden] { display: none; }
+  #jumpBtn:hover { background: rgba(108,140,255,.2); }
   #log { flex: 1; overflow-y: auto; padding: 22px 26px; scroll-behavior: smooth; }
   .msg { margin-bottom: 14px; max-width: 860px; }
   .msg .who { font-size: 10px; letter-spacing: .14em; color: var(--dim); margin-bottom: 4px; }
@@ -194,6 +205,12 @@
   .thinking { color: var(--info); }
   #palette { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.5); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
   #palette[hidden] { display: none; }
+  /* JAG-117: new-session dialog asks which local folder to open */
+  #nsBackdrop { position: fixed; inset: 0; z-index: 39; background: rgba(0,0,0,.5); }
+  #nsBackdrop[hidden] { display: none; }
+  #newSessDlg { position: fixed; z-index: 40; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: min(460px, 92vw); padding: 16px; }
+  #newSessDlg[hidden] { display: none; }
   .pal-item { cursor: pointer; }
   .pal-item:hover { background: rgba(108,140,255,.1); }
   /* v0.8.1 resizable columns + panel toggles */
@@ -250,6 +267,7 @@
   <div class="resizer" id="resize-left" title="trascina per ridimensionare"></div>
   <div id="chat" data-col="chat">
     <div id="log"></div>
+    <button id="jumpBtn" hidden title="vai all'ultimo messaggio" aria-label="vai all'ultimo messaggio">↓</button>
     <div id="cotDrawer">
       <div class="hd"><span class="thinking">🧠 Chain-of-Thought (live)</span><button class="ghost" style="padding:3px 10px;font-size:10px" onclick="$('cotDrawer').querySelector('.t').textContent='';cotText=''">clear</button></div>
       <div class="t thinking"></div>
@@ -461,6 +479,20 @@
     <ul id="palette-results" style="list-style:none;padding:8px 0 0;margin:0"></ul>
   </div>
 </div>
+<div id="nsBackdrop" hidden onclick="closeNewSess()"></div>
+<div id="newSessDlg" class="card" hidden>
+  <h2 style="margin:0 0 10px">Nuova sessione</h2>
+  <label class="remaining" for="nsTitle">titolo</label>
+  <input id="nsTitle" class="inp" style="width:100%;padding:6px 10px;font-size:12px;margin-top:4px">
+  <label class="remaining" for="nsWs" style="display:block;margin-top:10px">cartella (workspace locale)</label>
+  <input id="nsWs" class="inp" placeholder="/home/jagones/Repositories/…" style="width:100%;padding:6px 10px;font-size:12px;margin-top:4px">
+  <div class="remaining" style="margin-top:4px">la sessione sarà legata a questa cartella (regole di progetto, tool, git)</div>
+  <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+    <button class="ghost" onclick="closeNewSess()">annulla</button>
+    <button class="ghost" onclick="createNewSession()">crea</button>
+  </div>
+  <div id="nsResult" class="remaining" style="margin-top:8px"></div>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 let sessionId = localStorage.getItem("sf_session") || null;
@@ -487,7 +519,15 @@ async function ensureToken() {
 function authQS() { return TOKEN ? "token=" + encodeURIComponent(TOKEN) : ""; }
 function authHeaders() { return TOKEN ? {"Authorization": "Bearer " + TOKEN} : {}; }
 
-function scroll() { const l = $("log"); l.scrollTop = l.scrollHeight; }
+/* JAG-116: never yank the reader to the bottom mid-stream — auto-scroll only when
+   already at the bottom; a floating arrow returns there on demand. */
+let _stick = true;
+function _nearBottom() { const l = $("log"); return !l || (l.scrollHeight - l.scrollTop - l.clientHeight) < 48; }
+function updateJump() {
+  const b = $("jumpBtn"), l = $("log"); if (!b || !l) return;
+  b.hidden = !(l.scrollHeight - l.clientHeight > 80 && !_nearBottom());
+}
+function scroll() { const l = $("log"); if (l && _stick) l.scrollTop = l.scrollHeight; updateJump(); }
 function copyText(btn, text) {
   const done = () => { btn.textContent = "✓"; setTimeout(() => btn.textContent = "⧉", 1200); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -639,16 +679,31 @@ async function loadSessions() {
   });
   if (!(out.sessions || []).length) box.innerHTML = '<div class="remaining">no sessions yet</div>';
 }
+/* JAG-117: creating a session asks which local folder to open it in. */
 async function newSession() {
-  const title = $("sessInp").value.trim() || ("session " + new Date().toLocaleTimeString());
+  $("nsTitle").value = $("sessInp").value.trim() || ("session " + new Date().toLocaleTimeString());
+  $("nsResult").textContent = "";
+  try { const w = await api("GET", "/api/workspace"); $("nsWs").value = w.default || w.workspace || ""; }
+  catch (e) { $("nsWs").value = ""; }
+  $("newSessDlg").hidden = false; $("nsBackdrop").hidden = false; $("nsTitle").focus();
+}
+function closeNewSess() { $("newSessDlg").hidden = true; $("nsBackdrop").hidden = true; }
+async function createNewSession() {
+  const title = $("nsTitle").value.trim() || ("session " + new Date().toLocaleTimeString());
+  const p = new URLSearchParams(); p.set("title", title);
+  const ws = $("nsWs").value.trim();
+  if (ws) p.set("workspace", ws);
+  if (TOKEN) p.set("token", TOKEN);
+  const s = await api("GET", "/api/sessions/new?" + p.toString());
+  if (s.error) { $("nsResult").textContent = "errore: " + s.error; return; }
   $("sessInp").value = "";
-  const s = await api("GET", "/api/sessions/new?title=" + encodeURIComponent(title) + (authQS() ? "&" + authQS() : ""));
   sessionId = s.id; localStorage.setItem("sf_session", sessionId);
   $("log").innerHTML = ""; curThink = curAns = null;
-  loadSessions(); loadCtx(); closeAside();
+  closeNewSess(); loadSessions(); loadHistory(); loadRules(); loadCtx(); closeAside();
 }
 async function loadHistory() {
   if (!sessionId) return;
+  _stick = true;  // JAG-116: opening a session always lands at the latest message
   const s = await api("GET", "/api/history?session=" + encodeURIComponent(sessionId));
   // JAG-96: rebuild the inline tool cards persisted by the harness, interleaved
   // at the position (`after` = messages already sent) where each call happened.
@@ -1590,10 +1645,14 @@ $("session-search").addEventListener("input", loadSessions);
 $("hide-empty").addEventListener("change", loadSessions);
 addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); openPalette(); }
-  if (e.key === "Escape") closePalette();
+  if (e.key === "Escape") { closePalette(); closeNewSess(); }
 });
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 $("inp").addEventListener("input", skillsAutocomplete);
+/* JAG-116: track whether the reader is pinned to the bottom + the jump arrow */
+$("log").addEventListener("scroll", () => { _stick = _nearBottom(); updateJump(); });
+$("jumpBtn").onclick = () => { _stick = true; const l = $("log"); l.scrollTop = l.scrollHeight; updateJump(); };
+["nsTitle", "nsWs"].forEach(id => { const el = $(id); if (el) el.addEventListener("keydown", e => { if (e.key === "Enter") createNewSession(); }); });
 $("inp").addEventListener("keydown", e => {
   if (e.key === "Escape" && $("slashMenu")) $("slashMenu").hidden = true;
 });

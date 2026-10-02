@@ -54,8 +54,11 @@ def get_workspace():
 
 def check_dir(path):
     """Normalise + validate an existing directory; returns the abs path or None."""
-    path = os.path.abspath(os.path.expanduser((path or "").strip()))
-    return path if path and os.path.isdir(path) else None
+    raw = (path or "").strip()
+    if not raw:
+        return None
+    p = os.path.abspath(os.path.expanduser(raw))
+    return p if os.path.isdir(p) else None
 
 
 def resolve_workspace(sess=None):
