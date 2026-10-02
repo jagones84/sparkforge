@@ -1435,6 +1435,45 @@ def maybe_reflect(sess, message, answer, used_tools, model=None):
         return None
 
 
+def assemble_turn(sess, message, tool_ctx=None, model=None, autonomous=False):
+    """Assemble the exact message list SENT to the router for one chat turn.
+
+    JAG-100: the caller has ALREADY appended the `user` turn to the session
+    (JAG-51 contract), so we drop that stored copy and let `context_engine.build`
+    append the (possibly autonomous-augmented) message exactly ONCE. Before this
+    fix the same message was sent twice: harmless for a short prompt, but it
+    DOUBLED a large pasted message (a 34.5k-token block reached the model as
+    ~72k = 2x block + system). Returns (msgs, ctx_stats); ctx_stats is None when
+    the context engine is unavailable (plain fallback).
+    """
+    if tool_ctx is None:
+        tool_ctx = _tool_context()
+    sys = _system_prompt(sess, tool_ctx)
+    eff_message = message
+    if autonomous:
+        eff_message = (
+            "AUTONOMOUS GOAL MODE — accomplish the goal below end to end without "
+            "asking for confirmation. FIRST emit write_todos with 2-8 steps, then "
+            "execute them one by one with tools, marking each 'doing' and then "
+            "'done' with evidence, then finish with a short plain-text summary."
+            "\n\nGOAL: " + str(message))
+    # JAG-100: drop the just-stored user turn so it is never sent twice.
+    transcript = list(sess.get("messages", []))
+    if transcript and transcript[-1].get("role") == "user":
+        transcript = transcript[:-1]
+    try:
+        import context_engine
+        msgs, ctx_stats = context_engine.build(
+            sys, transcript, eff_message, budget_tokens=context_budget(model))
+        return msgs, ctx_stats
+    except Exception:  # noqa: BLE001 — never block a turn on the context engine
+        msgs = [{"role": "system", "content": sys}]
+        msgs += [{"role": m["role"], "content": m["content"]}
+                 for m in transcript[-20:]]
+        msgs.append({"role": "user", "content": eff_message})
+        return msgs, None
+
+
 def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=None,
               autonomous=False):
     """Run one streamed router call and persist exactly one assistant message.
@@ -1455,38 +1494,17 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     # JAG-58b: the chat IS the agent — same tool registry as the agent loop, so
     # the model can call tools inline before it answers. Falls back to plain chat
     # if the tool registry is unavailable.
-    # JAG-70: one shared assembler (`_system_prompt`) is used here AND by the
-    # context indicator, so the measured prompt size cannot drift from reality.
+    # JAG-70/JAG-100: one shared assembler builds the EXACT prompt sent here and
+    # measured by the context indicator, so the number cannot drift from reality.
     tool_ctx = _tool_context()
-    sys = _system_prompt(sess, tool_ctx)
-    # v0.3 context engineering: compaction + token budget + memory retrieval
-    # JAG-78: `/goal` runs the SAME chat loop in AUTONOMOUS mode — the model must
-    # plan (write_todos), then execute the plan step by step with tools, without
-    # stopping to ask. The directive is added to the prompt ONLY; the stored user
-    # turn stays the clean goal text.
-    eff_message = message
-    if autonomous:
-        eff_message = (
-            "AUTONOMOUS GOAL MODE — accomplish the goal below end to end without "
-            "asking for confirmation. FIRST emit write_todos with 2-8 steps, then "
-            "execute them one by one with tools, marking each 'doing' and then "
-            "'done' with evidence, then finish with a short plain-text summary."
-            "\n\nGOAL: " + str(message))
-    try:
-        import context_engine
-        msgs, ctx_stats = context_engine.build(
-            sys, sess["messages"], eff_message, budget_tokens=context_budget(model))
+    msgs, ctx_stats = assemble_turn(sess, message, tool_ctx, model, autonomous)
+    if ctx_stats:
         # JAG-78: `on_event` (not `publish`), so the chat STREAM carries the live
         # prompt size and the app's ctx meter updates during the turn.
         on_event("context.built", session=sess["id"], **{
             k: v for k, v in ctx_stats.items() if k in (
                 "budget_tokens", "retrieved_memories", "final_messages",
                 "final_tokens")})
-    except Exception:
-        msgs = [{"role": "system", "content": sys}]
-        msgs += [{"role": m["role"], "content": m["content"]} for m in sess["messages"][-20:]]
-        msgs.append({"role": "user", "content": message})
-        ctx_stats = None
     model = model or default_model()
     # JAG-58b: tool-aware chat loop. The model may answer directly, or ask for a
     # tool; the tool runs through the same approval gate as the agent loop and
