@@ -62,6 +62,21 @@ check("D1 additive overlays for same section concatenate in order",
       "OVERLAY_ONE" in overlaid and "OVERLAY_TWO" in overlaid
       and overlaid.index("OVERLAY_ONE") < overlaid.index("OVERLAY_TWO"), "")
 
+tmp = tempfile.mkdtemp()
+os.makedirs(os.path.join(tmp, ".sparkforge", "prompt.d"), exist_ok=True)
+with open(os.path.join(tmp, ".sparkforge", "prompt.d", "70-capability.md"),
+          "w", encoding="utf-8") as f:
+    f.write("PROJECT_OVERLAY_SENTINEL")
+out2 = prompt.render_sections(None, ws=tmp)
+check("D10 overlay file is appended", "PROJECT_OVERLAY_SENTINEL" in out2, "")
+check("D11 default is NOT removed (additive)",
+      "Capability questions" in out2, "")
+
+import server  # noqa: E402
+sp = server._system_prompt({"id": "sX"})
+check("D12 _system_prompt delegates to render_sections",
+      "prompt map" in sp and "Tool registry" in sp, "")
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)
