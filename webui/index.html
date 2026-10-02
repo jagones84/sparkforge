@@ -1420,8 +1420,14 @@ function planStopped(d) {
 }
 function taskTree(nodes) {
   // checklist annidata: i figli (parent) sono indentati sotto il padre (stile TRAE).
+  // Gli orfani (parent inesistente) e i possibili cicli non devono sparire:
+  // vanno parcheggiati alla radice e renderizzati una sola volta.
+  const ids = new Set((nodes || []).map(n => n.id));
   const byParent = {};
-  (nodes || []).forEach(n => { const p = n.parent || "_root"; (byParent[p] ||= []).push(n); });
+  (nodes || []).forEach(n => {
+    const p = (n.parent && ids.has(n.parent)) ? n.parent : "_root";
+    (byParent[p] ||= []).push(n);
+  });
   const mark = { todo: "☐", doing: "◐", done: "☑", blocked: "⛔", cancelled: "⊘" };
   const one = (n, depth) => {
     const deps = (n.deps || []).length ? ` <span class="dep">⤷ ${n.deps.join(", ")}</span>` : "";
@@ -1429,7 +1435,12 @@ function taskTree(nodes) {
     return `<div class="task" data-id="${_attr(n.id)}" style="margin-left:${depth * 14}px">` +
       `<span class="st ${n.status}">${n.status}</span><span>${mark[n.status] || "☐"} ${esc(n.label)}</span>${deps}${ev}</div>`;
   };
-  const walk = (p, depth) => (byParent[p] || []).map(n => one(n, depth) + walk(n.id, depth + 1)).join("");
+  const seen = new Set();
+  const walk = (p, depth) => (byParent[p] || []).map(n => {
+    if (seen.has(n.id)) return "";
+    seen.add(n.id);
+    return one(n, depth) + walk(n.id, depth + 1);
+  }).join("");
   return walk("_root", 0);
 }
 /* JAG-128B: la proposta di self-improvement arriva come evento SSE e resta

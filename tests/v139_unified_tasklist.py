@@ -32,6 +32,8 @@ check("B5 chat SSE wires plan.stopped to planStopped",
 check("B6 nested renderer is actually wired",
       bool(_re.search(r"taskTree\s*\(", web)) and "function taskTree" in web
       and web.count("taskTree(") >= 2, "")
+check("B7 taskTree parks orphans under root and guards cycles",
+      "ids.has(n.parent)" in web and "seen.has(" in web, "")
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
