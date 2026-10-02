@@ -89,12 +89,21 @@ R.set_workspace(WS2)
 check("R6 switching workspace switches project rules",
       "PROJECT-AGENTS-COMPAT" in R.collect()["project"]["text"], "")
 
-# ---- R7: empty -> empty block, no crash -----------------------------------
+# ---- R7: additive AGENTS.md; only no files at all -> empty block ----------
+# ADDITIVE contract (spec JAG-128A): a present-but-empty RULES.md no longer
+# excludes the same scope's AGENTS.md, so the block must still carry its text.
 R.save("global", "")
 WS3 = os.path.join(tmp, "proj3")
 os.makedirs(WS3, exist_ok=True)
 R.set_workspace(WS3)
-check("R7 empty rules -> empty block", R.rules_block() == "", repr(R.rules_block()))
+r7_additive = "GLOBAL-AGENTS-COMPAT" in R.rules_block()
+# ...while a scope with NEITHER RULES.md NOR AGENTS.md stays empty.
+os.remove(os.path.join(CFG, "AGENTS.md"))
+os.remove(os.path.join(CFG, "RULES.md"))
+r7_empty = R.rules_block() == ""
+check("R7 empty RULES.md keeps AGENTS.md (additive); no files -> empty block",
+      r7_additive and r7_empty,
+      "additive=%s empty=%s" % (r7_additive, r7_empty))
 
 # ---- A1: API helpers -------------------------------------------------------
 check("A1 api helpers present",

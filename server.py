@@ -1078,9 +1078,10 @@ SYSTEM_PROMPT = (
 RULES_POLICY = (
     "## Rules (global + project)\n"
     "Your standing rules are FILES on disk (paths given below): a GLOBAL file for "
-    "every project and a PROJECT file for the current workspace, each with an "
-    "AGENTS.md fallback. GLOBAL rules come from your user config; PROJECT rules "
-    "override global ones on conflict. Follow them; if a rule conflicts with the "
+    "every project and a PROJECT file for the current workspace, each also "
+    "loading its scope's AGENTS.md (additive, not a fallback). GLOBAL rules come "
+    "from your user config; PROJECT rules override global ones on conflict. "
+    "Follow them; if a rule conflicts with the "
     "user's explicit request in this turn, say so before proceeding."
 )
 
@@ -1091,7 +1092,7 @@ def rules_context(sess=None, ws=None):
     `ws` (or the session's own workspace) selects the project; without either the
     global default workspace is used. Uses `rules_prompt_block` (never empty) so
     the model always sees where the global/project rules and their AGENTS.md
-    fallbacks live — not just their text.
+    additions (also loaded, additive) live — not just their text.
     """
     try:
         import rules as rules_mod

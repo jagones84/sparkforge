@@ -6,9 +6,9 @@ concatenated broadest -> most specific (project wins), then injected into the
 system prompt of both chat and the agent loop.
 
   * GLOBAL (user, all sessions):  ~/.config/sparkforge/RULES.md
-                                  (fallback: ~/.config/sparkforge/AGENTS.md)
+                                  (also loaded, additive: ~/.config/sparkforge/AGENTS.md)
   * PROJECT (the selected workspace): <ws>/.sparkforge/RULES.md + <ws>/.sparkforge/rules/*.md
-                                  (fallback: <ws>/AGENTS.md)
+                                  (also loaded, additive: <ws>/AGENTS.md)
 
 The workspace is selectable and persisted in ~/.config/sparkforge/config.json.
 No secret ever belongs here.
@@ -263,15 +263,16 @@ def rules_prompt_block(max_bytes=None, ws=None):
 
     Unlike `rules_block` (empty when no rules), this always renders the header
     with the absolute paths of the global + project rule files and their
-    AGENTS.md fallbacks, so the agent knows WHERE its instructions live and can
-    read or edit them with the fs tools. The rules text, when present, follows.
+    AGENTS.md additions (also loaded, additive), so the agent knows WHERE its
+    instructions live and can read or edit them with the fs tools. The rules
+    text, when present, follows.
     """
     cap = max_bytes or MAX_BYTES
     c = collect(ws)
     pp = prompt_paths(c["workspace"])
 
     def _scope(title, sc, fallback, extra=None):
-        head = ("### %s\n- file: %s\n- AGENTS.md fallback: %s\n"
+        head = ("### %s\n- file: %s\n- AGENTS.md (also loaded, additive): %s\n"
                 % (title, sc["path"], fallback))
         if extra:
             head += "- extra: %s/*.md\n" % extra
@@ -281,10 +282,11 @@ def rules_prompt_block(max_bytes=None, ws=None):
 
     intro = ("## Rules on disk (global + project)\n"
              "Your standing rules are real files; read or edit them with the fs "
-             "tools. Global rules apply to every project; project rules override "
-             "them on conflict.\n"
-             "- GLOBAL file: %s   (AGENTS.md fallback: %s)\n"
-             "- PROJECT file: %s   (AGENTS.md fallback: %s)\n"
+             "tools. Global rules apply to every project; project rules win on "
+             "conflict. Within each scope RULES.md and AGENTS.md are BOTH loaded "
+             "(additive, not a fallback).\n"
+             "- GLOBAL file: %s   (AGENTS.md also loaded, additive: %s)\n"
+             "- PROJECT file: %s   (AGENTS.md also loaded, additive: %s)\n"
              "- PROJECT extra: %s/*.md\n"
              % (pp["global_rules"], pp["global_fallback"],
                 pp["project_rules"], pp["project_fallback"], pp["project_extra_dir"]))
