@@ -36,6 +36,19 @@ check("A4 render non-empty", bool(out.strip()), str(len(out)))
 check("A5 identity text present", "SparkForge" in out, "")
 check("A6 tool registry block present", "Tool registry" in out, "")
 
+check("B1 rules block injected", "Rules on disk" in out, "")
+check("B2 memory policy injected",
+      "memory" in out.lower() and "core" in out.lower(), "")
+check("B3 dynamic tool_ctx is respected",
+      prompt.render_sections(None, tool_ctx="TOOLCTX_SENTINEL").count("TOOLCTX_SENTINEL") == 1, "")
+
+check("C1 manifest declares precedence",
+      "PROJECT > GLOBAL > DEFAULT" in out, "")
+check("C2 manifest lists section addenda dir",
+      "prompt.d" in out, "")
+check("C3 capability rule present (no shell for self-questions)",
+      "Capability questions" in out and "NEVER run shell" in out, "")
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)

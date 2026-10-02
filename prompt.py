@@ -41,6 +41,29 @@ _STATIC_ATTRS = {
 }
 
 
+CAPABILITY_RULE = (
+    "## Capability questions\n"
+    "When the user asks about YOUR OWN capabilities \u2014 which tools you have, "
+    "whether a tool exists, where your rules or memory live, what you can do \u2014 "
+    "answer FROM YOUR PROMPT: the `Tool registry` block above, the tool `self`, or "
+    "skills{action:'list'}. NEVER run shell/git (ls, find, git status) to answer a "
+    "question about yourself: that inspects the machine, not you."
+)
+
+
+def _manifest_text():
+    pretty = ", ".join("%s(%s)" % (s["id"], s["kind"]) for s in SECTIONS)
+    return (
+        "## How you are built (prompt map)\n"
+        "Your system prompt is an ordered list of sections; some are generated at "
+        "runtime, some are text you can EXTEND with files (adding, never replacing). "
+        "In case of CONTRADICTION the more specific level wins: PROJECT > GLOBAL > DEFAULT.\n"
+        "- global section addenda: %s/<NN>-<id>.md\n"
+        "- project section addenda: <workspace>/.sparkforge/prompt.d/<NN>-<id>.md\n"
+        "- sections: %s" % (GLOBAL_DDIR, pretty)
+    )
+
+
 def project_ddir(ws):
     return os.path.join(ws or "", ".sparkforge", "prompt.d")
 
@@ -98,3 +121,74 @@ def render_sections(sess=None, ws=None, tool_ctx=None):
         if parts:
             parts_out.append("\n".join(parts))
     return "\n\n".join(parts_out)
+
+
+def _provider_self_summary(sess, ws, ctx):
+    try:
+        import server
+        return server.self_summary()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _provider_tools(sess, ws, ctx):
+    if ctx:
+        return ctx
+    try:
+        import server
+        return server._tool_context()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _provider_rules(sess, ws, ctx):
+    try:
+        import rules
+        return rules.rules_prompt_block(ws=ws or rules.resolve_workspace(sess))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _provider_skills(sess, ws, ctx):
+    try:
+        import skills
+        return skills.skills_context(max_chars=3600)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _provider_memory(sess, ws, ctx):
+    block = ""
+    try:
+        import memory
+        lessons = memory.governed_query(kind="agent.note", limit=6)
+        instr = ["- " + str(r.get("content", "")).strip()
+                 for r in lessons if str(r.get("content", "")).strip()]
+        if instr:
+            block = "\nLessons from past sessions (self-improvement):\n" + "\n".join(instr)
+        core = memory.core_read().strip()
+        if core:
+            block += ("\n\n## Core memory (always visible \u2014 edit with "
+                      "memory{action:'set_core'})\n" + core)
+    except Exception:  # noqa: BLE001
+        pass
+    return block
+
+
+def _provider_state(sess, ws, ctx):
+    try:
+        import server
+        return ("Harness state (your persistent task list):\n"
+                + server.context_summary(session_id=(sess or {}).get("id")))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+_PROVIDERS = {
+    "self-summary": _provider_self_summary,
+    "tools": _provider_tools,
+    "rules": _provider_rules,
+    "skills": _provider_skills,
+    "memory": _provider_memory,
+    "state": _provider_state,
+}
