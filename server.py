@@ -1904,7 +1904,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     # JAG-129A: stato del loop di completamento (vedi keepgoing.decide).
     import keepgoing as _kg
     clear_abort(sess["id"])
+    import runmetrics
+    runmetrics.start(sess["id"], model=model)
     _kg_rounds = 0
+    _kg_stop_reason = None
     _kg_prev = None
     _kg_stale = 0
     _kg_started = time.time()
@@ -2082,6 +2085,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     "ripianifica. Lista attuale:\n%s"
                     % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))))})
                 continue
+            _kg_stop_reason = _dec["reason"]
             on_event("plan.stopped", session=sess["id"], reason=_dec["reason"],
                      open=len(_open), total=len(_nodes), rounds=_kg_rounds,
                      duration_s=round(time.time() - _kg_started, 1))
@@ -2147,6 +2151,15 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 "reason": "model emitted JSON instead of a prose reply"}
     reply = append_message(sess, "assistant", content, reasoning=think.strip() or None,
                            meta=meta)
+    try:
+        runmetrics.finish(sess["id"], outcome=("error" if meta.get("error") else "done"),
+                          stop_reason=_kg_stop_reason, iterations=_kg_rounds,
+                          steps=work_steps,
+                          tokens=int(chat_usage.get("prompt_tokens") or 0)
+                                 + int(chat_usage.get("completion_tokens") or 0))
+        publish("run.metrics", session=sess["id"], metrics=runmetrics.get(sess["id"]))
+    except Exception:  # noqa: BLE001 — le metriche non devono mai rompere un turno
+        pass
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
             model=model, think_chars=len(think), error=bool(meta.get("error")))
     # JAG-128B: nudge di fine turno — quando il turno ha usato parecchi tool (o e'

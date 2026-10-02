@@ -891,6 +891,7 @@ function send(text) {
   es.addEventListener("plan.incomplete", e => planIncomplete(JSON.parse(e.data)));
   es.addEventListener("plan.continuing", e => { planContinuing(JSON.parse(e.data)); });
   es.addEventListener("plan.stopped", e => planStopped(JSON.parse(e.data)));
+  es.addEventListener("run.metrics", e => { runFooter(JSON.parse(e.data).metrics); });
   es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
   es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); flushQueue(); });
@@ -1417,6 +1418,10 @@ function planStopped(d) {
                 budget: "⏱ budget esaurito", blocked: "⛔ bloccato",
                 user_stop: "⏹ fermato da te" };
   who("ai", `${map[d.reason] || d.reason} — ${d.open} aperti / ${d.total} · ${d.rounds} giri · ${d.duration_s}s`);
+}
+function runFooter(m) {
+  if (!m) return;
+  who("ai", `⏱ run: ${m.stop_reason || m.outcome} · ${m.iterations} giri · ${m.steps} step · ${m.tokens} tok · ${m.duration_s}s`);
 }
 function taskTree(nodes) {
   // checklist annidata: i figli (parent) sono indentati sotto il padre (stile TRAE).
