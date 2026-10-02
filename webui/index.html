@@ -1163,14 +1163,11 @@ function renderGraph() {
     (graph.node_count || 0) + " nodes · " + (c.done || 0) + " done" +
     (graph.goal ? " · " + graph.goal.slice(0, 40) : "");
   $("taskCount").textContent = (c.done || 0) + "/" + (graph.node_count || 0);
-  (graph.nodes || []).forEach(n => {
-    const d = document.createElement("div"); d.className = "task";
-    if (n.id === graphFresh) d.classList.add("fresh");
-    const deps = (n.deps || []).length ? ` <span class="dep">⤷ ${n.deps.join(", ")}</span>` : "";
-    const ev = (n.evidence || []).length ? ` <span class="ev">📎 ${n.evidence.length}</span>` : "";
-    d.innerHTML = `<span class="st ${n.status}">${n.status}</span><span>${n.label}</span>${deps}${ev}`;
-    d.onclick = () => showNodeDetail(n);
-    box.appendChild(d);
+  box.innerHTML = taskTree(graph.nodes);
+  box.querySelectorAll(".task").forEach(el => {
+    const n = (graph.nodes || []).find(x => String(x.id) === el.dataset.id);
+    el.onclick = () => n && showNodeDetail(n);
+    if (n && n.id === graphFresh) el.classList.add("fresh");
   });
   $("remaining").innerHTML = "";
 }
@@ -1424,11 +1421,15 @@ function planStopped(d) {
 function taskTree(nodes) {
   // checklist annidata: i figli (parent) sono indentati sotto il padre (stile TRAE).
   const byParent = {};
-  nodes.forEach(n => { const p = n.parent || "_root"; (byParent[p] ||= []).push(n); });
+  (nodes || []).forEach(n => { const p = n.parent || "_root"; (byParent[p] ||= []).push(n); });
   const mark = { todo: "☐", doing: "◐", done: "☑", blocked: "⛔", cancelled: "⊘" };
-  const walk = (p, depth) => (byParent[p] || []).map(n =>
-    `<div style="margin-left:${depth * 14}px">${mark[n.status] || "☐"} ${esc(n.label)}</div>`
-    + walk(n.id, depth + 1)).join("");
+  const one = (n, depth) => {
+    const deps = (n.deps || []).length ? ` <span class="dep">⤷ ${n.deps.join(", ")}</span>` : "";
+    const ev = (n.evidence || []).length ? ` <span class="ev">📎 ${n.evidence.length}</span>` : "";
+    return `<div class="task" data-id="${_attr(n.id)}" style="margin-left:${depth * 14}px">` +
+      `<span class="st ${n.status}">${n.status}</span><span>${mark[n.status] || "☐"} ${esc(n.label)}</span>${deps}${ev}</div>`;
+  };
+  const walk = (p, depth) => (byParent[p] || []).map(n => one(n, depth) + walk(n.id, depth + 1)).join("");
   return walk("_root", 0);
 }
 /* JAG-128B: la proposta di self-improvement arriva come evento SSE e resta
