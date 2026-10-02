@@ -62,6 +62,13 @@ check("R10 deny writes no rule file (and status denied)",
       _rules_after == _rules_before
       and improve.get_proposal(rec["id"])["status"] == "denied", "")
 
+check("R11 rules.append exists", hasattr(rules, "append"), "")
+
+import registry  # noqa: E402
+sch = registry.TOOL_SCHEMAS.get("improve", {})
+check("R12 improve tool declared with propose action",
+      "propose" in (sch.get("properties", {}).get("action", {}).get("enum") or []), "")
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)

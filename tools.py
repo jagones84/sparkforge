@@ -556,10 +556,23 @@ def _diff(args, run_id):
             "backend": "host", "sandboxed": False}
 
 
+def _improve(args, run_id=None):
+    """Registra una proposta di auto-miglioramento (skill/regole)."""
+    import improve
+    scope = str((args or {}).get("scope", "")).strip()
+    content = str((args or {}).get("content", "")).strip()
+    if scope not in ("skill", "project", "global") or not content:
+        return {"error": "scope in {skill,project,global} and content required"}
+    if improve.AGENT_WRITE.get(scope) == "forbidden":
+        return {"error": "scope not writable"}
+    rec = improve.propose(scope, content, reason=str((args or {}).get("reason", "")))
+    return {"ok": True, "proposal": rec}
+
+
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
              "fs.edit": _fs_edit, "diff": _diff,
              "git": _git, "http": _http, "browser": _browser, "self": _self,
-             "skills": _skills, "memory": _memory, "web": _web}
+             "skills": _skills, "memory": _memory, "web": _web, "improve": _improve}
 
 
 def _dispatch_execute(tool, args, run_id=None):
