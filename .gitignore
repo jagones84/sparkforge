@@ -21,4 +21,7 @@ trash/
 config/mcp_clients.local.yaml
 config/mcp_clients.local.json
 
+# JAG-109: user-installed skills (zip upload) — never in the repo.
+skills/local/
+
 .superpowers/
