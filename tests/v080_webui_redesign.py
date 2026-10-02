@@ -44,8 +44,8 @@ def main():
     check("server badge", 'id="server-badge"' in src)
     check("responsive 1100", "@media (max-width: 1100px)" in src)
     check("responsive 820", "@media (max-width: 820px)" in src)
-    # --- Fase 2: rail contesto a 5 pannelli ---
-    for p in ("graph", "config", "self", "settings", "approvals"):
+    # --- Fase 2: rail contesto (JAG-127: panel consolidati, niente Self/Providers/Keys) ---
+    for p in ("graph", "config", "settings", "approvals", "mcp", "skills", "rules", "files"):
         check("panel tab %s" % p, ('data-panel="%s"' % p) in src)
     check("panel body", 'id="panel-body"' in src)
     check("open panel fn", "openPanel(" in src)

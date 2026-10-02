@@ -352,13 +352,10 @@
     <nav id="rail-tabs">
       <button data-panel="graph" class="active" onclick="openPanel('graph')">Graph</button>
       <button data-panel="config" onclick="openPanel('config')">Config</button>
-      <button data-panel="self" onclick="openPanel('self')">Self</button>
       <button data-panel="settings" onclick="openPanel('settings')">Settings</button>
       <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
       <button data-panel="mcp" onclick="openPanel('mcp')">MCP</button>
       <button data-panel="skills" onclick="openPanel('skills')">Skills</button>
-      <button data-panel="providers" onclick="openPanel('providers')">Providers</button>
-      <button data-panel="keys" onclick="openPanel('keys')">Keys</button>
       <button data-panel="rules" onclick="openPanel('rules')">Rules</button>
       <button data-panel="files" onclick="openPanel('files')">Files</button>
     </nav>
@@ -398,16 +395,43 @@
         <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
       </section>
       <section data-section="config" hidden>
-        <h2>Config · tools</h2>
+        <h2>Config · tools &amp; approval policy</h2>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
       </section>
-      <section data-section="self" hidden>
-        <h2>Self</h2>
-        <div class="card" id="selfPanel"><div class="remaining">loading…</div></div>
-      </section>
       <section data-section="settings" hidden>
-        <h2>Settings · providers</h2>
-        <div class="card" id="settingsPanel"><div class="remaining">loading…</div></div>
+        <h2>Self · harness</h2>
+        <div class="card" id="selfPanel"><div class="remaining">loading…</div></div>
+        <h2>Providers · LLM</h2>
+        <div class="card">
+          <div class="remaining" id="provSummary">loading…</div>
+          <div id="provList" style="margin-top:8px"></div>
+        </div>
+        <h2>Add / edit provider</h2>
+        <div class="card">
+          <input id="provId" class="inp" placeholder="id (es. openrouter) *" style="width:100%;padding:6px 10px;font-size:12px">
+          <input id="provName" class="inp" placeholder="name" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <select id="provKind" class="inp" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+            <option value="openai">openai-compatible</option>
+            <option value="llamacpp">llama.cpp</option>
+            <option value="openrouter">openrouter</option>
+            <option value="deepseek">deepseek</option>
+            <option value="anthropic">anthropic</option>
+            <option value="custom">custom</option>
+          </select>
+          <input id="provUrl" class="inp" placeholder="base_url (https://…/v1)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <input id="provKeyEnv" class="inp" placeholder="api_key_env = VAR name (not the key)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <input id="provModels" class="inp" placeholder="models (comma-separated)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="provLocal"> local (no key)</label>
+          <button class="ghost" onclick="saveProvider()" style="margin-top:8px">save provider</button>
+          <div id="provResult" class="remaining" style="margin-top:6px"></div>
+          <div class="remaining" style="margin-top:6px">saved in config/providers.local.yaml (outside the repo)</div>
+        </div>
+        <h2>Keys · secrets</h2>
+        <div class="card">
+          <div class="remaining" id="keysSummary">loading…</div>
+          <div id="keysList" style="margin-top:8px"></div>
+          <div class="remaining" style="margin-top:8px">Values are NOT in the repo: put them in <code>.env</code> or <code>~/.hermes/.env</code> (gitignored). Providers and MCP reference the key by NAME only.</div>
+        </div>
         <h2>API token</h2>
         <div class="card">
           <div style="display:flex;gap:6px">
@@ -422,13 +446,8 @@
         <div class="card">
           <div id="approvals" class="remaining">no pending approvals</div>
         </div>
-        <h2>Policy · auto / required / denied</h2>
-        <div class="card">
-          <div class="remaining" style="margin-bottom:8px">click a tool's policy to cycle it:
-            <b>auto</b> = never ask · <b>required</b> = always ask · <b>denied</b> = blocked.
-            A file read/write <b>outside</b> the session folder is always <b>required</b>.</div>
-          <div id="apprPolicy"><div class="remaining">loading…</div></div>
-        </div>
+        <div class="remaining" style="margin-top:8px">A tool set to <b>auto</b> never asks.
+          To change a tool's policy (<b>auto / required / denied</b>) use the <b>Config</b> panel — the single place for auto-approve.</div>
       </section>
       <section data-section="mcp" hidden>
         <h2>MCP · external servers</h2>
@@ -477,41 +496,6 @@
         <div class="card">
           <div class="remaining" id="skillsSummary">loading…</div>
           <div id="skillsList" style="margin-top:8px"></div>
-        </div>
-      </section>
-      <section data-section="providers" hidden>
-        <h2>Providers · LLM</h2>
-        <div class="card">
-          <div class="remaining" id="provSummary">loading…</div>
-          <div id="provList" style="margin-top:8px"></div>
-        </div>
-        <h2>Add / edit provider</h2>
-        <div class="card">
-          <input id="provId" class="inp" placeholder="id (es. openrouter) *" style="width:100%;padding:6px 10px;font-size:12px">
-          <input id="provName" class="inp" placeholder="name" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <select id="provKind" class="inp" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-            <option value="openai">openai-compatible</option>
-            <option value="llamacpp">llama.cpp</option>
-            <option value="openrouter">openrouter</option>
-            <option value="deepseek">deepseek</option>
-            <option value="anthropic">anthropic</option>
-            <option value="custom">custom</option>
-          </select>
-          <input id="provUrl" class="inp" placeholder="base_url (https://…/v1)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <input id="provKeyEnv" class="inp" placeholder="api_key_env = VAR name (not the key)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <input id="provModels" class="inp" placeholder="models (comma-separated)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="provLocal"> local (no key)</label>
-          <button class="ghost" onclick="saveProvider()" style="margin-top:8px">save provider</button>
-          <div id="provResult" class="remaining" style="margin-top:6px"></div>
-          <div class="remaining" style="margin-top:6px">saved in config/providers.local.yaml (outside the repo)</div>
-        </div>
-      </section>
-      <section data-section="keys" hidden>
-        <h2>Keys · secrets</h2>
-        <div class="card">
-          <div class="remaining" id="keysSummary">loading…</div>
-          <div id="keysList" style="margin-top:8px"></div>
-          <div class="remaining" style="margin-top:8px">Values are NOT in the repo: put them in <code>.env</code> or <code>~/.hermes/.env</code> (gitignored). Providers and MCP reference the key by NAME only.</div>
         </div>
       </section>
       <section data-section="files" hidden>
@@ -1212,9 +1196,6 @@ async function loadApprovals() {
   const box = $("approvals"); box.innerHTML = "";
   const pend = out.approvals || [];
   $("apprCount").textContent = pend.length ? `(${pend.length} pending)` : "";
-  // JAG-127: always render the auto/required/denied policy controls here too.
-  try { renderTools($("apprPolicy"), await api("GET", "/api/tools")); }
-  catch (e) { $("apprPolicy").innerHTML = '<div class="remaining">' + esc(e) + '</div>'; }
   if (!pend.length) { box.textContent = "no pending approvals"; return; }
   pend.forEach(a => {
     const d = document.createElement("div"); d.className = "card";
@@ -1415,7 +1396,7 @@ function renderTools(el, d) {
   const tools = (d && d.tools) || d || [];
   if (!Array.isArray(tools)) { json_pre(el, d); return; }
   if (!tools.length) { el.innerHTML = '<div class="remaining">no tools</div>'; return; }
-  el.innerHTML = '<div class="remaining" style="margin-bottom:8px">click <b>auto/required/denied</b> to change the approval policy (auto = no prompt; required = asks confirmation; denied = blocks).</div>' +
+  el.innerHTML = '<div class="remaining" style="margin-bottom:8px">Single place for <b>auto-approve</b>. Click a tool\'s policy to cycle: <b>auto</b> = never ask · <b>required</b> = always ask · <b>denied</b> = blocked. A file read/write <b>outside</b> the session folder is always <b>required</b>.</div>' +
     tools.map(t => {
     const on = t.enabled !== false;
     const ap = t.approval || "auto";
@@ -1807,13 +1788,16 @@ function openPanel(name) {
   else if (name === "approvals") { loadApprovals(); }
   else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); }
   else if (name === "skills") { loadSkills(); }
-  else if (name === "providers") { loadProviders(); }
-  else if (name === "keys") { loadKeys(); }
   else if (name === "rules") { loadRules(); }
   else if (name === "files") { loadFiles(); loadEdits(); }
-  else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
-  else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
+  else if (name === "settings") {
+    // JAG-127: one Settings panel = Self + Providers + Keys + token (no more tabs).
+    $("token-input").value = TOKEN || "";
+    api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)}));
+    loadProviders();
+    loadKeys();
+  }
 }
 
 /* ---- JAG-124: workspace file tree + editor ---- */
@@ -2119,7 +2103,7 @@ function paletteItems() {
     { label: "\uFF0B New session", run: () => newSession() },
     { label: "\u21BB Compact context", run: () => compactNow() },
   ];
-  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers", "keys", "rules", "files"].forEach(p => items.push({ label: "\u25B8 Panel " + p, run: () => openPanel(p) }));
+  ["graph", "config", "settings", "approvals", "mcp", "skills", "rules", "files"].forEach(p => items.push({ label: "\u25B8 Panel " + p, run: () => openPanel(p) }));
   return items;
 }
 function renderPalette(q) {

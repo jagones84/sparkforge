@@ -80,9 +80,15 @@ check("A7 tool_action accepts workspace", "def tool_action(st, tool, args, on_ev
 
 # ---- U: WebUI --------------------------------------------------------------
 html = read(os.path.join(REPO, "webui", "index.html"))
-check("U1 approval policy controls in the Approvals panel",
-      'id="apprPolicy"' in html and "renderTools($(\"apprPolicy\")" in html, "")
-check("U2 session switch refreshes the workspace", "loadCtx(); loadRules(); closeAside();" in html, "")
+check("U1 policy lives in Config only (no Approvals duplicate)",
+      'id="configPanel"' in html and 'id="apprPolicy"' not in html, "")
+check("U2 no redundant Self/Providers/Keys tabs",
+      'data-panel="self"' not in html and 'data-panel="providers"' not in html
+      and 'data-panel="keys"' not in html, "")
+check("U2b Settings merges self + providers + keys",
+      'data-section="settings"' in html and 'id="selfPanel"' in html
+      and 'id="provList"' in html and 'id="keysList"' in html, "")
+check("U2c session switch refreshes the workspace", "loadCtx(); loadRules(); closeAside();" in html, "")
 check("U3 readable files become links", "a.filelink" in html and "function linkifyFiles" in html, "")
 check("U4 link opens the file in the editor",
       "function openInEditor" in html and "openInEditor(a.dataset.p)" in html, "")
