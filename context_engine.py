@@ -112,7 +112,11 @@ def build(system_prompt, messages, message=None, budget_tokens=DEFAULT_BUDGET,
     query = message or (messages[-1].get("content") if messages else "")
     stats = {"budget_tokens": budget_tokens, "keep_recent": keep_recent,
              "retrieval_query": (query or "")[:120]}
-    msgs, cstats = compact(messages, budget_tokens, keep_recent)
+    # JAG-99: the system prompt is sent uncompacted and dominates small budgets;
+    # compact the transcript against what is LEFT for it, so the TOTAL prompt
+    # (system + transcript) stays within `budget_tokens`.
+    room = max(1024, budget_tokens - count_tokens(system_prompt))
+    msgs, cstats = compact(messages, room, keep_recent)
     stats.update({"compaction": cstats})
     if retrieve_memory and query:
         hits = retrieve(query)

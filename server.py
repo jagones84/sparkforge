@@ -328,6 +328,10 @@ CONTEXT_RESERVE = int(os.environ.get("SPARKFORGE_CONTEXT_RESERVE", "4096"))
 # JAG-70: auto-compaction triggers when the REAL prompt reaches this % of the
 # budget (the frontier pattern: compact before you hit the wall, not after).
 AUTOCOMPACT_PCT = float(os.environ.get("SPARKFORGE_CONTEXT_AUTOCOMPACT_PCT", "75"))
+# JAG-99: after compaction the transcript is shrunk to this % of the budget, so
+# the TOTAL prompt lands BELOW the trigger with headroom (no instant re-trigger).
+AUTOCOMPACT_TARGET_PCT = float(os.environ.get(
+    "SPARKFORGE_CONTEXT_TARGET_PCT", str(max(10.0, AUTOCOMPACT_PCT - 15.0))))
 
 
 def model_context_window(alias=None):
@@ -2444,7 +2448,8 @@ def context_usage(session_id=None, message=None, model=None):
     import context_engine
     budget = context_budget(model)
     base = {"budget_tokens": budget, "session": session_id,
-            "auto_compact_pct": AUTOCOMPACT_PCT}
+            "auto_compact_pct": AUTOCOMPACT_PCT,
+            "auto_compact_target_pct": AUTOCOMPACT_TARGET_PCT}
     sess = load_session(session_id) if session_id else None
     if not sess:
         return {**base, "available": False, "messages": 0, "tokens_used": 0,
@@ -2490,9 +2495,13 @@ def prepare_session_for_turn(sess, model=None):
         usage = context_usage(sess["id"], model=model)
         if not usage.get("available") or not usage.get("over_threshold"):
             return sess
-        stats = compact_session(sess["id"], usage["budget_tokens"])
+        # JAG-99: shrink to TARGET% (not the full budget) so the prompt lands back
+        # under the trigger with headroom; the system prompt is accounted for.
+        target = int(usage["budget_tokens"] * AUTOCOMPACT_TARGET_PCT / 100.0)
+        stats = compact_session(sess["id"], target)
         publish("context.auto_compact", session=sess["id"],
                 pct=usage.get("pct"), threshold=AUTOCOMPACT_PCT,
+                target_pct=AUTOCOMPACT_TARGET_PCT,
                 before=stats.get("input_tokens"), after=stats.get("output_tokens"),
                 compacted=stats.get("compacted"), dropped=stats.get("dropped"))
         return load_session(sess["id"]) or sess
@@ -2511,10 +2520,14 @@ def compact_session(session, budget_tokens=None):
     if not sess:
         return {"error": "session not found: %s" % session}
     budget = int(budget_tokens) if budget_tokens else context_budget()
-    msgs, stats = context_engine.compact(sess.get("messages", []), budget)
+    # JAG-99: the system prompt is sent uncompacted and consumes the budget, so
+    # the transcript is compacted against what is really LEFT for it.
+    room = max(1024, budget - context_engine.count_tokens(_system_prompt(sess)))
+    msgs, stats = context_engine.compact(sess.get("messages", []), room)
     sess["messages"] = msgs
     save_session(sess)
     stats.update({"session": session, "budget_tokens": budget,
+                  "transcript_room": room,
                   "tokens_after": sum(context_engine.count_tokens(m.get("content", ""))
                                       for m in msgs)})
     publish("context.compact", **stats)
