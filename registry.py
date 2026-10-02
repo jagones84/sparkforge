@@ -160,6 +160,22 @@ TOOL_SCHEMAS = {
         "required": [],
         "subject": "query",
     },
+    "diff": {
+        "description": ("Compare two files or two texts and return a unified diff "
+                        "(stdlib difflib). action=files compares two paths (honouring "
+                        "the read roots); action=text compares two strings. Read-only."),
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["files", "text"], "default": "files"},
+            "a": {"type": "string", "description": "first file path (action=files)"},
+            "b": {"type": "string", "description": "second file path (action=files)"},
+            "text_a": {"type": "string", "description": "first text (action=text)"},
+            "text_b": {"type": "string", "description": "second text (action=text)"},
+            "context": {"type": "integer", "default": 3},
+        },
+        "required": [],
+        "subject": "a",
+    },
 }
 
 

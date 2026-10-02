@@ -485,8 +485,46 @@ def _memory(args, run_id):
             "backend": "host", "sandboxed": False}
 
 
+def _diff(args, run_id):
+    """Native diff tool: unified diff of two files (roots-checked) or two texts."""
+    import difflib
+    action = str(args.get("action") or "files").strip().lower()
+    ctx = int(args.get("context", 3))
+    if action == "text":
+        a = str(args.get("text_a", ""))
+        b = str(args.get("text_b", ""))
+        label_a, label_b = "a", "b"
+    else:
+        roots = registry.tool_spec("fs.read")["roots"]
+        pa, err = registry.resolve_path(str(args.get("a", "")), roots)
+        if err:
+            return {"ok": False, "error": err, "backend": "host", "sandboxed": False}
+        pb, err = registry.resolve_path(str(args.get("b", "")), roots)
+        if err:
+            return {"ok": False, "error": err, "backend": "host", "sandboxed": False}
+        if not os.path.isfile(pa):
+            return {"ok": False, "error": "no such file: %s" % pa,
+                    "backend": "host", "sandboxed": False}
+        if not os.path.isfile(pb):
+            return {"ok": False, "error": "no such file: %s" % pb,
+                    "backend": "host", "sandboxed": False}
+        with open(pa, "r", encoding="utf-8", errors="replace") as f:
+            a = f.read()
+        with open(pb, "r", encoding="utf-8", errors="replace") as f:
+            b = f.read()
+        label_a, label_b = pa, pb
+    diff = list(difflib.unified_diff(a.splitlines(), b.splitlines(),
+                                     fromfile=label_a, tofile=label_b, n=ctx, lineterm=""))
+    added = sum(1 for ln in diff if ln.startswith("+") and not ln.startswith("+++"))
+    removed = sum(1 for ln in diff if ln.startswith("-") and not ln.startswith("---"))
+    return {"ok": True, "exit_code": 0, "stderr": "", "identical": not diff,
+            "added": added, "removed": removed,
+            "stdout": _truncate("\n".join(diff) if diff else "(identici)", 8192),
+            "backend": "host", "sandboxed": False}
+
+
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
-             "fs.edit": _fs_edit,
+             "fs.edit": _fs_edit, "diff": _diff,
              "git": _git, "http": _http, "browser": _browser, "self": _self,
              "skills": _skills, "memory": _memory, "web": _web}
 

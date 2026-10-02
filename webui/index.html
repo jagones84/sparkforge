@@ -193,8 +193,10 @@
   #app { display: flex; flex: 1; min-height: 0; }
   [data-col="sessions"] { flex: 0 0 220px; width: 220px; border-right: 1px solid var(--line); overflow-y: auto; }
   [data-col="chat"]     { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-  [data-col="context"]  { flex: 0 0 238px; width: 238px; border-left: 1px solid var(--line); border-right: 0; overflow-y: auto; }
-  #rail-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line-2); }
+  [data-col="context"]  { flex: 0 0 238px; width: 238px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden; min-height: 0; }
+  /* the rail scrolls only its body, so the tab titles stay visible */
+  #panel-body { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+  #rail-tabs { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line-2); }
   #rail-tabs button { padding: 4px 9px; font-size: 10px; border-radius: 6px; }
   #rail-tabs button.active { color: var(--txt); border-color: var(--accent); background: rgba(139,123,240,.14); }
   .toolcard-head { cursor: pointer; }
@@ -394,11 +396,6 @@
         </div>
       </section>
       <section data-section="skills" hidden>
-        <h2>Skills · installate</h2>
-        <div class="card">
-          <div class="remaining" id="skillsSummary">caricamento…</div>
-          <div id="skillsList" style="margin-top:8px"></div>
-        </div>
         <h2>Installa da zip</h2>
         <div class="card">
           <input type="file" id="skillZip" accept=".zip" style="font-size:12px">
@@ -407,6 +404,11 @@
           <button class="ghost" onclick="installSkillZip()" style="margin-top:8px">installa</button>
           <div id="skillResult" class="remaining" style="margin-top:6px"></div>
           <div class="remaining" style="margin-top:6px">installate in skills/local/ (fuori dal repo)</div>
+        </div>
+        <h2>Skills · installate</h2>
+        <div class="card">
+          <div class="remaining" id="skillsSummary">caricamento…</div>
+          <div id="skillsList" style="margin-top:8px"></div>
         </div>
       </section>
       <section data-section="providers" hidden>
@@ -1208,16 +1210,26 @@ function renderTools(el, d) {
   const tools = (d && d.tools) || d || [];
   if (!Array.isArray(tools)) { json_pre(el, d); return; }
   if (!tools.length) { el.innerHTML = '<div class="remaining">no tools</div>'; return; }
-  el.innerHTML = tools.map(t => {
+  el.innerHTML = '<div class="remaining" style="margin-bottom:8px">clic su <b>auto/required/denied</b> per cambiare la politica di approvazione (auto = nessuna finestra; required = chiede conferma; denied = blocca).</div>' +
+    tools.map(t => {
     const on = t.enabled !== false;
     const ap = t.approval || "auto";
+    const nm = t.name || t.id || "?";
+    const apColor = ap === "auto" ? "var(--ok)" : (ap === "denied" ? "var(--err)" : "var(--warn)");
     return `<div class="card" style="padding:6px 8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">` +
       `<span style="color:${on ? "var(--ok)" : "var(--dim)"}">${on ? "●" : "○"}</span>` +
-      `<span style="font-weight:600">${t.name || t.id || "?"}</span>` +
-      `<span class="remaining" style="margin-left:auto">${ap}</span>` +
-      `<button class="ghost" style="font-size:10px" data-tool="${t.name || t.id}" data-on="${on}">${on ? "disable" : "enable"}</button></div>` +
+      `<span style="font-weight:600">${nm}</span>` +
+      `<button class="ghost" style="margin-left:auto;font-size:10px;color:${apColor}" data-ap="${nm}" title="cicla la politica di approvazione">${ap} ⟳</button>` +
+      `<button class="ghost" style="font-size:10px" data-tool="${nm}" data-on="${on}">${on ? "disable" : "enable"}</button></div>` +
       (t.description ? `<div class="remaining" style="margin:-4px 0 8px 22px">${t.description}</div>` : "");
   }).join("");
+  el.querySelectorAll("button[data-ap]").forEach(b =>
+    b.onclick = () => {
+      const cur = b.textContent.replace("⟳", "").trim();
+      const next = cur === "auto" ? "required" : (cur === "required" ? "denied" : "auto");
+      api("POST", "/api/tools", { tool: b.dataset.ap, approval: next })
+        .then(() => api("GET", "/api/tools")).then(d2 => renderTools(el, d2));
+    });
   el.querySelectorAll("button[data-tool]").forEach(b =>
     b.onclick = () => api("POST", "/api/tools", { tool: b.dataset.tool, enabled: b.dataset.on !== "true" })
       .then(() => api("GET", "/api/tools")).then(d2 => renderTools(el, d2)));

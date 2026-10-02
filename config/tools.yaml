@@ -137,6 +137,14 @@ tools:
     approval: auto
     auto_approve: []
 
+  # unified diff of two files or two texts (stdlib difflib) — read-only
+  diff:
+    enabled: true
+    approval: auto
+    roots:
+      - "."
+      - "/home/jagones/Repositories"
+
   # self-knowledge: repo/config paths, skill/MCP install recipe, systemd state
   self:
     enabled: true
@@ -166,3 +174,12 @@ tools:
   pmcp__gateway.tasks_list:
     enabled: true
     approval: auto
+  pmcp__gateway.catalog_search:
+    enabled: true
+    approval: auto
+  pmcp__gateway.describe:
+    enabled: true
+    approval: auto
+  pmcp__gateway.invoke:
+    enabled: true
+    approval: required
