@@ -59,7 +59,31 @@ def _frontmatter_name(text):
     return None
 
 
-_cache = {"ts": 0, "skills": []}
+_cache = {"sig": None, "skills": []}
+
+
+def _skills_sig():
+    """Signature of the skills tree: mtimes of SKILLS_DIR + each category dir.
+
+    The category dirs are symlinks into the autodist store, so adding a skill
+    inside a category changes the CATEGORY mtime but NOT the top-level dir
+    mtime. Keying the cache on the top-level mtime alone made a freshly adopted
+    skill invisible until a server restart.
+    """
+    if not os.path.exists(SKILLS_DIR):
+        return None
+    parts = [os.stat(SKILLS_DIR).st_mtime_ns]
+    try:
+        for cat in sorted(os.listdir(SKILLS_DIR)):
+            cd = os.path.join(SKILLS_DIR, cat)
+            try:
+                if os.path.isdir(cd):
+                    parts.append((cat, os.stat(cd).st_mtime_ns))
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return tuple(parts)
 
 
 def _parse_skill_md(text, fallback_name):
@@ -89,10 +113,9 @@ def _parse_skill_md(text, fallback_name):
 
 def list_skills(reload=False):
     """Scan skills/<category>/<name>/SKILL.md; returns cached entries."""
-    if os.path.exists(SKILLS_DIR):
-        mt = os.stat(SKILLS_DIR).st_mtime
-        if not reload and _cache["skills"] and _cache["ts"] == mt:
-            return _cache["skills"]
+    sig = _skills_sig()
+    if not reload and _cache["skills"] and _cache["sig"] == sig:
+        return _cache["skills"]
     skills = []
     if os.path.isdir(SKILLS_DIR):
         for cat in sorted(os.listdir(SKILLS_DIR)):
@@ -113,8 +136,7 @@ def list_skills(reload=False):
                                    "path": os.path.relpath(sp, REPO),
                                    "title": title, "description": desc,
                                    "local": cat == LOCAL_CATEGORY})
-    if os.path.exists(SKILLS_DIR):
-        _cache.update(ts=os.stat(SKILLS_DIR).st_mtime, skills=skills)
+    _cache.update(sig=sig, skills=skills)
     return skills
 
 
