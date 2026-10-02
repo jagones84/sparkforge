@@ -2531,6 +2531,40 @@ def prepare_session_for_turn(sess, model=None):
         return sess
 
 
+def _summarize_with_llm(messages, model=None):
+    """JAG-103: let the MODEL do the compaction.
+
+    Summarize the OLDER turns into one faithful, compact block (decisions, facts,
+    file paths/commands, user preferences, open tasks) in the transcript's own
+    language. Reuses `stream_with_fallback` (role "summarizer") — no bespoke router
+    code. Returns the summary text, or None on ANY failure so the caller falls back
+    to the local extractive merge (compaction must never stall a turn).
+    """
+    lines = []
+    for m in messages:
+        content = (m.get("content") or "").strip()
+        if content:
+            lines.append("%s: %s" % (m.get("role", "?"), content))
+    transcript = "\n".join(lines)
+    if not transcript.strip():
+        return None
+    prompt = (
+        "You are compacting the OLDER turns of an ongoing chat so the assistant can "
+        "keep working with less context. Write a faithful, compact summary IN THE "
+        "SAME LANGUAGE as the transcript. Preserve: decisions made, concrete facts, "
+        "file paths and commands, user preferences, and any OPEN tasks or questions. "
+        "Drop chit-chat and repetition. Reply with the summary text ONLY (no preamble), "
+        "at most ~200 words.\n\nTRANSCRIPT:\n" + transcript)
+    try:
+        answer, _think, _used = stream_with_fallback(
+            [{"role": "user", "content": prompt}], model, "summarizer",
+            lambda ch, t: None, timeout=180)
+        answer = (answer or "").strip()
+        return answer or None
+    except Exception:  # noqa: BLE001 — never let summarization break compaction
+        return None
+
+
 def compact_session(session, budget_tokens=None):
     """Compact a session transcript in place under the token budget (v0.5).
 
@@ -2559,7 +2593,8 @@ def compact_session(session, budget_tokens=None):
         # JAG-102: manual action — target a fraction of the CURRENT transcript.
         budget = current
         room = max(1024, int(current * COMPACT_FORCE_RATIO))
-    msgs, stats = context_engine.compact(messages, room)
+    msgs, stats = context_engine.compact(
+        messages, room, summarizer=lambda old: _summarize_with_llm(old))
     sess["messages"] = msgs
     save_session(sess)
     stats.update({"session": session, "budget_tokens": budget,

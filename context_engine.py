@@ -33,16 +33,21 @@ def _msgs_tokens(msgs):
     return sum(count_tokens(m.get("content", "")) for m in msgs)
 
 
-def compact(messages, budget_tokens, keep_recent=DEFAULT_KEEP_RECENT):
+def compact(messages, budget_tokens, keep_recent=DEFAULT_KEEP_RECENT, summarizer=None):
     """Compact a transcript under a token budget.
 
     Returns (msgs, stats). Keeps the newest `keep_recent` messages verbatim;
-    older ones are merged into one extractive summary message. If even that is
-    over budget, the kept window is shrunk.
+    older ones are merged into one summary message. If even that is over budget,
+    the kept window is shrunk.
+
+    JAG-103: when `summarizer(old_messages) -> str|None` is given, the older turns
+    are summarized BY THE MODEL (a faithful prose summary) instead of the local
+    extractive merge. A None/empty return (router down, timeout) falls back to the
+    extractive path, so compaction can never stall a turn.
     """
     stats = {"input_messages": len(messages),
              "input_tokens": _msgs_tokens(messages),
-             "compacted": 0, "kept": 0, "dropped": 0}
+             "compacted": 0, "kept": 0, "dropped": 0, "summary": None}
     if not messages:
         return [], stats
     if stats["input_tokens"] <= budget_tokens:
@@ -51,14 +56,24 @@ def compact(messages, budget_tokens, keep_recent=DEFAULT_KEEP_RECENT):
     cut = max(0, len(messages) - keep_recent)
     old, recent = messages[:cut], messages[cut:]
     if old:
-        summary_lines = []
-        for m in old:
-            role = m.get("role", "?")
-            content = (m.get("content") or "").strip().replace("\n", " ")
-            if content:
-                summary_lines.append("%s: %s" % (role, content[:160]))
-            stats["compacted"] += 1
-        summary = "Earlier conversation (compacted):\n" + "\n".join(summary_lines[-40:])
+        summary = None
+        if summarizer is not None:
+            try:
+                summary = summarizer(old)
+            except Exception:  # noqa: BLE001 — fall back to the local merge
+                summary = None
+        if summary:
+            stats["summary"] = "llm"
+        else:
+            summary_lines = []
+            for m in old:
+                role = m.get("role", "?")
+                content = (m.get("content") or "").strip().replace("\n", " ")
+                if content:
+                    summary_lines.append("%s: %s" % (role, content[:160]))
+            summary = "Earlier conversation (compacted):\n" + "\n".join(summary_lines[-40:])
+            stats["summary"] = "extractive"
+        stats["compacted"] = len(old)
         msgs = [{"role": "system", "content": summary}]
     else:
         msgs = []
