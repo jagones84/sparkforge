@@ -54,6 +54,36 @@ check("S1 local flag", bool(found) and found[0]["local"] is True,
 check("S1 skill.md at root",
       os.path.isfile(os.path.join(skills._local_dir(), "demo", "SKILL.md")))
 
+# S2 SKILL.md obbligatorio (assente) -> errore, nessun residuo
+z = make_zip({"my-skill/readme.txt": "no skill here\n"})
+r = skills.install_zip(z, name="nofile")
+check("S2 missing SKILL.md rejected", "error" in r, str(r))
+check("S2 no residue", not os.path.exists(os.path.join(skills._local_dir(), "nofile")))
+
+# S3 zip-slip rifiutato
+z = make_zip({"my-skill/SKILL.md": SKILL_MD, "my-skill/../../evil.txt": "boom"})
+r = skills.install_zip(z, name="slip")
+check("S3 zip-slip rejected", "error" in r, str(r))
+check("S3 nothing outside", not os.path.exists(os.path.join(tmp, "evil.txt")) and
+      not os.path.exists(os.path.join(skills.SKILLS_DIR, "evil.txt")))
+
+# S4 symlink rifiutato
+buf = io.BytesIO()
+with zipfile.ZipFile(buf, "w") as zf:
+    zf.writestr("my-skill/SKILL.md", SKILL_MD)
+    info = zipfile.ZipInfo("my-skill/link")
+    info.external_attr = (0o120777 << 16)  # symlink
+    zf.writestr(info, "/etc/passwd")
+r = skills.install_zip(buf.getvalue(), name="sym")
+check("S4 symlink rejected", "error" in r, str(r))
+
+# S5 cap superato (compresso)
+os.environ["SPARKFORGE_SKILL_MAX_ZIP"] = "50"
+z = make_zip({"my-skill/SKILL.md": SKILL_MD})
+r = skills.install_zip(z, name="big")
+check("S5 oversize rejected", "error" in r, str(r))
+os.environ.pop("SPARKFORGE_SKILL_MAX_ZIP", None)
+
 total = len(results)
 passed = sum(results)
 print("%d/%d" % (passed, total))
