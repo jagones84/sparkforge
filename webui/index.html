@@ -213,6 +213,13 @@
   #newSessDlg { position: fixed; z-index: 40; top: 50%; left: 50%; transform: translate(-50%,-50%);
     width: min(460px, 92vw); padding: 16px; }
   #newSessDlg[hidden] { display: none; }
+  /* JAG-121: folder picker (file-browser) for choosing the session workspace */
+  #dirBackdrop { position: fixed; inset: 0; z-index: 41; background: rgba(0,0,0,.5); }
+  #dirBackdrop[hidden] { display: none; }
+  #dirPicker { position: fixed; z-index: 42; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: min(520px, 94vw); padding: 16px; background: #0f1320; }
+  #dirPicker[hidden] { display: none; }
+  #dirList button { display: block; width: 100%; text-align: left; margin-bottom: 4px; font-size: 12px; }
   .pal-item { cursor: pointer; }
   .pal-item:hover { background: rgba(108,140,255,.1); }
   /* v0.8.1 resizable columns + panel toggles */
@@ -487,13 +494,29 @@
   <label class="remaining" for="nsTitle">titolo</label>
   <input id="nsTitle" class="inp" style="width:100%;padding:6px 10px;font-size:12px;margin-top:4px">
   <label class="remaining" for="nsWs" style="display:block;margin-top:10px">cartella (workspace locale)</label>
-  <input id="nsWs" class="inp" placeholder="/home/jagones/Repositories/…" style="width:100%;padding:6px 10px;font-size:12px;margin-top:4px">
+  <div style="display:flex;gap:6px;margin-top:4px">
+    <input id="nsWs" class="inp" placeholder="/home/jagones/Repositories/…" style="flex:1;padding:6px 10px;font-size:12px">
+    <button class="ghost" onclick="openDirPicker()" title="sfoglia le cartelle">📁 sfoglia…</button>
+  </div>
   <div class="remaining" style="margin-top:4px">la sessione sarà legata a questa cartella (regole di progetto, tool, git)</div>
   <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
     <button class="ghost" onclick="closeNewSess()">annulla</button>
     <button class="ghost" onclick="createNewSession()">crea</button>
   </div>
   <div id="nsResult" class="remaining" style="margin-top:8px"></div>
+</div>
+<div id="dirBackdrop" hidden onclick="closeDirPicker()"></div>
+<div id="dirPicker" class="card" hidden>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="ghost" id="dirUp" onclick="dirUp()" title="cartella superiore" aria-label="cartella superiore">↑</button>
+    <div id="dirPath" class="remaining" style="flex:1;word-break:break-all"></div>
+  </div>
+  <div id="dirList" style="margin-top:8px;max-height:46vh;overflow:auto"></div>
+  <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+    <button class="ghost" onclick="closeDirPicker()">annulla</button>
+    <button class="ghost" onclick="pickCurrentDir()">usa questa cartella</button>
+  </div>
+  <div id="dirResult" class="remaining" style="margin-top:6px"></div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -703,6 +726,28 @@ async function createNewSession() {
   $("log").innerHTML = ""; curThink = curAns = null;
   closeNewSess(); loadSessions(); loadHistory(); loadRules(); loadCtx(); closeAside();
 }
+/* JAG-121: folder picker (file-browser) for the session workspace */
+let _dirState = { path: "", parent: null, roots: [] };
+async function openDirPicker(start) {
+  $("dirPicker").hidden = false; $("dirBackdrop").hidden = false; $("dirResult").textContent = "";
+  await loadDirs(start || $("nsWs").value.trim());
+}
+function closeDirPicker() { $("dirPicker").hidden = true; $("dirBackdrop").hidden = true; $("dirResult").textContent = ""; }
+async function loadDirs(path) {
+  const qs = path ? ("?path=" + encodeURIComponent(path)) : "";
+  const d = await api("GET", "/api/fs/dirs" + qs);
+  if (d.error) { $("dirResult").textContent = "errore: " + d.error; return; }
+  _dirState = d; $("dirPath").textContent = d.path;
+  $("dirUp").disabled = !d.parent;
+  const box = $("dirList"); box.innerHTML = "";
+  if (!(d.dirs || []).length) box.innerHTML = '<div class="remaining">nessuna sottocartella</div>';
+  (d.dirs || []).forEach(x => {
+    const b = document.createElement("button"); b.className = "ghost"; b.textContent = "📁 " + x.name;
+    b.onclick = () => loadDirs(x.path); box.appendChild(b);
+  });
+}
+function dirUp() { if (_dirState.parent) loadDirs(_dirState.parent); }
+function pickCurrentDir() { $("nsWs").value = _dirState.path || ""; closeDirPicker(); }
 async function loadHistory() {
   if (!sessionId) return;
   _stick = true;  // JAG-116: opening a session always lands at the latest message
@@ -1657,7 +1702,7 @@ $("session-search").addEventListener("input", loadSessions);
 $("hide-empty").addEventListener("change", loadSessions);
 addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); openPalette(); }
-  if (e.key === "Escape") { closePalette(); closeNewSess(); }
+  if (e.key === "Escape") { closePalette(); closeNewSess(); closeDirPicker(); }
 });
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 $("inp").addEventListener("input", skillsAutocomplete);

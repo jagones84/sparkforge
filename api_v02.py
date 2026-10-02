@@ -785,6 +785,8 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, rules_status(qs))
         if path == "/api/workspace":
             return _r(handler, 200, workspace_get(qs))
+        if path == "/api/fs/dirs":  # JAG-121: folder picker for a new session
+            return _r(handler, 200, fs_dirs(qs))
 
         return False
 
@@ -1092,6 +1094,41 @@ def provider_reload():
     _lazy('providers')
     _PROVIDERS.reload()
     return {"ok": True}
+
+
+def _browse_roots():
+    """Allowed roots for the folder picker (default: the user's home)."""
+    import os as _os
+    env = _os.environ.get("SPARKFORGE_BROWSE_ROOTS")
+    roots = [r for r in env.replace(":", " ").split() if r] if env else [_os.path.expanduser("~")]
+    return [_os.path.realpath(_os.path.expanduser(r)) for r in roots]
+
+
+def fs_dirs(qs=None):
+    """GET /api/fs/dirs — list sub-directories for the workspace folder picker."""
+    import os as _os
+    roots = _browse_roots()
+    p = _os.path.realpath(_os.path.expanduser((qs or {}).get("path") or roots[0]))
+    if not any(p == r or p.startswith(r + _os.sep) for r in roots):
+        return {"error": "path outside browse roots", "roots": roots, "path": p}
+    if not _os.path.isdir(p):
+        return {"error": "not a directory: %s" % p, "roots": roots, "path": p}
+    dirs = []
+    try:
+        with _os.scandir(p) as it:
+            for e in it:
+                try:
+                    if e.is_dir(follow_symlinks=False) and not e.name.startswith("."):
+                        dirs.append({"name": e.name, "path": e.path})
+                except OSError:
+                    continue
+    except OSError as e:
+        return {"error": str(e), "roots": roots, "path": p}
+    dirs.sort(key=lambda d: d["name"].lower())
+    parent = _os.path.dirname(p)
+    if not any(parent == r or parent.startswith(r + _os.sep) for r in roots):
+        parent = None
+    return {"path": p, "parent": parent, "roots": roots, "dirs": dirs[:500], "count": len(dirs)}
 
 
 def _session_ws(session_id):
