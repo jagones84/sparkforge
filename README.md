@@ -2,6 +2,8 @@
 
 **A frontier-style agent harness for the DGX Spark — chat, plan, tasks, agent loop, WebUI, CLI, and a mobile command API, all backed by the local llama.cpp router.**
 
+© 2025-2026 Giovanni J. Agones ([jagones84](https://github.com/jagones84)) · licensed under AGPL-3.0 (see [LICENSE](LICENSE)).
+
 SparkForge is the "super harness" successor to the SparkPulse mobile telemetry project (JAG-16): where SparkPulse *observes* the DGX from your phone, SparkForge *commands* it — a state-of-the-art (2026-pattern) harness wrapped around whatever LLM the local router (`:8080`) has loaded, with:
 
 - 💬 **Streaming chat** with visible **Chain-of-Thought** timeline (`reasoning_content` or `<think>` parsing)
