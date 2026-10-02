@@ -91,8 +91,10 @@ def _addenda(base_dir):
         return out
     for p in sorted(glob.glob(os.path.join(base_dir, "*.md"))):
         sid = _section_id(os.path.basename(p))
-        if sid:
-            out[sid] = _read(p)
+        if not sid:
+            continue
+        text = _read(p)
+        out[sid] = (out[sid] + "\n" + text) if sid in out else text
     return out
 
 

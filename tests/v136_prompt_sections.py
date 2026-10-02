@@ -2,6 +2,8 @@
 """v0.9.37 acceptance — architettura prompt a registro (JAG-128A)."""
 import os
 import sys
+import tempfile
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
@@ -48,6 +50,17 @@ check("C2 manifest lists section addenda dir",
       "prompt.d" in out, "")
 check("C3 capability rule present (no shell for self-questions)",
       "Capability questions" in out and "NEVER run shell" in out, "")
+
+with tempfile.TemporaryDirectory() as tmp:
+    with open(os.path.join(tmp, "90-state.md"), "w", encoding="utf-8") as fh:
+        fh.write("OVERLAY_ONE")
+    with open(os.path.join(tmp, "91-state.md"), "w", encoding="utf-8") as fh:
+        fh.write("OVERLAY_TWO")
+    with mock.patch.object(prompt, "project_ddir", lambda ws: tmp):
+        overlaid = prompt.render_sections(None, ws=tmp)
+check("D1 additive overlays for same section concatenate in order",
+      "OVERLAY_ONE" in overlaid and "OVERLAY_TWO" in overlaid
+      and overlaid.index("OVERLAY_ONE") < overlaid.index("OVERLAY_TWO"), "")
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
