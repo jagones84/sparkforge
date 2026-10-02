@@ -36,9 +36,31 @@ check("R8 proposal has id + pending status",
       bool(rec.get("id")) and rec.get("status") == "pending", str(rec))
 check("R9 proposal is persisted",
       any(p["id"] == rec["id"] for p in improve.list_proposals()), "")
+
+import rules  # noqa: E402
+
+_rp = rules.prompt_paths()
+_rule_files = [_rp["global_rules"], _rp["global_fallback"],
+               _rp["project_rules"], _rp["project_fallback"]]
+
+
+def _snap(paths):
+    snap = {}
+    for p in paths:
+        exists = os.path.exists(p)
+        snap[p] = (exists, open(p, encoding="utf-8", errors="replace").read()
+                   if exists else "")
+    extra = _rp["project_extra_dir"]
+    snap[extra] = sorted(os.listdir(extra)) if os.path.isdir(extra) else None
+    return snap
+
+
+_rules_before = _snap(_rule_files)
 improve.decide(rec["id"], "deny")
-check("R10 deny does not write any rule file",
-      improve.get_proposal(rec["id"])["status"] == "denied", "")
+_rules_after = _snap(_rule_files)
+check("R10 deny writes no rule file (and status denied)",
+      _rules_after == _rules_before
+      and improve.get_proposal(rec["id"])["status"] == "denied", "")
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
