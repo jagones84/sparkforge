@@ -2868,6 +2868,16 @@ class Handler(BaseHTTPRequestHandler):
                     os.unlink(tmp)
                 except OSError:
                     pass
+        # Raw skill zip upload (JAG-109) — before JSON parsing.
+        if path == "/api/skills/install" and (
+                ctype.startswith("application/zip") or ctype.startswith("application/x-zip")):
+            n = int(self.headers.get("Content-Length") or 0)
+            if not n:
+                return self._send(400, {"error": "zip body required"})
+            data = self.rfile.read(n)
+            res = api_v02.install_skill_raw(data, name=qs.get("name"),
+                                            overwrite=qs.get("overwrite") == "1")
+            return self._send(200 if res.get("ok") else 400, res)
         body = self._body()
         if api_v02.handle(self, "POST", path, qs, body):
             return

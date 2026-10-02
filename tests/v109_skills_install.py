@@ -119,6 +119,14 @@ check("S10 DELETE route present", '"/api/skills/' in src and "DELETE" in src)
 lst = skills.list_skills(reload=True)
 check("S10 list has local flag", all("local" in s for s in lst), str(lst[:1]))
 
+# S11 l'upload raw è gestito in server.py (branch zip) e delega a skills.install_zip
+srv = open(os.path.join(REPO, "server.py"), encoding="utf-8").read()
+check("S11 raw zip branch present",
+      '"/api/skills/install"' in srv and "application/zip" in srv)
+check("S11 api helper present",
+      "install_skill_raw" in open(os.path.join(REPO, "api_v02.py"),
+                                  encoding="utf-8").read())
+
 total = len(results)
 passed = sum(results)
 print("%d/%d" % (passed, total))

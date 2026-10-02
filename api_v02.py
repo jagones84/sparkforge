@@ -1001,3 +1001,11 @@ def update_policy(body):
     _publish("tools.update", tool=name, enabled=entry.get("enabled"),
              approval=entry.get("approval"))
     return {"ok": True, "tools": registry.catalog()}
+
+
+def install_skill_raw(data, name=None, overwrite=False):
+    """POST /api/skills/install — body zip grezzo. Engine: skills.install_zip."""
+    import skills as skills_mod
+    res = skills_mod.install_zip(data, name=name, overwrite=overwrite)
+    _publish("skills.install", name=res.get("name"), ok=bool(res.get("ok")))
+    return res
