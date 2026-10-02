@@ -1441,7 +1441,11 @@ function taskTree(nodes) {
     seen.add(n.id);
     return one(n, depth) + walk(n.id, depth + 1);
   }).join("");
-  return walk("_root", 0);
+  let html = walk("_root", 0);
+  (nodes || []).forEach(n => {
+    if (!seen.has(n.id)) { seen.add(n.id); html += one(n, 0); }
+  });
+  return html;
 }
 /* JAG-128B: la proposta di self-improvement arriva come evento SSE e resta
  * azionabile dalla chat (accetta/rifiuta -> POST /api/improve). */
