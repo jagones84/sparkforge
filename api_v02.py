@@ -1312,6 +1312,10 @@ def workspace_set(body):
             return {"ok": False, "error": "sessione inesistente: %s" % sid}
         sess["workspace"] = real
         _srv().save_session(sess)
+        try:
+            _RULES.remember_workspace(real)  # JAG-126: next new session defaults here
+        except Exception:  # noqa: BLE001 — convenience only
+            pass
         _publish("workspace.update", session=sid, workspace=real, ok=True)
         return {"ok": True, "scope": "session", "session": sid, "workspace": real}
     res = _RULES.set_workspace(real)

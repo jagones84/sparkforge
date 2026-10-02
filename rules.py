@@ -38,18 +38,62 @@ def _config_file():
     return os.path.join(_config_dir(), "config.json")
 
 
-def get_workspace():
-    """The selected project root (config.json, else SPARKFORGE_WORKSPACE, else repo)."""
+def _read_config():
+    """The config.json dict (empty on any error — never raises)."""
     try:
         with open(_config_file(), "r", encoding="utf-8") as f:
-            ws = (json.load(f) or {}).get("workspace")
-        if ws and os.path.isdir(ws):
-            return ws
-    except OSError:
-        pass
+            return json.load(f) or {}
     except Exception:  # noqa: BLE001 — a bad config must not break anything
-        pass
-    return os.environ.get("SPARKFORGE_WORKSPACE") or REPO
+        return {}
+
+
+def _write_config(cfg):
+    """Atomically persist config.json."""
+    cfg_dir = _config_dir()
+    os.makedirs(cfg_dir, exist_ok=True)
+    tmp = _config_file() + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, _config_file())
+
+
+def get_workspace():
+    """The default project root for a session that has no folder of its own.
+
+    JAG-126: precedence is the EXPLICIT default (config.json `workspace`, set by
+    the user) -> `SPARKFORGE_WORKSPACE` -> the LAST workspace actually used
+    (config.json `last_workspace`) -> the user's home. The harness repo is no
+    longer the silent default: opening a folder once makes the NEXT new session
+    start there, and a fresh install starts at home, never inside sparkforge.
+    """
+    cfg = _read_config()
+    ws = cfg.get("workspace")
+    if ws and os.path.isdir(ws):
+        return ws
+    env = os.environ.get("SPARKFORGE_WORKSPACE")
+    if env and os.path.isdir(env):
+        return env
+    last = cfg.get("last_workspace")
+    if last and os.path.isdir(last):
+        return last
+    home = os.path.expanduser("~")
+    return home if os.path.isdir(home) else REPO
+
+
+def remember_workspace(path):
+    """JAG-126: remember the folder in use, so the NEXT new session defaults to it."""
+    real = check_dir(path)
+    if not real:
+        return {"ok": False}
+    cfg = _read_config()
+    if cfg.get("last_workspace") == real:
+        return {"ok": True, "unchanged": True}
+    cfg["last_workspace"] = real
+    try:
+        _write_config(cfg)
+    except OSError:
+        return {"ok": False}
+    return {"ok": True, "last_workspace": real}
 
 
 def check_dir(path):
@@ -80,19 +124,9 @@ def set_workspace(path):
     if not real:
         return {"ok": False, "error": "cartella inesistente: %s" % (raw or "(vuoto)")}
     path = real
-    cfg_dir = _config_dir()
-    os.makedirs(cfg_dir, exist_ok=True)
-    cfg = {}
-    try:
-        with open(_config_file(), "r", encoding="utf-8") as f:
-            cfg = json.load(f) or {}
-    except Exception:  # noqa: BLE001
-        cfg = {}
+    cfg = _read_config()
     cfg["workspace"] = path
-    tmp = _config_file() + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, _config_file())
+    _write_config(cfg)
     return {"ok": True, "workspace": path}
 
 

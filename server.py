@@ -267,18 +267,30 @@ def backfill_session_workspaces():
     return n
 
 
+def _remember_workspace(path):
+    """JAG-126: remember the folder of the session being used, so the NEXT new
+    session defaults to it. Never breaks the session if the write fails."""
+    try:
+        import rules as rules_mod
+        rules_mod.remember_workspace(path)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def get_or_create_session(sid, title=None, workspace=None):
     if sid:
         s = load_session(sid)
         if s:
             if ensure_session_workspace(s, workspace):
                 save_session(s)
+            _remember_workspace(s.get("workspace"))
             return s
     sid = sid or uuid.uuid4().hex[:12]
     s = {"id": sid, "title": title or "session " + sid[:6],
          "created": round(time.time(), 3), "messages": []}
     ensure_session_workspace(s, workspace)
     save_session(s)
+    _remember_workspace(s.get("workspace"))
     return s
 
 
