@@ -3180,6 +3180,10 @@ class Handler(BaseHTTPRequestHandler):
             remaining = ["%s: %s" % (t["status"], t["title"]) for t in tasks.get("tasks", [])
                          if t.get("status") != "done"]
             return self._send(200, {**tasks, "remaining": remaining})
+        if path == "/api/improve":
+            # JAG-128B: elenco proposte di self-improvement per la card WebUI.
+            import improve as improve_mod
+            return self._send(200, {"proposals": improve_mod.list_proposals()})
         if path == "/api/sessions":
             return self._send(200, {"sessions": list_sessions()})
         if path == "/api/sessions/new":
@@ -3347,6 +3351,13 @@ class Handler(BaseHTTPRequestHandler):
             depth = push_steer(sid, text)
             publish("chat.steer", session=sid, text=text, queued=depth)
             return self._send(200, {"ok": True, "queued": depth})
+        if path == "/api/improve":
+            # JAG-128B: approva/rifiuta una proposta di self-improvement.
+            import improve as improve_mod
+            pid = body.get("id") or qs.get("id", "")
+            decision = body.get("decision") or qs.get("decision", "")
+            res = improve_mod.decide(pid, decision)
+            return self._send(200 if res.get("ok") else 400, res)
         if path == "/api/chat/stream":
             # a JSON body over query params). Same SSE contract.
             message = body.get("message") or qs.get("message", "")

@@ -887,6 +887,7 @@ function send(text) {
   es.addEventListener("approval.request", e => { approvalCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); who("user", "🎯 steer: " + (d.text || "")); });
   es.addEventListener("plan.incomplete", e => planIncomplete(JSON.parse(e.data)));
+  es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
   es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); flushQueue(); });
 }
@@ -1407,6 +1408,28 @@ function planIncomplete(d) {
   const go = document.createElement("button"); go.className = "ghost"; go.textContent = "▶ continua";
   go.onclick = () => { go.disabled = true; go.textContent = "▶ ripreso"; send("Continua: completa i passi aperti del piano."); };
   row.appendChild(go); bub.appendChild(row);
+  card.appendChild(bub); $("log").appendChild(card); scroll();
+}
+/* JAG-128B: la proposta di self-improvement arriva come evento SSE e resta
+ * azionabile dalla chat (accetta/rifiuta -> POST /api/improve). */
+function improveCard(d) {
+  const card = document.createElement("div");
+  card.className = "msg ai";
+  const bub = document.createElement("div"); bub.className = "bubble planwarn";
+  const head = document.createElement("div");
+  head.textContent = "💡 proposta di miglioramento (" + (d.scope || "") + ")";
+  const body = document.createElement("div");
+  body.style.cssText = "white-space:pre-wrap;font-size:12px;color:var(--dim);margin:4px 0";
+  body.textContent = d.content || "";
+  const row = document.createElement("div"); row.style.cssText = "display:flex;gap:6px;margin-top:4px";
+  const ok = document.createElement("button"); ok.className = "ghost"; ok.style.color = "var(--ok)"; ok.textContent = "✅ accetta";
+  const no = document.createElement("button"); no.className = "ghost"; no.style.color = "var(--err)"; no.textContent = "⛔ rifiuta";
+  ok.onclick = () => api("POST", "/api/improve", { id: d.id_id || d.id, decision: "approve" })
+    .then(() => { ok.textContent = "✅ accettata"; no.remove(); });
+  no.onclick = () => api("POST", "/api/improve", { id: d.id_id || d.id, decision: "deny" })
+    .then(() => { no.textContent = "⛔ rifiutata"; ok.remove(); });
+  row.appendChild(ok); row.appendChild(no);
+  bub.appendChild(head); bub.appendChild(body); bub.appendChild(row);
   card.appendChild(bub); $("log").appendChild(card); scroll();
 }
 

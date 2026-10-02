@@ -13,6 +13,13 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
+def read(p):
+    try:
+        return open(p, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return ""
+
+
 import improve  # noqa: E402
 
 check("R1 routing table exposes scopes",
@@ -68,6 +75,12 @@ import registry  # noqa: E402
 sch = registry.TOOL_SCHEMAS.get("improve", {})
 check("R12 improve tool declared with propose action",
       "propose" in (sch.get("properties", {}).get("action", {}).get("enum") or []), "")
+
+srv = read(os.path.join(REPO, "server.py"))
+check("R13 route /api/improve present", '"/api/improve"' in srv, "")
+web = read(os.path.join(REPO, "webui", "index.html"))
+check("R14 webui listens to improve.proposal",
+      'improve.proposal' in web and "function improveCard" in web, "")
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
