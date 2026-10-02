@@ -1527,6 +1527,11 @@ function connectFeed() {
     const bits = [d.tool, (d.exit_code != null ? "exit=" + d.exit_code : ""), (d.backend ? "backend=" + d.backend : ""), (d.ok === false ? "FAILED" : "")].filter(Boolean);
     push("🛠 " + bits.join(" ")); });
   es.addEventListener("tool.blocked", e => { const d = JSON.parse(e.data); push("⛔ blocked " + d.tool + ": " + (d.reason || "").slice(0, 50)); });
+  // JAG-128B finalfix: la publish del tool `improve` NON porta `session`, quindi
+  // il fan-out raggiunge SOLO gli abbonati a /api/feed. La card va agganciata QUI,
+  // altrimenti resta irraggiungibile (il listener della chat non la vede mai).
+  es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); });
+  es.addEventListener("improve.nudge", e => { const d = JSON.parse(e.data); who("ai", "💡 self-improvement: " + (d.hint || "")); });
   es.addEventListener("agent.paused", () => push("⏸ run paused"));
   es.addEventListener("agent.aborted", () => push("⛔ run aborted"));
   es.addEventListener("agent.control", e => { const d = JSON.parse(e.data); push("🎛 " + d.action + " → " + d.status); });

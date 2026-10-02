@@ -38,13 +38,24 @@ def _path(pid):
     return os.path.join(PROPOSAL_DIR, pid + ".json")
 
 
-def propose(scope, content, reason="", target_path=""):
-    """Registra una PROPOSTA (non scrive nulla di definitivo)."""
+def propose(scope, content, reason="", target_path="", ws=None):
+    """Registra una PROPOSTA (non scrive nulla di definitivo).
+
+    `ws` e' il workspace in cui la regola andra' scritta in caso di approve:
+    viene catturato ORA (il workspace puo' cambiare prima della decisione),
+    cosi' `decide` scrive nel progetto giusto e non in quello "corrente".
+    """
+    if ws is None:
+        try:
+            import rules
+            ws = rules.get_workspace()
+        except Exception:  # noqa: BLE001 — il ws non deve mai rompere la proposta
+            ws = ""
     os.makedirs(PROPOSAL_DIR, exist_ok=True)
     pid = "%d-%s" % (int(time.time() * 1000), scope)
     rec = {"id": pid, "ts": time.time(), "scope": scope,
            "content": str(content)[:8000], "reason": str(reason)[:500],
-           "target_path": target_path, "status": "pending"}
+           "target_path": target_path, "status": "pending", "ws": ws}
     with open(_path(pid), "w", encoding="utf-8") as f:
         json.dump(rec, f, ensure_ascii=False, indent=2)
     return rec
@@ -87,8 +98,12 @@ def decide(pid, decision):
         return {"ok": True, **_save(rec)}
     if decision != "approve":
         return {"ok": False, "error": "decision must be approve|deny"}
+    if rec.get("scope") == "skill":
+        # JAG-128B deferred: l'apply di una skill non e' implementato. NON si
+        # marca 'approved' in silenzio: lo status resta 'pending' e si dice il vero.
+        return {"ok": False, "error": "skill apply not implemented (JAG-128B deferred)"}
     if rec["scope"] in ("project", "global"):
         import rules
-        rules.append(rec["scope"], rec["content"])
+        rules.append(rec["scope"], rec["content"], ws=rec.get("ws"))
     rec["status"] = "approved"
     return {"ok": True, **_save(rec)}

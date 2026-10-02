@@ -131,6 +131,38 @@ finally:
     server_mod.publish = _old_publish
     shutil.rmtree(_tmp, ignore_errors=True)
 
+# --- I2 (approve scrive nel ws della proposta) + I3 (approve su skill = no-op) ---
+_tmp2 = tempfile.mkdtemp(prefix="v137-prop2-")
+_ws = None
+_old_dir2 = improve.PROPOSAL_DIR
+improve.PROPOSAL_DIR = _tmp2
+try:
+    _ws = tempfile.mkdtemp(prefix="v137-ws-")
+    _rec = improve.propose("project", "REGOLA-DA-TEST", reason="r", ws=_ws)
+    check("R17 propose persists the ws in the record",
+          _rec.get("ws") == _ws, "ws=%s" % _rec.get("ws"))
+
+    _dec = improve.decide(_rec["id"], "approve")
+    _rulefile = os.path.join(_ws, ".sparkforge", "RULES.md")
+    _written = read(_rulefile)
+    check("R18 approve writes into the PROPOSAL ws (not the current one)",
+          bool(_dec.get("ok")) and "REGOLA-DA-TEST" in _written,
+          "ok=%s file=%s exists=%s" % (_dec.get("ok"), _rulefile,
+                                       os.path.exists(_rulefile)))
+
+    _recs = improve.propose("skill", "SKILL-DA-TEST", reason="r", ws=_ws)
+    _decs = improve.decide(_recs["id"], "approve")
+    _still = improve.get_proposal(_recs["id"]) or {}
+    check("R19 approve on skill is explicit no-op (no silent approved)",
+          _decs.get("ok") is False and "not implemented" in (_decs.get("error") or "")
+          and _still.get("status") == "pending",
+          "res=%s status=%s" % (_decs, _still.get("status")))
+finally:
+    improve.PROPOSAL_DIR = _old_dir2
+    shutil.rmtree(_tmp2, ignore_errors=True)
+    if _ws:
+        shutil.rmtree(_ws, ignore_errors=True)
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)
