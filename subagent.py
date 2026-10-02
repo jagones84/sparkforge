@@ -27,13 +27,29 @@ import api_v02  # for the RunState / agent_run_v2 machinery
 import approvals
 import registry
 import sandbox
+import taskgraph  # per-run task graph (child gets its own todo list)
 import tools as toolmod
 
 _lock = threading.RLock()
 _running = {}     # subagent_id -> {state, parent_run_id, goal, result}
+_DEPTH = {}       # run_id -> depth of nesting (matrioska); 0 = top level
 
 
-def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None):
+def depth_of(run_id):
+    """Depth of a run: 0 for top-level, +1 for each delegated level."""
+    return _DEPTH.get(run_id, 0)
+
+
+def depth_allowed(depth, max_depth=None):
+    """True se si puo' ancora annidare (matrioska) sotto `depth` livelli."""
+    import keepgoing
+    md = int(keepgoing.cfg()["subagent_max_depth"])
+    if max_depth is not None:
+        md = int(max_depth)
+    return int(depth) < md
+
+
+def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None, depth=0):
     """Spawn a subagent run and return its id.
 
     The subagent runs asynchronously in a background thread. Call
@@ -41,9 +57,14 @@ def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None):
 
     Returns a dict with subagent_id (caller should store it).
     """
+    if not depth_allowed(depth):
+        return {"subagent_id": None, "run_id": None, "goal": goal,
+                "error": "max subagent depth reached"}
     sid = "sub_%s" % uuid.uuid4().hex[:10]
     st = api_v02.new_run("%s (subagent %s)" % (goal[:80], sid), model, max_steps)
     st.parent_run_id = parent_run_id
+    _DEPTH[st.id] = int(depth)
+    taskgraph.ensure(st.id, session_id=st.id, goal=goal)
 
     entry = {
         "id": sid,
@@ -99,12 +120,27 @@ def collect(subagent_id, timeout=None):
     if not entry["done"].wait(timeout=timeout):
         return {"ok": False, "error": "subagent timeout", "subagent_id": subagent_id}
     result = entry["result"] or {}
+    summary = result.get("summary", "")
+    parent_run_id = entry.get("parent_run_id")
+    if parent_run_id and summary:
+        try:
+            graph = taskgraph.load(parent_run_id)
+            child_run_id = entry.get("state").id if entry.get("state") else None
+            if graph and child_run_id:
+                for n in graph.get("nodes", []):
+                    if n.get("child_run_id") == child_run_id:
+                        taskgraph.update_node(
+                            graph, n["id"],
+                            evidence="[subagent] " + str(summary)[:400])
+                        break
+        except Exception:
+            pass
     return {
         "ok": result.get("status") == "done",
         "status": result.get("status"),
         "result": result,
         "trace": result.get("trace", []),
-        "summary": result.get("summary", ""),
+        "summary": summary,
         "steps": len(result.get("trace", [])),
         "subagent_id": subagent_id,
     }

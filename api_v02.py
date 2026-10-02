@@ -671,6 +671,7 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, {"tools": registry.catalog(),
                                      "sandbox": sandbox.probe(force=qs.get("probe") == "1"),
                                      "policy": registry.load_config().get("approvals") or {},
+                                     "runtime": registry.load_config().get("runtime") or {},
                                      "approvals": approvals.stats()})
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
@@ -1062,6 +1063,16 @@ def update_policy(body):
         registry.load_config(reload=True)
         _publish("tools.update", policy=dict(ap))
         return {"ok": True, "tools": registry.catalog(), "policy": dict(ap)}
+    if isinstance(body.get("runtime"), dict):
+        cfg.setdefault("runtime", {})
+        for k in ("keepgoing_max", "no_progress_rounds", "max_wall_secs",
+                  "subagent_max_depth"):
+            if k in body["runtime"] and body["runtime"][k] is not None:
+                cfg["runtime"][k] = int(body["runtime"][k])
+        registry.save_config(cfg)
+        registry.load_config(reload=True)
+        _publish("tools.update", runtime=dict(cfg["runtime"]))
+        return {"ok": True, "tools": registry.catalog(), "runtime": dict(cfg["runtime"])}
     name = body.get("tool") or body.get("name")
     if not name:
         return {"error": "tool required", "tools": registry.catalog()}

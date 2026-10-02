@@ -229,7 +229,7 @@ def _has_evidence(node):
 # ------------------------------------------------------------ node mutation --
 
 def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None,
-             source="model", parent=None):
+             source="model", parent=None, child_run_id=None):
     """Append a node; emits `graph.node.added`. `done` requires evidence.
 
     JAG-63: `parent` (a node id) turns a node into a SUBTASK of another step,
@@ -248,7 +248,7 @@ def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None
         raise ValueError("evidence required for a node in status 'done'")
     node = {"id": node_id or _next_id(graph), "label": label, "status": status,
             "deps": deps, "parent": str(parent) if parent else None, "evidence": ev,
-            "source": source,
+            "source": source, "child_run_id": child_run_id,
             "created": round(time.time(), 3), "updated": round(time.time(), 3)}
     with GRAPH_LOCK:
         graph["nodes"].append(node)

@@ -1168,6 +1168,36 @@ def drain_steer(sess_id):
         STEER_INBOX[sess_id] = []
         return q
 
+
+def has_steer(sess_id):
+    """JAG-129A: True quando c'e' almeno un messaggio di steering in coda."""
+    with _steer_lock:
+        return bool(STEER_INBOX.get(sess_id))
+
+
+# JAG-129A: abort di un turno di chat in corso (distinto dallo steer: steer
+# reindirizza, abort ferma). Il loop controlla il flag ad ogni giro.
+ABORT_INBOX = set()
+_abort_lock = threading.Lock()
+
+
+def push_abort(sess_id):
+    if not sess_id:
+        return False
+    with _abort_lock:
+        ABORT_INBOX.add(sess_id)
+    return True
+
+
+def _is_aborted(sess_id):
+    with _abort_lock:
+        return sess_id in ABORT_INBOX
+
+
+def clear_abort(sess_id):
+    with _abort_lock:
+        ABORT_INBOX.discard(sess_id)
+
 SKILLS_POLICY = (
     "Skills: you have an installed skill library — the SKILLS list below is "
     "live and includes all symlinked distributions. Before solving a task, SCAN "
@@ -1290,7 +1320,6 @@ def context_summary(session_id=None, graph_key=None):
     compaction or restarts. The old parallel `tasks.json` board is no longer
     injected here (it was the source of the "graph vs todo" confusion).
     """
-    plan = load_plan()
     lines = []
     key = graph_key or session_id
     g = None
@@ -1299,10 +1328,6 @@ def context_summary(session_id=None, graph_key=None):
             g = taskgraph.load(key)
         except Exception:  # noqa: BLE001 — context must never break a turn
             g = None
-    if plan.get("goal"):
-        lines.append("PLAN goal: " + plan["goal"])
-        for s in plan.get("steps", []):
-            lines.append(" - [%s] %s" % ("x" if s.get("done") else " ", s.get("title", "")))
     if g:
         todos = taskgraph.render_todos(g)
         if todos:
@@ -1837,7 +1862,6 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     answer, think = "", ""
     final_answer = ""
     announce_nudged = False
-    verify_nudged = False  # JAG-87: the "verify before you finish" gate fired once
     # JAG-84: only REAL tool calls consume the work budget. Plan/todo bookkeeping
     # (write_todos / update_todos / replan_todos) and invalid-JSON retries used to
     # eat the same 4-step budget, so a "plan then work" turn ran out of steps right
@@ -1877,13 +1901,24 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     work_steps = 0
     iters = 0
     used_tools = []
+    # JAG-129A: stato del loop di completamento (vedi keepgoing.decide).
+    import keepgoing as _kg
+    clear_abort(sess["id"])
+    import runmetrics
+    runmetrics.start(sess["id"], model=model)
+    _kg_rounds = 0
+    _kg_stop_reason = None
+    _kg_prev = None
+    _kg_stale = 0
+    _kg_started = time.time()
+    _kg_last_tool = None
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
         # JAG-127b: inject any steering message typed while this turn was running.
         for _s in drain_steer(sess["id"]):
             msgs.append({"role": "user", "content":
                          "[user steering — take this into account now] " + _s})
-            on_event("chat.steer", session=sess["id"], text=_s)
+            on_event("chat.steer", session=sess["id"], text=_s, applied=True)
         collected = []
 
         def _capture(ch, t, _c=collected):
@@ -2020,25 +2055,40 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          "or — if there is nothing left to do — reply with the final "
                          "result in plain prose. Do not just repeat the announcement."})
             continue
-        if not verify_nudged and tool_ctx:
-            # JAG-87 — VERIFICATION GATE before finishing (harness layer L7).
-            # The plan is execution state: if steps are still OPEN, the turn must
-            # not end silently. Nudge ONCE (bounded) to either close them with
-            # evidence, re-plan them away, or justify why they are done. This is
-            # the "verify before you declare done" rule the best harnesses ship
-            # (Devin/Codex: run the checks; Anthropic: no completion without proof).
-            _open_n = _open_plan_steps(sess)
-            if _open_n:
-                verify_nudged = True
+        if tool_ctx:
+            # JAG-129A: l'harness (la "segretaria") decide se l'agente puo' davvero
+            # chiudere. Con passi aperti re-inietta la lista e CONTINUA.
+            _g = taskgraph.load(sess["id"]) or {}
+            _nodes = _g.get("nodes", [])
+            _open = [n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES]
+            _cur = _kg.state_hash(_nodes)
+            _kg_stale = (_kg_stale + 1) if (_kg_prev is not None and _cur == _kg_prev) else 0
+            _dec = _kg.decide(open_nodes=len(_open), rounds=_kg_rounds, stale=_kg_stale,
+                              started=_kg_started, aborted=_is_aborted(sess["id"]),
+                              blocked=any(n.get("status") == "blocked" for n in _nodes),
+                              steer=has_steer(sess["id"]))
+            if _dec["continue"]:
+                _kg_rounds += 1
+                _kg_prev = _cur
+                for _s in drain_steer(sess["id"]):
+                    msgs.append({"role": "user", "content":
+                                 "[user steering — take this into account now] " + _s})
+                    on_event("chat.steer", session=sess["id"], text=_s, applied=True)
+                on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
+                         open=len(_open), total=len(_nodes))
                 msgs.append({"role": "assistant", "content": answer})
                 msgs.append({"role": "user", "content": (
-                    "VERIFICATION GATE: your task list still has %d open step(s). Do "
-                    "NOT just reply. Do one of these: (a) finish them NOW and mark "
-                    "each 'done' with evidence; (b) if they are no longer needed, "
-                    'emit {"action":"replan_todos","note":"<why>"}; or (c) if the '
-                    "work really is complete, reply explaining step by step why each "
-                    "open item is done or irrelevant." % _open_n)})
+                    "CONTINUA: la tua TASK LIST ha ancora %d passo/i aperto/i. NON "
+                    "fermarti e non chiedere il permesso. Per OGNI passo aperto: "
+                    "esegui l'azione con una tool call, poi marcalo 'done' con "
+                    "update_todos e l'evidenza concreta; se non serve piu', "
+                    "ripianifica. Lista attuale:\n%s"
+                    % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))))})
                 continue
+            _kg_stop_reason = _dec["reason"]
+            on_event("plan.stopped", session=sess["id"], reason=_dec["reason"],
+                     open=len(_open), total=len(_nodes), rounds=_kg_rounds,
+                     duration_s=round(time.time() - _kg_started, 1))
         for ch, t in collected:
             on_delta(ch, t)
         final_answer, think = answer, think
@@ -2101,6 +2151,18 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 "reason": "model emitted JSON instead of a prose reply"}
     reply = append_message(sess, "assistant", content, reasoning=think.strip() or None,
                            meta=meta)
+    try:
+        runmetrics.finish(sess["id"], outcome="done",
+                          stop_reason=_kg_stop_reason, iterations=_kg_rounds,
+                          steps=work_steps,
+                          prompt_tokens=int(chat_usage.get("prompt_tokens") or 0),
+                          completion_tokens=int(chat_usage.get("completion_tokens") or 0),
+                          tokens=int(chat_usage.get("prompt_tokens") or 0)
+                                 + int(chat_usage.get("completion_tokens") or 0),
+                          model=model)
+        publish("run.metrics", session=sess["id"], metrics=runmetrics.get(sess["id"]))
+    except Exception:  # noqa: BLE001 — le metriche non devono mai rompere un turno
+        pass
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
             model=model, think_chars=len(think), error=bool(meta.get("error")))
     # JAG-128B: nudge di fine turno — quando il turno ha usato parecchi tool (o e'
@@ -2115,10 +2177,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     hint="valuta cosa persistere: memoria (libera) o proposta regole (improve tool)")
     except Exception:  # noqa: BLE001 — il nudge non deve mai rompere un turno
         pass
-    # JAG-127f: task-completion WARNING (user's choice: only a notice, no forced
-    # continuation). If the persistent task graph still has OPEN nodes when the
-    # model ends the turn, surface it so the UI can offer a "continua" button.
-    # No extra LLM call and no loop here — the turn ends normally.
+    # JAG-129A: rete di sicurezza — se il turno finisce con passi aperti (es. dopo
+    # un abort), pubblica comunque le metriche di fine turno. `plan.incomplete`
+    # convive con `plan.stopped` emesso dal loop.
     try:
         _g = taskgraph.load(sess["id"])
         _nodes = (_g or {}).get("nodes", [])
@@ -2127,7 +2188,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             publish("plan.incomplete", session=sess["id"], open=len(_open),
                     total=len(_nodes),
                     items=[str(n.get("label", "")) for n in _open][:12])
-    except Exception:  # noqa: BLE001 — a warning must never break the turn
+    except Exception:  # noqa: BLE001
         pass
     try:  # JAG-69: deterministic Stop hooks at the end of the turn
         import hooks
@@ -2226,6 +2287,29 @@ def apply_agent_action(act, run_id=None, session=None):
         return "task not found"
     if action == "write_todos":
         return _mirror_graph(run_id, act, "write_todos: graph updated", session)
+    if action == "subagent":
+        goal = str(act.get("goal") or act.get("detail") or "").strip()
+        if not goal:
+            return "subagent error: goal required"
+        try:
+            max_steps = int(act.get("max_steps", 4))
+        except (TypeError, ValueError):
+            max_steps = 4
+        import subagent as _sub
+        result = _sub.spawn(goal, parent_run_id=run_id, max_steps=max_steps,
+                            model=act.get("model"),
+                            depth=_sub.depth_of(run_id) + 1)
+        if result.get("error"):
+            return "subagent error: %s" % result["error"]
+        if run_id:
+            try:
+                graph = taskgraph.ensure(run_id, session_id=session)
+                taskgraph.add_node(graph, goal, source="subagent",
+                                   child_run_id=result["run_id"])
+            except Exception as e:  # noqa: BLE001 — linking must never break a run
+                publish("graph.error", run=run_id, error=str(e))
+        return "subagent spawned: %s (goal: %s, max_steps=%d)" % (
+            result["subagent_id"], goal[:80], max_steps)
     if action == "note":
         publish("agent.note", text=str(act.get("detail") or act.get("title") or "")[:400])
         return "noted"
@@ -2702,6 +2786,14 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
             # persist the explicit assistant error turn, then tell the client.
             ensure_reply_persisted(sess, since, error=e, model=target)
             publish("chat.error", session=sess["id"], error=str(e))
+            try:
+                import runmetrics
+                runmetrics.finish(sess["id"], outcome="error", stop_reason="error",
+                                  model=target)
+                publish("run.metrics", session=sess["id"],
+                        metrics=runmetrics.get(sess["id"]))
+            except Exception:  # noqa: BLE001
+                pass
             q.put("event: error\ndata: %s\n\n" % json.dumps(
                 {"error": str(e), "session": sess["id"], "stored": True},
                 ensure_ascii=False))
@@ -3174,7 +3266,16 @@ class Handler(BaseHTTPRequestHandler):
             # keep-alive is a /api/feed-only privilege (v0.6.1, JAG-48)
             return sse_response(self, feed_gen(since), keepalive=True)
         if path == "/api/plan":
-            return self._send(200, load_plan())
+            # JAG-129B/F3: alias di lettura della task list persistente, con
+            # shape retro-compatibile {nodes,counts,goal,steps} (consumer storici).
+            sid = qs.get("session") or ""
+            g = taskgraph.load(sid) if sid else None
+            pub = taskgraph.public(g) or {"nodes": [], "counts": {}}
+            pub["goal"] = (g or {}).get("goal") or ""
+            pub["steps"] = [{"id": n.get("id"), "title": n.get("label"),
+                             "done": n.get("status") in ("done", "cancelled")}
+                            for n in (g or {}).get("nodes", [])]
+            return self._send(200, pub)
         if path == "/api/tasks":
             tasks = load_tasks()
             remaining = ["%s: %s" % (t["status"], t["title"]) for t in tasks.get("tasks", [])
@@ -3351,6 +3452,14 @@ class Handler(BaseHTTPRequestHandler):
             depth = push_steer(sid, text)
             publish("chat.steer", session=sid, text=text, queued=depth)
             return self._send(200, {"ok": True, "queued": depth})
+        if path == "/api/chat/abort":
+            # JAG-129A: ferma il turno in corso (l'agente non deve continuare).
+            sid = body.get("session") or qs.get("session")
+            if not sid:
+                return self._send(400, {"error": "session required"})
+            push_abort(sid)
+            publish("chat.abort", session=sid)
+            return self._send(200, {"ok": True, "aborted": sid})
         if path == "/api/improve":
             # JAG-128B: approva/rifiuta una proposta di self-improvement.
             import improve as improve_mod
@@ -3379,10 +3488,16 @@ class Handler(BaseHTTPRequestHandler):
             res = ensure_model(alias, on_event=lambda k, **d: publish(k, **d))
             return self._send(200 if res.get("loaded") else 502, res)
         if path == "/api/plan":
-            goal = body.get("goal", "")
-            plan = {"goal": goal, "steps": body.get("steps", load_plan().get("steps", []))}
-            save_plan(plan)
-            return self._send(200, plan)
+            # JAG-129B/F3: il "plan" legacy E' la task list persistente, con
+            # shape retro-compatibile {nodes,counts,goal,steps} (consumer storici).
+            sid = body.get("session") or qs.get("session") or ""
+            g = taskgraph.load(sid) if sid else None
+            pub = taskgraph.public(g) or {"nodes": [], "counts": {}}
+            pub["goal"] = (g or {}).get("goal") or ""
+            pub["steps"] = [{"id": n.get("id"), "title": n.get("label"),
+                             "done": n.get("status") in ("done", "cancelled")}
+                            for n in (g or {}).get("nodes", [])]
+            return self._send(200, pub)
         if path == "/api/plan/generate":
             goal = body.get("goal", "")
             if not goal:
@@ -3393,14 +3508,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(502, {"error": "planner failed: %s" % e})
             return self._send(200, {"plan": plan, "raw": answer[:800], "run_id": run_id})
         if path == "/api/plan/toggle":
-            sid = body.get("id")
-            plan = load_plan()
-            for s in plan.get("steps", []):
-                if s["id"] == sid:
-                    s["done"] = not s.get("done")
-                    save_plan(plan)
-                    return self._send(200, plan)
-            return self._send(404, {"error": "step not found"})
+            # JAG-129B: il toggle legacy agisce sulla task list persistente
+            # (una sola fonte di verita'), non piu' su plan.json.
+            node_id = str(body.get("id") or qs.get("id") or "")
+            _g = taskgraph.load(body.get("session") or qs.get("session") or "")
+            node = taskgraph.find(_g, node_id=node_id) if _g else None
+            if not node:
+                return self._send(404, {"error": "step not found"})
+            if node.get("status") == "done":
+                taskgraph.update_node(_g, node_id, status="todo")
+            else:
+                taskgraph.complete_node(_g, node_id,
+                                        evidence="manual toggle (legacy /api/plan/toggle)")
+            return self._send(200, taskgraph.public(_g))
         if path == "/api/tasks":
             title = body.get("title", "")
             if not title:

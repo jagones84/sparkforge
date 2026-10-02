@@ -407,10 +407,8 @@
     </nav>
     <div id="panel-body">
       <section data-section="graph">
-        <h2>Plan <span class="remaining">· session task list (persistent)</span></h2>
+        <h2>TASK LIST (persistente) <span id="taskCount" class="remaining"></span></h2>
         <div class="card">
-          <div id="planGoal" class="remaining">no goal yet</div>
-          <div id="planSteps" style="margin-top:8px"></div>
           <div style="display:flex;gap:6px;margin-top:8px">
             <input id="planInp" class="inp" placeholder="goal…" style="flex:1;padding:6px 10px;font-size:12px">
             <button class="ghost" onclick="planGoal()" title="same as typing /goal in chat: plans AND runs to completion">▶ goal</button>
@@ -418,9 +416,6 @@
           </div>
           <div class="remaining" style="margin-top:6px">This panel is the persistent view of the plan.
             <b>/goal &lt;text&gt;</b> in chat does the same thing: plan + execute autonomously (no manual planning needed).</div>
-        </div>
-        <h2>Execution <span id="taskCount" class="remaining"></span> <span class="remaining">· run graph (current run)</span></h2>
-        <div class="card">
           <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
           <div id="tasks"></div>
           <div style="display:flex;gap:6px;margin-top:8px">
@@ -444,6 +439,13 @@
       </section>
       <section data-section="config" hidden>
         <h2>Config · tools &amp; approval policy</h2>
+        <div class="card"><b>Runtime / long-horizon</b>
+          <label>giri di continuazione <input id="rtKgMax" type="number" min="0" value="8"></label>
+          <label>no-progress rounds <input id="rtNoProg" type="number" min="0" value="2"></label>
+          <label>tetto tempo (s) <input id="rtWall" type="number" min="0" value="3600"></label>
+          <label>profondità subagent <input id="rtDepth" type="number" min="0" value="2"></label>
+          <button class="ghost" onclick="saveRuntime()">salva runtime</button>
+        </div>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
       </section>
       <section data-section="settings" hidden>
@@ -887,6 +889,9 @@ function send(text) {
   es.addEventListener("approval.request", e => { approvalCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); who("user", "🎯 steer: " + (d.text || "")); });
   es.addEventListener("plan.incomplete", e => planIncomplete(JSON.parse(e.data)));
+  es.addEventListener("plan.continuing", e => { planContinuing(JSON.parse(e.data)); });
+  es.addEventListener("plan.stopped", e => planStopped(JSON.parse(e.data)));
+  es.addEventListener("run.metrics", e => { runFooter(JSON.parse(e.data).metrics); });
   es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
   es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); flushQueue(); });
@@ -1091,23 +1096,11 @@ async function compactNow() {
 /* JAG-91: the plan is the PERSISTENT per-session task graph (the same list the
  * model owns and re-receives every turn), not the orphaned global plan.json. */
 async function loadPlan() {
-  if (!sessionId) { $("planGoal").textContent = "no session selected"; $("planSteps").innerHTML = ""; return; }
+  if (!sessionId) { renderGraph(); return; }
   let g = null;
   try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
-  if (!g || !g.nodes || !g.nodes.length) {
-    $("planGoal").textContent = g && g.goal ? g.goal : "no goal yet";
-    $("planSteps").innerHTML = '<div class="remaining">no plan steps — send a request to generate them</div>';
-    return;
-  }
-  $("planGoal").textContent = g.goal || "no goal yet";
-  $("planSteps").innerHTML = "";
-  (g.nodes || []).forEach(n => {
-    const d = document.createElement("div");
-    d.className = "step" + (n.status === "done" ? " done" : "");
-    d.innerHTML = `<span>${n.status === "done" ? "☑" : (n.status === "doing" ? "▶" : "☐")}</span><span>${n.label}</span>`;
-    d.onclick = () => api("POST", "/api/runs/" + sessionId + "/graph/nodes", { id: n.id, action: "update", status: n.status === "done" ? "doing" : "done" }).then(loadPlan);
-    $("planSteps").appendChild(d);
-  });
+  if (g && g.nodes && g.nodes.length) { graph = g; }
+  renderGraph();
 }
 /* v0.8: dedupe identical plan steps (the "say hello" x9 bug) */
 function dedupePlan(steps) {
@@ -1130,6 +1123,8 @@ function planGoal() {
 let curRunId = localStorage.getItem("sf_run") || null;
 let graph = null;        // {run_id, session_id, goal, nodes:[], counts, node_count}
 let graphFresh = null;   // node id to highlight on the next render
+
+function listRunId() { return (graph && graph.run_id) || curRunId || null; }
 
 function countNodes(nodes) {
   const c = { todo: 0, doing: 0, done: 0, blocked: 0, cancelled: 0 };
@@ -1169,14 +1164,11 @@ function renderGraph() {
     (graph.node_count || 0) + " nodes · " + (c.done || 0) + " done" +
     (graph.goal ? " · " + graph.goal.slice(0, 40) : "");
   $("taskCount").textContent = (c.done || 0) + "/" + (graph.node_count || 0);
-  (graph.nodes || []).forEach(n => {
-    const d = document.createElement("div"); d.className = "task";
-    if (n.id === graphFresh) d.classList.add("fresh");
-    const deps = (n.deps || []).length ? ` <span class="dep">⤷ ${n.deps.join(", ")}</span>` : "";
-    const ev = (n.evidence || []).length ? ` <span class="ev">📎 ${n.evidence.length}</span>` : "";
-    d.innerHTML = `<span class="st ${n.status}">${n.status}</span><span>${n.label}</span>${deps}${ev}`;
-    d.onclick = () => showNodeDetail(n);
-    box.appendChild(d);
+  box.innerHTML = taskTree(graph.nodes);
+  box.querySelectorAll(".task").forEach(el => {
+    const n = (graph.nodes || []).find(x => String(x.id) === el.dataset.id);
+    el.onclick = () => n && showNodeDetail(n);
+    if (n && n.id === graphFresh) el.classList.add("fresh");
   });
   $("remaining").innerHTML = "";
 }
@@ -1203,21 +1195,25 @@ async function graphNodeAction(id, a) {
     if (ev === null || !ev.trim()) return;
     body.action = "update"; body.status = "done"; body.evidence = ev;
   } else { body.action = "update"; body.status = a; }
-  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", body);
+  const rid = listRunId();
+  if (!rid) { who("ai", "no task list to update"); return; }
+  const r = await api("POST", "/api/runs/" + rid + "/graph/nodes", body);
   if (r && r.error) { who("ai", "⚠ graph: " + r.error); return; }
-  if (r && r.id) applyGraphEvent({ run: curRunId, node: r });
+  if (r && r.id) applyGraphEvent({ run: rid, node: r });
 }
 async function addTask() {
   const v = $("taskInp").value.trim(); if (!v) return;
   $("taskInp").value = "";
-  if (!curRunId) { await api("POST", "/api/tasks", { title: v }); return; }
-  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", { action: "add", label: v });
-  if (r && r.id) applyGraphEvent({ run: curRunId, node: r });
+  const rid = listRunId();
+  if (!rid) { await api("POST", "/api/tasks", { title: v }); return; }
+  const r = await api("POST", "/api/runs/" + rid + "/graph/nodes", { action: "add", label: v });
+  if (r && r.id) applyGraphEvent({ run: rid, node: r });
 }
 async function replanGraph() {
-  if (!curRunId) { who("ai", "no run graph to re-plan yet"); return; }
+  const rid = listRunId();
+  if (!rid) { who("ai", "no run graph to re-plan yet"); return; }
   const note = prompt("re-plan: what changed / what is still missing?", "");
-  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", { action: "replan", note: note || "" });
+  const r = await api("POST", "/api/runs/" + rid + "/graph/nodes", { action: "replan", note: note || "" });
   if (r && r.error) { who("ai", "⚠ replan: " + r.error); return; }
   who("ai", "↻ re-plan: +" + ((r.added || []).length) + " nodes" +
       ((r.added_labels || []).length ? " — " + r.added_labels.join("; ") : ""));
@@ -1232,9 +1228,10 @@ async function resetPlan() {
   loadPlan(); loadGraph();
 }
 async function resetRunGraph() {
-  if (!curRunId) { who("ai", "no run graph to reset"); return; }
+  const rid = listRunId();
+  if (!rid) { who("ai", "no run graph to reset"); return; }
   if (!(await confirmDelete("clear the current run graph?"))) return;
-  await api("POST", "/api/runs/" + encodeURIComponent(curRunId) + "/graph/reset", {});
+  await api("POST", "/api/runs/" + encodeURIComponent(rid) + "/graph/reset", {});
   who("ai", "↺ run graph reset");
   loadGraph();
 }
@@ -1409,6 +1406,51 @@ function planIncomplete(d) {
   go.onclick = () => { go.disabled = true; go.textContent = "▶ ripreso"; send("Continua: completa i passi aperti del piano."); };
   row.appendChild(go); bub.appendChild(row);
   card.appendChild(bub); $("log").appendChild(card); scroll();
+}
+/* JAG-129B: il piano puo' proseguire da solo (round multipli) o fermarsi per
+ * un motivo esplicito; la checklist viene renderizzata annidata (figli sotto
+ * il padre, stile TRAE). */
+function planContinuing(d) {
+  who("ai", `🔁 continuo da solo — ${d.open}/${d.total} passi aperti (giro ${d.round})`);
+}
+function planStopped(d) {
+  const map = { goal_reached: "✅ goal raggiunto", no_progress: "⚠ nessun progresso",
+                budget: "⏱ budget esaurito", blocked: "⛔ bloccato",
+                user_stop: "⏹ fermato da te" };
+  who("ai", `${map[d.reason] || d.reason} — ${d.open} aperti / ${d.total} · ${d.rounds} giri · ${d.duration_s}s`);
+}
+function runFooter(m) {
+  if (!m) return;
+  who("ai", `⏱ run: ${m.stop_reason || m.outcome} · ${m.iterations} giri · ${m.steps} step · ${m.tokens} tok · ${m.duration_s}s`);
+}
+function taskTree(nodes) {
+  // checklist annidata: i figli (parent) sono indentati sotto il padre (stile TRAE).
+  // Gli orfani (parent inesistente) e i possibili cicli non devono sparire:
+  // vanno parcheggiati alla radice e renderizzati una sola volta.
+  const ids = new Set((nodes || []).map(n => n.id));
+  const byParent = {};
+  (nodes || []).forEach(n => {
+    const p = (n.parent && ids.has(n.parent)) ? n.parent : "_root";
+    (byParent[p] ||= []).push(n);
+  });
+  const mark = { todo: "☐", doing: "◐", done: "☑", blocked: "⛔", cancelled: "⊘" };
+  const one = (n, depth) => {
+    const deps = (n.deps || []).length ? ` <span class="dep">⤷ ${n.deps.join(", ")}</span>` : "";
+    const ev = (n.evidence || []).length ? ` <span class="ev">📎 ${n.evidence.length}</span>` : "";
+    return `<div class="task" data-id="${_attr(n.id)}" style="margin-left:${depth * 14}px">` +
+      `<span class="st ${n.status}">${n.status}</span><span>${mark[n.status] || "☐"} ${esc(n.label)}</span>${deps}${ev}</div>`;
+  };
+  const seen = new Set();
+  const walk = (p, depth) => (byParent[p] || []).map(n => {
+    if (seen.has(n.id)) return "";
+    seen.add(n.id);
+    return one(n, depth) + walk(n.id, depth + 1);
+  }).join("");
+  let html = walk("_root", 0);
+  (nodes || []).forEach(n => {
+    if (!seen.has(n.id)) { seen.add(n.id); html += one(n, 0); }
+  });
+  return html;
 }
 /* JAG-128B: la proposta di self-improvement arriva come evento SSE e resta
  * azionabile dalla chat (accetta/rifiuta -> POST /api/improve). */
@@ -1912,6 +1954,23 @@ function editProvider(p) {
   $("provModels").value = (p.models || []).map(m => m.id).join(", ");
   $("provResult").textContent = "editing '" + p.id + "' — press save provider";
 }
+async function loadRuntime() {
+  const d = await api("GET", "/api/tools");
+  const r = (d && d.runtime) || {};
+  if ($("rtKgMax")) $("rtKgMax").value = r.keepgoing_max ?? 8;
+  if ($("rtNoProg")) $("rtNoProg").value = r.no_progress_rounds ?? 2;
+  if ($("rtWall")) $("rtWall").value = r.max_wall_secs ?? 3600;
+  if ($("rtDepth")) $("rtDepth").value = r.subagent_max_depth ?? 2;
+}
+async function saveRuntime() {
+  await api("POST", "/api/tools", { runtime: {
+    keepgoing_max: +$("rtKgMax").value,
+    no_progress_rounds: +$("rtNoProg").value,
+    max_wall_secs: +$("rtWall").value,
+    subagent_max_depth: +$("rtDepth").value,
+  }});
+  who("ai", "✅ runtime aggiornato");
+}
 async function saveProvider() {
   const id = $("provId").value.trim();
   if (!id) { $("provResult").textContent = "id required"; return; }
@@ -2042,7 +2101,7 @@ function openPanel(name) {
   else if (name === "skills") { loadSkills(); }
   else if (name === "rules") { loadRules(); }
   else if (name === "files") { loadFiles(); loadEdits(); }
-  else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
+  else if (name === "config") { loadRuntime(); api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") {
     // JAG-127: one Settings panel = Self + Providers + Keys + token (no more tabs).
     $("token-input").value = TOKEN || "";
