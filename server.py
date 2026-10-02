@@ -808,7 +808,8 @@ def _completion_body(model_id, messages, stream, max_tokens=None):
     return body
 
 
-def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=None):
+def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=None,
+                   cancel=None):
     """POST /chat/completions with stream=true; feed deltas to on_delta.
 
     on_delta(channel, text) with channel in {think, answer}. Returns the
@@ -831,6 +832,10 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=Non
                 # v0.6.1 (JAG-48): mid-stream silence must not hang the run.
                 _set_read_idle(resp, ROUTER_IDLE_TIMEOUT)
             for raw in resp:
+                if cancel is not None and cancel():
+                    # JAG-129D: Stop uccide la generazione in corso (chiusura del
+                    # socket a fine blocco `with` interrompe l'inferenza lato router).
+                    break
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
                     continue
@@ -892,7 +897,7 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=Non
 
 
 def stream_with_fallback(messages, model, role, on_delta, timeout=300, usage=None,
-                         guard=None):
+                         guard=None, cancel=None):
     """v0.3 multi-model routing with fallback.
 
     Tries `model` (or the role-selected one) first; on a router failure walks
@@ -910,7 +915,7 @@ def stream_with_fallback(messages, model, role, on_delta, timeout=300, usage=Non
             if usage is not None:
                 usage.clear()  # a failed attempt must not leave stale numbers
             answer, think = _router_stream(messages, alias, on_delta, timeout, usage,
-                                           guard)
+                                           guard, cancel)
             if i > 0:
                 publish("model.fallback", role=role, from_model=chain[0],
                         to_model=alias)
@@ -1906,6 +1911,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     clear_abort(sess["id"])
     import runmetrics
     runmetrics.start(sess["id"], model=model)
+    _abort_now = (lambda: _is_aborted(sess["id"]))  # JAG-129D: Stop uccide la generazione
     _kg_rounds = 0
     _kg_stop_reason = None
     _kg_prev = None
@@ -1931,9 +1937,18 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 _c.append((ch, t))
 
         answer, think, model = stream_with_fallback(msgs, model, "chat", _capture,
-                                                    usage=chat_usage)
+                                                    usage=chat_usage, cancel=_abort_now)
         _record_usage()
         _emit_context()  # JAG-98: live meter now uses the model's real count
+        if _is_aborted(sess["id"]):
+            # JAG-129D: Stop ha interrotto la generazione. Nessun tool puo' girare
+            # dopo un abort: si chiude subito il turno con un esito esplicito.
+            publish("chat.interrupted", session=sess["id"])
+            for ch, t in collected:
+                on_delta(ch, t)
+            final_answer, think = (answer or "⏹ Interrotto dall'utente."), think
+            _kg_stop_reason = "user_stop"
+            break
         act = extract_json(answer)
         if isinstance(act, dict) and act.get("action") == "write_todos":
             n = _apply_chat_todos(sess, act, on_event)
@@ -2093,7 +2108,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             on_delta(ch, t)
         final_answer, think = answer, think
         break
-    if not final_answer:
+    if not final_answer and not _is_aborted(sess["id"]):
         # JAG-78b: the loop ran out of tool steps without a prose answer — force
         # one, but BUFFER it. Streaming it live leaked raw tool-call JSON into
         # the user's chat bubble when the model kept acting instead of answering
@@ -2114,7 +2129,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     _c.append((ch, t))
 
             final_answer, think, model = stream_with_fallback(msgs, model, "chat",
-                                                              _cap_final, usage=chat_usage)
+                                                              _cap_final, usage=chat_usage,
+                                                              cancel=_abort_now)
             _record_usage()
             if ((final_answer or "").strip() and not _looks_like_json_action(final_answer)
                     and not _looks_like_promise(final_answer)):
@@ -2152,7 +2168,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     reply = append_message(sess, "assistant", content, reasoning=think.strip() or None,
                            meta=meta)
     try:
-        runmetrics.finish(sess["id"], outcome="done",
+        runmetrics.finish(sess["id"], outcome=("user_abort" if _is_aborted(sess["id"]) else "done"),
                           stop_reason=_kg_stop_reason, iterations=_kg_rounds,
                           steps=work_steps,
                           prompt_tokens=int(chat_usage.get("prompt_tokens") or 0),
