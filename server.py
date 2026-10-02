@@ -1915,7 +1915,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         for _s in drain_steer(sess["id"]):
             msgs.append({"role": "user", "content":
                          "[user steering — take this into account now] " + _s})
-            on_event("chat.steer", session=sess["id"], text=_s)
+            on_event("chat.steer", session=sess["id"], text=_s, applied=True)
         collected = []
 
         def _capture(ch, t, _c=collected):
@@ -2067,6 +2067,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             if _dec["continue"]:
                 _kg_rounds += 1
                 _kg_prev = _cur
+                for _s in drain_steer(sess["id"]):
+                    msgs.append({"role": "user", "content":
+                                 "[user steering — take this into account now] " + _s})
+                    on_event("chat.steer", session=sess["id"], text=_s, applied=True)
                 on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
                          open=len(_open), total=len(_nodes))
                 msgs.append({"role": "assistant", "content": answer})
