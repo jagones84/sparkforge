@@ -332,6 +332,10 @@ AUTOCOMPACT_PCT = float(os.environ.get("SPARKFORGE_CONTEXT_AUTOCOMPACT_PCT", "75
 # the TOTAL prompt lands BELOW the trigger with headroom (no instant re-trigger).
 AUTOCOMPACT_TARGET_PCT = float(os.environ.get(
     "SPARKFORGE_CONTEXT_TARGET_PCT", str(max(10.0, AUTOCOMPACT_PCT - 15.0))))
+# JAG-102: the MANUAL "compact now" action must always reduce. It targets this
+# fraction of the transcript's CURRENT size — using the full model budget made
+# the button a no-op for any session under 100% (so it "did nothing").
+COMPACT_FORCE_RATIO = float(os.environ.get("SPARKFORGE_COMPACT_FORCE_RATIO", "0.5"))
 
 
 def model_context_window(alias=None):
@@ -2532,16 +2536,30 @@ def compact_session(session, budget_tokens=None):
 
     Uses the v0.3 extractive compaction; the newest messages stay verbatim,
     older ones are merged into a synthetic summary message. Returns stats.
+
+    JAG-102: called WITHOUT `budget_tokens` this is the MANUAL "compact now"
+    action. It must actually SHRINK the transcript, so it targets a fraction of
+    what the transcript currently uses (`COMPACT_FORCE_RATIO`). Previously it used
+    the full model budget, which made it a no-op for any session under 100% — the
+    button appeared to do nothing. The single source of this policy lives here, so
+    the WebUI and the app need no duplicated logic.
     """
     import context_engine
     sess = load_session(session) if session else None
     if not sess:
         return {"error": "session not found: %s" % session}
-    budget = int(budget_tokens) if budget_tokens else context_budget()
-    # JAG-99: the system prompt is sent uncompacted and consumes the budget, so
-    # the transcript is compacted against what is really LEFT for it.
-    room = max(1024, budget - context_engine.count_tokens(_system_prompt(sess)))
-    msgs, stats = context_engine.compact(sess.get("messages", []), room)
+    messages = sess.get("messages", [])
+    current = sum(context_engine.count_tokens(m.get("content", "")) for m in messages)
+    if budget_tokens:
+        budget = int(budget_tokens)
+        # JAG-99: the system prompt is sent uncompacted and consumes the budget,
+        # so the transcript is compacted against what is really LEFT for it.
+        room = max(1024, budget - context_engine.count_tokens(_system_prompt(sess)))
+    else:
+        # JAG-102: manual action — target a fraction of the CURRENT transcript.
+        budget = current
+        room = max(1024, int(current * COMPACT_FORCE_RATIO))
+    msgs, stats = context_engine.compact(messages, room)
     sess["messages"] = msgs
     save_session(sess)
     stats.update({"session": session, "budget_tokens": budget,
