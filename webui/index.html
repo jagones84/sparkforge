@@ -117,7 +117,7 @@
   .cursor { display: inline-block; width: 8px; height: 14px; background: var(--acc); margin-left: 2px;
     vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
-  #composer { display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--line); background: rgba(8,10,20,.6); }
+  #composer { display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--line); background: rgba(8,10,20,.6); position: relative; }
   #inp, .inp { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
     border-radius: var(--radius); padding: 12px 16px; font: inherit; outline: none; }
   #inp { flex: 1; }
@@ -236,7 +236,8 @@
       <div class="t thinking"></div>
     </div>
     <div id="composer">
-      <input id="inp" placeholder="command the forge… (Enter to send)" autofocus>
+      <div id="slashMenu" class="card" hidden style="position:absolute;bottom:100%;left:22px;right:22px;max-height:220px;overflow-y:auto;padding:4px 0;margin-bottom:4px"></div>
+      <input id="inp" placeholder="command the forge… (Enter to send · / per le skill)" autofocus>
       <button onclick="send()">send</button>
       <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
       <button class="ghost" id="stopBtn" onclick="stopRun()" title="interrompi agent / chat">⏹ stop</button>
@@ -258,6 +259,7 @@
       <button data-panel="settings" onclick="openPanel('settings')">Settings</button>
       <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
       <button data-panel="mcp" onclick="openPanel('mcp')">MCP</button>
+      <button data-panel="skills" onclick="openPanel('skills')">Skills</button>
     </nav>
     <div id="panel-body">
       <section data-section="graph">
@@ -348,6 +350,22 @@
           </div>
           <div id="mcpResult" class="remaining" style="margin-top:6px"></div>
           <div class="remaining" style="margin-top:6px">salvati in config/mcp_clients.local.yaml (fuori dal repo · niente segreti committati)</div>
+        </div>
+      </section>
+      <section data-section="skills" hidden>
+        <h2>Skills · installate</h2>
+        <div class="card">
+          <div class="remaining" id="skillsSummary">caricamento…</div>
+          <div id="skillsList" style="margin-top:8px"></div>
+        </div>
+        <h2>Installa da zip</h2>
+        <div class="card">
+          <input type="file" id="skillZip" accept=".zip" style="font-size:12px">
+          <input id="skillName" class="inp" placeholder="nome (opzionale · dal file)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="skillOverwrite"> sovrascrivi se esiste</label>
+          <button class="ghost" onclick="installSkillZip()" style="margin-top:8px">installa</button>
+          <div id="skillResult" class="remaining" style="margin-top:6px"></div>
+          <div class="remaining" style="margin-top:6px">installate in skills/local/ (fuori dal repo)</div>
         </div>
       </section>
     </div>
@@ -1144,12 +1162,83 @@ async function reloadMcp() {
   } catch (e) { $("mcpResult").textContent = "errore: " + e; }
 }
 
+/* ---- JAG-109: skills panel + '/' autocomplete (engine = /api/skills) ---- */
+let _skillsCache = [];
+async function loadSkills() {
+  try {
+    const d = await api("GET", "/api/skills");
+    _skillsCache = d.skills || [];
+    $("skillsSummary").textContent = _skillsCache.length + " skill · locali: " +
+      _skillsCache.filter(s => s.local).length;
+    const box = $("skillsList"); box.innerHTML = "";
+    _skillsCache.forEach(s => {
+      const row = document.createElement("div");
+      row.className = "card";
+      row.style.cssText = "padding:6px 8px;margin-bottom:6px;display:flex;gap:8px;align-items:center";
+      const dot = document.createElement("span"); dot.textContent = s.local ? "🟢" : "🏠";
+      const info = document.createElement("div"); info.style.cssText = "flex:1;min-width:0";
+      const t = document.createElement("div"); t.style.fontWeight = "600"; t.textContent = s.name;
+      const sub = document.createElement("div"); sub.className = "remaining";
+      sub.textContent = (s.category || "") + " · " + (s.title || "");
+      info.append(t, sub);
+      const ins = document.createElement("button"); ins.className = "ghost"; ins.textContent = "/";
+      ins.title = "usa in chat";
+      ins.onclick = () => { $("inp").value = "/" + s.name + " "; $("inp").focus(); };
+      row.append(dot, info, ins);
+      if (s.local) {
+        const del = document.createElement("button"); del.className = "ghost"; del.textContent = "🗑";
+        del.onclick = async () => {
+          if (!(await confirmDelete("rimuovere la skill '" + s.name + "'?"))) return;
+          await api("DELETE", "/api/skills/" + encodeURIComponent(s.name));
+          loadSkills();
+        };
+        row.appendChild(del);
+      }
+      box.appendChild(row);
+    });
+  } catch (e) { $("skillsSummary").textContent = "errore: " + e; }
+}
+async function installSkillZip() {
+  const f = $("skillZip").files && $("skillZip").files[0];
+  if (!f) { $("skillResult").textContent = "scegli un file .zip"; return; }
+  const qs = new URLSearchParams();
+  if ($("skillName").value.trim()) qs.set("name", $("skillName").value.trim());
+  if ($("skillOverwrite").checked) qs.set("overwrite", "1");
+  $("skillResult").textContent = "carico…";
+  const r = await fetch("/api/skills/install?" + qs.toString(), {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/zip" },
+    body: f
+  }).then(x => x.json()).catch(e => ({ error: String(e) }));
+  $("skillResult").textContent = r.error ? ("errore: " + r.error) : ("installata: " + r.name);
+  if (!r.error) { loadSkills(); loadCtx(); }
+}
+function skillsAutocomplete() {
+  const inp = $("inp"); if (!inp) return;
+  const box = $("slashMenu");
+  const v = inp.value;
+  if (!v.startsWith("/") || v.includes(" ")) { box.hidden = true; return; }
+  const q = v.slice(1).toLowerCase();
+  const hits = _skillsCache.filter(s => s.name.toLowerCase().startsWith(q)).slice(0, 8);
+  if (!hits.length) { box.hidden = true; return; }
+  box.innerHTML = "";
+  hits.forEach(s => {
+    const li = document.createElement("div");
+    li.style.cssText = "padding:6px 10px;cursor:pointer;font-size:12px";
+    li.textContent = "/" + s.name + "  ·  " + (s.title || s.description || "");
+    li.onclick = () => { inp.value = "/" + s.name + " "; box.hidden = true; inp.focus(); };
+    box.appendChild(li);
+  });
+  box.hidden = false;
+}
+
 function openPanel(name) {
   document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
   document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
   if (name === "graph") { loadPlan(); loadGraph(); loadCtx(); }
   else if (name === "approvals") { loadApprovals(); }
   else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); }
+  else if (name === "skills") { loadSkills(); }
   else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
@@ -1161,7 +1250,7 @@ function paletteItems() {
     { label: "\uFF0B Nuova sessione", run: () => newSession() },
     { label: "\u21BB Compatta contesto", run: () => compactNow() },
   ];
-  ["graph", "config", "self", "settings", "approvals", "mcp"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
+  ["graph", "config", "self", "settings", "approvals", "mcp", "skills"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
   return items;
 }
 function renderPalette(q) {
@@ -1221,13 +1310,17 @@ addEventListener("keydown", e => {
   if (e.key === "Escape") closePalette();
 });
 $("inp").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+$("inp").addEventListener("input", skillsAutocomplete);
+$("inp").addEventListener("keydown", e => {
+  if (e.key === "Escape" && $("slashMenu")) $("slashMenu").hidden = true;
+});
 $("taskInp").addEventListener("keydown", e => { if (e.key === "Enter") addTask(); });
 $("sessInp").addEventListener("keydown", e => { if (e.key === "Enter") newSession(); });
 $("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progress on the current plan"; $("inp").value = ""; runAgent(g); };
 $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
-  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadHistory(); connectFeed();
+  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadHistory(); connectFeed(); loadSkills();
 });
 setInterval(loadStatus, 5000);
 setInterval(loadApprovals, 4000);
