@@ -488,7 +488,7 @@ async function loadSessions() {
       loadSessions(); loadHistory(); loadCtx(); closeAside();
     };
     d.querySelector(".del").onclick = async () => {
-      if (!confirm("delete session " + (s.title || s.id) + "?")) return;
+      if (!(await confirmDelete("delete session " + (s.title || s.id) + "?"))) return;
       await api("DELETE", "/api/sessions/" + s.id);
       if (sessionId === s.id) { sessionId = null; localStorage.removeItem("sf_session"); $("log").innerHTML = ""; }
       loadSessions(); loadCtx();
@@ -914,6 +914,51 @@ function openTab(name) {
   $("backdrop").classList.add("show");
 }
 function closeAside() { $("aside").classList.remove("open"); $("backdrop").classList.remove("show"); }
+
+/* JAG-105: destructive actions ask ONCE, with a "non chiedere più" checkbox that
+ * suppresses the prompt until the page is reloaded (the user's "una volta a
+ * riavvio"). The mobile app already deletes without asking, so only the WebUI
+ * needed this. Elements are built with the DOM API so a session title is never
+ * injected as HTML. */
+let _skipDeleteConfirm = false;
+function confirmDelete(message) {
+  if (_skipDeleteConfirm) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const ov = document.createElement("div");
+    ov.id = "sfConfirm";
+    ov.style.cssText = "position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center";
+    const box = document.createElement("div");
+    box.className = "card";
+    box.style.cssText = "width:min(90vw,360px);display:flex;flex-direction:column;gap:12px";
+    const msg = document.createElement("div");
+    msg.textContent = message;
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim);cursor:pointer";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" non chiedere più (fino al riavvio)"));
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:8px;justify-content:flex-end";
+    const no = document.createElement("button");
+    no.className = "ghost"; no.textContent = "annulla";
+    const yes = document.createElement("button");
+    yes.className = "ghost"; yes.textContent = "cancella";
+    yes.style.cssText = "border-color:var(--err);color:var(--err)";
+    row.append(no, yes);
+    box.append(msg, label, row);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    const done = ok => {
+      if (ok && cb.checked) _skipDeleteConfirm = true;
+      ov.remove();
+      resolve(ok);
+    };
+    yes.onclick = () => done(true);
+    no.onclick = () => done(false);
+    ov.onclick = e => { if (e.target === ov) done(false); };
+  });
+}
 
 /* ---- v0.8 context rail panels ---- */
 function json_pre(el, d) { el.innerHTML = '<pre style="white-space:pre-wrap;font-size:11px;color:var(--dim)">' + JSON.stringify(d, null, 2).replace(/</g, "&lt;") + '</pre>'; }
