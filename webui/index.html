@@ -920,7 +920,7 @@ function runAgent(goal) {
     l.className = "agentline"; l.textContent = "⏸ run paused (awaiting approval / operator)";
     $("log").appendChild(l); loadApprovals(); scroll(); });
   es.addEventListener("agent.aborted", e => { const d = JSON.parse(e.data);
-    who("ai", "⛔ aborted: " + (d.summary || "")); });
+    who("ai", "⛔ run interrotta dall'operatore" + (d.run ? " (" + d.run + ")" : "")); });
   es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
     who("ai", "🏁 " + (d.summary || "done")); es.close(); activeSSE = null; activeRunId = null; loadPlan(); loadGraph(); loadCtx(); });
   es.addEventListener("error", () => { es.close(); activeSSE = null; activeRunId = null; });
@@ -953,6 +953,10 @@ function connectFeed() {
     push("🏁 graph finalized: " + (d.closed || 0) + " node(s) closed with evidence"); loadGraph(); });
   es.addEventListener("tasks.breakdown", e => { const d = JSON.parse(e.data);
     push("✅ todo breakdown: " + (d.tasks || []).length + " tasks"); loadGraphSoon(); });
+  es.addEventListener("model.runaway", e => { const d = JSON.parse(e.data);
+    push(`⚠ runaway: ripetizione del modello interrotta (${d.model || "?"})`); });
+  es.addEventListener("agent.control", e => { const d = JSON.parse(e.data);
+    if (d.action) push(`🎛 run ${d.run || ""} → ${d.action} (${d.status || ""})`); });
   es.addEventListener("context.compact", e => { const d = JSON.parse(e.data);
     const kind = d.summary === "llm" ? ("llm:" + (d.summarizer || "?")) : (d.summary || "—");
     push(`🗜 compact: ${d.compacted} msgs · ${kind} · ${d.tokens_after} tok`); loadCtx(); });

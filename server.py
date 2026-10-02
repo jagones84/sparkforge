@@ -601,7 +601,66 @@ def _chat_endpoint(model):
             {"Content-Type": "application/json"}, model or "default")
 
 
-def _router_stream(messages, model, on_delta, timeout=300, usage=None):
+# JAG-111: bound a single completion and cut a degenerate repetition loop, so a
+# model stuck repeating itself cannot hang a run (ROUTER_IDLE_TIMEOUT only covers
+# *silence*, not a continuous token stream).
+MAX_TOKENS = int(os.environ.get("SPARKFORGE_MAX_TOKENS", "0"))
+REPEAT_GUARD = os.environ.get("SPARKFORGE_REPEAT_GUARD", "1") not in ("0", "false", "False")
+_REPEAT_MIN_PERIOD = int(os.environ.get("SPARKFORGE_REPEAT_MIN_PERIOD", "20"))
+_REPEAT_MAX_PERIOD = int(os.environ.get("SPARKFORGE_REPEAT_MAX_PERIOD", "240"))
+_REPEAT_LIMIT = int(os.environ.get("SPARKFORGE_REPEAT_LIMIT", "4"))
+
+
+class _RepetitionGuard:
+    """Detect a degenerate repetition loop in a streamed reply.
+
+    Streaming chunks are tiny, so we watch the accumulated text: if the last
+    `p*limit` characters are exactly `limit` copies of `text[-p:]` for some period
+    `p` in [min_period, max_period], the model is looping and the stream must be
+    cut. Blocks with too small an alphabet, or (under 48 chars) without a space,
+    are ignored so code/tables/numbers never trip the guard.
+    """
+
+    def __init__(self, min_period=_REPEAT_MIN_PERIOD, max_period=_REPEAT_MAX_PERIOD,
+                 limit=_REPEAT_LIMIT, max_scan=8000):
+        self.min_period = max(4, int(min_period))
+        self.max_period = max(self.min_period, int(max_period))
+        self.limit = max(2, int(limit))
+        self.max_scan = max_scan
+        self.text = ""
+
+    def feed(self, piece):
+        """Append a streamed chunk; return True when a repetition loop is detected."""
+        if not piece:
+            return False
+        self.text = (self.text + piece)[-self.max_scan:]
+        t = self.text
+        if len(t) < self.min_period * self.limit:
+            return False
+        maxp = min(self.max_period, len(t) // self.limit)
+        for p in range(self.min_period, maxp + 1):
+            blk = t[-p:]
+            if len(set(blk.strip())) < 4:
+                continue
+            if " " not in blk and p < 48:
+                continue
+            if t[-(p * self.limit):] == blk * self.limit:
+                return True
+        return False
+
+
+def _completion_body(model_id, messages, stream, max_tokens=None):
+    """Single place that builds the OpenAI-compatible request body (JAG-111)."""
+    body = {"model": model_id, "messages": messages, "stream": bool(stream),
+            "temperature": 0.7}
+    if stream:
+        body["stream_options"] = {"include_usage": True}
+    if max_tokens:
+        body["max_tokens"] = int(max_tokens)
+    return body
+
+
+def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=None):
     """POST /chat/completions with stream=true; feed deltas to on_delta.
 
     on_delta(channel, text) with channel in {think, answer}. Returns the
@@ -613,15 +672,11 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None):
     prompt_tokens instead of the ~4-chars/token proxy.
     """
     url, headers, model_id = _chat_endpoint(model)
-    body = json.dumps({
-        "model": model_id,
-        "messages": messages,
-        "stream": True,
-        "temperature": 0.7,
-        "stream_options": {"include_usage": True},
-    }).encode("utf-8")
+    body = json.dumps(_completion_body(model_id, messages, True,
+                                       MAX_TOKENS or None)).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=headers)
     answer, think = [], []
+    rg = _RepetitionGuard() if (guard if guard is not None else REPEAT_GUARD) else None
     try:
         with _open_with_retry(req, timeout) as resp:
             if ROUTER_IDLE_TIMEOUT > 0:
@@ -643,6 +698,10 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None):
                 delta = ((chunk.get("choices") or [{}])[0].get("delta")) or {}
                 rc = delta.get("reasoning_content")
                 c = delta.get("content")
+                piece = (rc or "") + (c or "")
+                if rg is not None and piece and rg.feed(piece):
+                    publish("model.runaway", model=model_id, chars=len(rg.text))
+                    break
                 if rc:
                     think.append(rc)
                     on_delta("think", rc)
@@ -659,8 +718,8 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None):
         if answer or think:
             return "".join(answer), "".join(think)
         # non-streaming fallback
-        body = json.dumps({"model": model_id, "messages": messages,
-                           "temperature": 0.7}).encode("utf-8")
+        body = json.dumps(_completion_body(model_id, messages, False,
+                                           MAX_TOKENS or None)).encode("utf-8")
         req = urllib.request.Request(url, data=body, headers=headers)
         with _open_with_retry(req, timeout) as resp:
             data = json.loads(resp.read().decode("utf-8") or "{}")
@@ -684,7 +743,8 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None):
 # ----------------------------------------------------- tracing / cost ----
 
 
-def stream_with_fallback(messages, model, role, on_delta, timeout=300, usage=None):
+def stream_with_fallback(messages, model, role, on_delta, timeout=300, usage=None,
+                         guard=None):
     """v0.3 multi-model routing with fallback.
 
     Tries `model` (or the role-selected one) first; on a router failure walks
@@ -701,7 +761,8 @@ def stream_with_fallback(messages, model, role, on_delta, timeout=300, usage=Non
         try:
             if usage is not None:
                 usage.clear()  # a failed attempt must not leave stale numbers
-            answer, think = _router_stream(messages, alias, on_delta, timeout, usage)
+            answer, think = _router_stream(messages, alias, on_delta, timeout, usage,
+                                           guard)
             if i > 0:
                 publish("model.fallback", role=role, from_model=chain[0],
                         to_model=alias)
@@ -1909,12 +1970,15 @@ def _mirror_graph(run_id, act, observation, session=None):
     return observation
 
 
-def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
+def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_state=None):
     """Sense-think-act loop. No shell, no filesystem writes except harness stores."""
     if on_event is None:
         on_event = lambda kind, **d: publish(kind, **d)
-    on_event("agent.start", goal=goal, max_steps=max_steps)
     model = model or default_model()
+    # JAG-111: every run is abortable via /api/agent/control, and its id travels
+    # in `agent.start` so the WebUI/app stop button can target it.
+    st = run_state or api_v02.new_run(goal, model, max_steps)
+    on_event("agent.start", goal=goal, max_steps=max_steps, run=st.id, model=model)
     if trace is None:
         trace = RunTrace("agent", goal=goal, model=model)
         trace.span("agent.start", goal=goal, max_steps=max_steps)
@@ -1934,35 +1998,52 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None):
         publish("graph.error", run=trace.id, error=str(e))
 
     actions = []
-    for i in range(max_steps):
-        sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT + "\n\nHarness state (your persistent task list):\n" + context_summary(graph_key=trace.id)
-        msgs = [{"role": "system", "content": sys},
-                {"role": "user", "content": "Goal: %s (iteration %d/%d)" % (goal, i + 1, max_steps)}]
-        on_event("agent.iteration", i=i + 1, of=max_steps)
-        answer, think = _router_stream(msgs, model, lambda ch, t: on_event("agent.think", channel=ch, text=t))
-        _llm(msgs, answer + think)
-        act = extract_json(answer) or {}
-        if not isinstance(act, dict) or not act.get("action"):
-            act = {"thought": answer[:200], "action": "note", "detail": answer[:400]}
-        thought = str(act.get("thought", ""))[:400]
-        action = act.get("action")
-        on_event("agent.thought", i=i + 1, thought=thought, action=action)
-        if action == "finish":
-            summary = str(act.get("summary", ""))[:600]
+    aborted = False
+    try:
+        for i in range(max_steps):
+            api_v02.checkpoint(st)  # JAG-111: honour pause / abort between steps
+            sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT + "\n\nHarness state (your persistent task list):\n" + context_summary(graph_key=trace.id)
+            msgs = [{"role": "system", "content": sys},
+                    {"role": "user", "content": "Goal: %s (iteration %d/%d)" % (goal, i + 1, max_steps)}]
+            on_event("agent.iteration", i=i + 1, of=max_steps)
+            answer, think = _router_stream(msgs, model, lambda ch, t: on_event("agent.think", channel=ch, text=t))
+            _llm(msgs, answer + think)
+            act = extract_json(answer) or {}
+            if not isinstance(act, dict) or not act.get("action"):
+                act = {"thought": answer[:200], "action": "note", "detail": answer[:400]}
+            thought = str(act.get("thought", ""))[:400]
+            action = act.get("action")
+            on_event("agent.thought", i=i + 1, thought=thought, action=action)
+            if action == "finish":
+                summary = str(act.get("summary", ""))[:600]
+                on_event("agent.finish", summary=summary)
+                actions.append({"i": i + 1, "thought": thought, "action": "finish", "summary": summary})
+                st.status = "done"
+                st.summary = summary
+                break
+            obs = apply_agent_action(act, run_id=trace.id)
+            trace.span("agent.action", i=i + 1, action=action, observation=obs)
+            on_event("agent.observation", i=i + 1, observation=obs)
+            actions.append({"i": i + 1, "thought": thought, "action": action, "observation": obs})
+        else:
+            summary = "stopped at max_steps=%d; see trace" % max_steps
             on_event("agent.finish", summary=summary)
-            actions.append({"i": i + 1, "thought": thought, "action": "finish", "summary": summary})
-            break
-        obs = apply_agent_action(act, run_id=trace.id)
-        trace.span("agent.action", i=i + 1, action=action, observation=obs)
-        on_event("agent.observation", i=i + 1, observation=obs)
-        actions.append({"i": i + 1, "thought": thought, "action": action, "observation": obs})
-    else:
-        summary = "stopped at max_steps=%d; see trace" % max_steps
+            actions.append({"action": "finish", "summary": summary})
+            st.status = "done"
+            st.summary = summary
+    except api_v02.AbortRun:
+        aborted = True
+        summary = "aborted by operator"
+        on_event("agent.aborted", run=st.id)
         on_event("agent.finish", summary=summary)
         actions.append({"action": "finish", "summary": summary})
+        st.status = "aborted"
+        st.summary = summary
+    st.trace = actions
     finish_run_graph(trace.id, None, goal, on_event=on_event)
-    trace.finish("done")
-    return {"goal": goal, "model": model, "trace": actions, "run_id": trace.id}
+    trace.finish("aborted" if aborted else "done")
+    return {"goal": goal, "model": model, "trace": actions, "run_id": trace.id,
+            "aborted": aborted}
 
 
 # ---------------------------------------------------------- eval harness ----
@@ -2365,6 +2446,9 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
 
 def agent_stream_gen(goal, max_steps, model):
     q = queue.Queue()
+    # JAG-111: create the run HERE so the generator can abort it when the client
+    # disconnects; pass it to agent_run so /api/agent/control can stop it too.
+    st = api_v02.new_run(goal, model, max_steps)
 
     def on_event(kind, **d):
         q.put("event: %s\ndata: %s\n\n" % (kind, json.dumps(d, ensure_ascii=False)))
@@ -2373,16 +2457,22 @@ def agent_stream_gen(goal, max_steps, model):
 
     def worker():
         try:
-            agent_run(goal, max_steps, model, on_event)
-        except Exception as e:
+            agent_run(goal, max_steps, model, on_event, run_state=st)
+        except Exception as e:  # noqa: BLE001
             q.put("event: error\ndata: %s\n\n" % json.dumps({"error": str(e)}))
         finally:
             q.put(None)
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
-    yield from sse_pump(q, t, open_comment=": agent stream open\n\n",
-                        idle_timeout=CHAT_STREAM_IDLE or None)
+    try:
+        yield from sse_pump(q, t, open_comment=": agent stream open\n\n",
+                            idle_timeout=CHAT_STREAM_IDLE or None)
+    finally:
+        # client gone (socket closed): stop the loop instead of leaving an orphan
+        # worker streaming forever.
+        if t.is_alive():
+            st.abort = True
 
 
 def feed_gen(since=0):
