@@ -77,6 +77,17 @@ sp = server._system_prompt({"id": "sX"})
 check("D12 _system_prompt delegates to render_sections",
       "prompt map" in sp and "Tool registry" in sp, "")
 
+import rules  # noqa: E402
+wsdir = tempfile.mkdtemp()
+os.makedirs(os.path.join(wsdir, ".sparkforge"), exist_ok=True)
+with open(os.path.join(wsdir, ".sparkforge", "RULES.md"), "w", encoding="utf-8") as f:
+    f.write("RULES_SENTINEL")
+with open(os.path.join(wsdir, "AGENTS.md"), "w", encoding="utf-8") as f:
+    f.write("AGENTS_SENTINEL")
+blk = rules.rules_prompt_block(ws=wsdir)
+check("E1 RULES.md read", "RULES_SENTINEL" in blk, "")
+check("E2 AGENTS.md is ALSO read (additive, not excluded)", "AGENTS_SENTINEL" in blk, "")
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)

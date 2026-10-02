@@ -181,7 +181,12 @@ def _read(path):
 
 
 def _collect_scope(native, agents, extra_dir=None):
-    """(text, files): prefer the native RULES.md, else the AGENTS.md fallback."""
+    """(text, files): the native RULES.md PLUS the AGENTS.md addendum.
+
+    The scope's AGENTS.md is ADDITIVE, not a mere fallback: when RULES.md exists
+    its text is composed first and the AGENTS.md content is appended after it, so
+    BOTH instruction sources reach the model (JAG-128A).
+    """
     files, parts = [], []
     if os.path.isfile(native):
         files.append(native)
@@ -191,9 +196,11 @@ def _collect_scope(native, agents, extra_dir=None):
                 if fn.endswith(".md"):
                     files.append(os.path.join(extra_dir, fn))
                     parts.append(_read(os.path.join(extra_dir, fn)))
-    elif os.path.isfile(agents):
-        files.append(agents)
-        parts.append(_read(agents))
+    if os.path.isfile(agents) and agents not in files:
+        agents_text = _read(agents)
+        if agents_text.strip():
+            files.append(agents)
+            parts.append(agents_text)
     text = "\n\n".join(p.strip() for p in parts if p and p.strip())
     return text, files
 
