@@ -573,16 +573,16 @@ async function loadCtx() {
     const c = await api("GET", "/api/context?" + params.toString());
     if (c.error) return;
     if (c.available === false) { ctxNa("sessione non trovata"); return; }
-    const pct = Math.min(100, Math.round(c.tokens_used / Math.max(c.budget_tokens, 1) * 100));
-    $("ctxTok").textContent = c.tokens_used + " tok";
-    $("ctxMsgs").textContent = c.messages + " messages";
-    $("ctxBudget").textContent = c.budget_tokens + " tok" + (c.over_budget ? " · OVER" : "");
-    $("ctxBudget").className = c.over_budget ? "" : "";
-    $("ctxBudget").style.color = c.over_budget ? "var(--err)" : "var(--dim)";
-    const bar = $("ctxBar"); bar.style.width = pct + "%";
-    bar.className = pct > 90 ? "hot" : "";
-    $("ctx-meter").textContent = "ctx: " + c.tokens_used + "/" + c.budget_tokens;
-    $("ctx-meter").className = "pill" + (c.over_budget ? " warn" : "");
+    const d = c.display || {};
+    const state = d.state || "na";
+    $("ctxTok").textContent = d.tokens || "n/d";
+    $("ctxMsgs").textContent = d.messages || "n/d";
+    $("ctxBudget").textContent = d.budget || "n/d";
+    $("ctxBudget").style.color = state === "over" ? "var(--err)" : "var(--dim)";
+    const bar = $("ctxBar"); bar.style.width = (d.bar_pct != null ? d.bar_pct : 0) + "%";
+    bar.className = d.bar_hot ? "hot" : "";
+    $("ctx-meter").textContent = d.meter || "ctx: n/d";
+    $("ctx-meter").className = "pill" + (state === "over" ? " warn" : "");
   } catch {}
 }
 async function compactNow() {

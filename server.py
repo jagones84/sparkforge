@@ -1505,10 +1505,13 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     if ctx_stats:
         # JAG-78: `on_event` (not `publish`), so the chat STREAM carries the live
         # prompt size and the app's ctx meter updates during the turn.
-        on_event("context.built", session=sess["id"], **{
-            k: v for k, v in ctx_stats.items() if k in (
-                "budget_tokens", "retrieved_memories", "final_messages",
-                "final_tokens")})
+        on_event("context.built", session=sess["id"],
+                 display=context_display(ctx_stats.get("final_tokens"),
+                                         ctx_stats.get("budget_tokens")),
+                 **{
+                     k: v for k, v in ctx_stats.items() if k in (
+                         "budget_tokens", "retrieved_memories", "final_messages",
+                         "final_tokens")})
     model = model or default_model()
     # JAG-58b: tool-aware chat loop. The model may answer directly, or ask for a
     # tool; the tool runs through the same approval gate as the agent loop and
@@ -1551,6 +1554,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         if real and int(real) > 0:
             payload["final_tokens"] = int(real)
         if payload:
+            payload["display"] = context_display(
+                payload.get("final_tokens"), payload.get("budget_tokens"))
             on_event("context.built", session=sess["id"], **payload)
 
     work_steps = 0
@@ -2460,6 +2465,51 @@ def _system_prompt(sess, tool_ctx=None):
             + context_summary(session_id=(sess or {}).get("id")))
 
 
+def context_display(tokens_used=0, budget_tokens=0, messages=0,
+                    available=True, reason="nessuna sessione"):
+    """JAG-107: single source of truth for the context indicator presentation.
+
+    Both the WebUI (JS) and the Android app (Kotlin) render these ready-made
+    strings and flags verbatim, so the token formatting, the percentage and the
+    over/near state are computed ONLY here — never replicated client-side.
+    """
+    def _short(n):
+        n = int(n)
+        return ("%.0fk" % (n / 1000.0)) if n >= 10000 else str(n)
+
+    if not available or not budget_tokens:
+        return {"available": False, "reason": reason or "nessuna sessione",
+                "state": "na", "short": "ctx n/d", "meter": "ctx: n/d",
+                "tokens": "n/d", "budget": "n/d", "messages": "n/d",
+                "detail": "contesto n/d", "pct": 0, "bar_pct": 0,
+                "bar_hot": False}
+    used = int(tokens_used or 0)
+    budget = int(budget_tokens)
+    pct_f = (used / budget * 100.0) if budget else 0.0
+    pct_int = int(round(pct_f))
+    over = used > budget
+    near = pct_f >= AUTOCOMPACT_PCT
+    state = "over" if over else ("near" if near else "normal")
+    threshold = int(round(AUTOCOMPACT_PCT))
+    detail = "usati %s / %s token" % (_short(used), _short(budget))
+    if pct_int > 0:
+        detail += " · %d%%" % pct_int
+    if over:
+        detail += " · sopra soglia"
+    elif near:
+        detail += " · auto-compact al %d%%" % threshold
+    short = "ctx %s/%s" % (_short(used), _short(budget))
+    if pct_int > 0:
+        short += " · %d%%" % pct_int
+    return {"available": True, "reason": "", "state": state, "short": short,
+            "meter": "ctx: %d/%d" % (used, budget),
+            "tokens": "%d tok" % used,
+            "budget": "%d tok%s" % (budget, " · OVER" if over else ""),
+            "messages": "%d messages" % int(messages or 0),
+            "detail": detail, "pct": pct_int,
+            "bar_pct": max(0, min(100, pct_int)), "bar_hot": pct_int > 90}
+
+
 def context_usage(session_id=None, message=None, model=None):
     """Effective prompt tokens vs budget for the next turn (JAG-70).
 
@@ -2475,7 +2525,9 @@ def context_usage(session_id=None, message=None, model=None):
     sess = load_session(session_id) if session_id else None
     if not sess:
         return {**base, "available": False, "messages": 0, "tokens_used": 0,
-                "pct": 0.0, "over_threshold": False, "over_budget": False}
+                "pct": 0.0, "over_threshold": False, "over_budget": False,
+                "display": context_display(available=False,
+                                           reason="sessione non trovata")}
     sysp = _system_prompt(sess)
     # JAG-72: mirror `chat_once` EXACTLY — same model-aware budget and the same
     # memory-retrieval block — so the indicator's `x` equals the real prompt.
@@ -2498,6 +2550,7 @@ def context_usage(session_id=None, message=None, model=None):
            "over_threshold": pct >= AUTOCOMPACT_PCT,
            "over_budget": effective > budget,
            "source": "model" if real else "estimate"}
+    out["display"] = context_display(effective, budget, len(sess.get("messages", [])))
     if real:
         out["real_tokens_used"] = int(real)
     return out
