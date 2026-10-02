@@ -31,6 +31,27 @@ import subagent  # noqa: E402
 check("C4 depth limit enforced", subagent.depth_allowed(2, 2) is False, "")
 check("C5 depth allowed below cap", subagent.depth_allowed(1, 2) is True, "")
 
+import server  # noqa: E402
+from unittest import mock
+
+with mock.patch.object(subagent, "spawn", return_value={
+        "subagent_id": "sub_zzzz", "run_id": "run_child_x", "goal": "delegate"}) as _m:
+    server.apply_agent_action(
+        {"action": "subagent", "goal": "delegate", "max_steps": 2},
+        run_id="run_parent_x", session="run_parent_x")
+    _depth = _m.call_args.kwargs.get("depth")
+taskgraph.ensure("run_child_x", session_id="run_child_x", goal="delegate")
+pnode = taskgraph.load("run_parent_x")["nodes"][0]
+check("C6 child_run_id links to child run_id (not subagent_id)",
+      pnode["child_run_id"] == "run_child_x", str(pnode["child_run_id"]))
+check("C7 link resolves to the child graph",
+      taskgraph.load(pnode["child_run_id"]) is not None, str(pnode["child_run_id"]))
+check("C8 spawn depth propagates from parent (1)", _depth == 1, str(_depth))
+nested = subagent.depth_of("run_L1") + 1
+check("C9 second nested spawn refused at cap=1",
+      subagent.depth_allowed(0, 1) is True and subagent.depth_allowed(nested, 1) is False,
+      "nested_depth=%d" % nested)
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)

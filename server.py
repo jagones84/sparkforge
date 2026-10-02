@@ -2277,14 +2277,15 @@ def apply_agent_action(act, run_id=None, session=None):
             max_steps = 4
         import subagent as _sub
         result = _sub.spawn(goal, parent_run_id=run_id, max_steps=max_steps,
-                            model=act.get("model"))
+                            model=act.get("model"),
+                            depth=_sub.depth_of(run_id) + 1)
         if result.get("error"):
             return "subagent error: %s" % result["error"]
         if run_id:
             try:
                 graph = taskgraph.ensure(run_id, session_id=session)
                 taskgraph.add_node(graph, goal, source="subagent",
-                                   child_run_id=result["subagent_id"])
+                                   child_run_id=result["run_id"])
             except Exception as e:  # noqa: BLE001 — linking must never break a run
                 publish("graph.error", run=run_id, error=str(e))
         return "subagent spawned: %s (goal: %s, max_steps=%d)" % (
