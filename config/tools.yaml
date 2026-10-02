@@ -183,3 +183,10 @@ tools:
   pmcp__gateway.invoke:
     enabled: true
     approval: required
+
+  # JAG-125: Python snippet runner (MCP client `python_sandbox`). Pyodide/WASM:
+  # no host filesystem, no shell, no network — safe to auto-approve so the model
+  # can actually compute/execute snippets instead of hunting the pmcp catalog.
+  python_sandbox__run_python_code:
+    enabled: true
+    approval: auto

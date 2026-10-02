@@ -170,6 +170,65 @@ def rules_block(max_bytes=None, ws=None):
     return block
 
 
+def prompt_paths(ws=None):
+    """The four rule-file locations the model should know (JAG-125).
+
+    Any value shown to the model must be an ABSOLUTE path so it can `cat`/edit
+    the file directly, instead of guessing where its own rules live.
+    """
+    ws = ws or get_workspace()
+    return {
+        "workspace": ws,
+        "global_rules": global_rules_path(),
+        "global_fallback": global_agents_path(),
+        "project_rules": project_rules_path(ws),
+        "project_fallback": project_agents_path(ws),
+        "project_extra_dir": os.path.join(project_dir(ws), "rules"),
+    }
+
+
+def rules_prompt_block(max_bytes=None, ws=None):
+    """Prompt block that ALWAYS carries the rule-file paths (JAG-125).
+
+    Unlike `rules_block` (empty when no rules), this always renders the header
+    with the absolute paths of the global + project rule files and their
+    AGENTS.md fallbacks, so the agent knows WHERE its instructions live and can
+    read or edit them with the fs tools. The rules text, when present, follows.
+    """
+    cap = max_bytes or MAX_BYTES
+    c = collect(ws)
+    pp = prompt_paths(c["workspace"])
+
+    def _scope(title, sc, fallback, extra=None):
+        head = ("### %s\n- file: %s\n- AGENTS.md fallback: %s\n"
+                % (title, sc["path"], fallback))
+        if extra:
+            head += "- extra: %s/*.md\n" % extra
+        head += "- loaded: %s\n" % (", ".join(sc["files"]) or "(none yet)")
+        body = (sc["text"] or "").strip()
+        return head + (body if body else "_(no rules set here yet)_")
+
+    intro = ("## Rules on disk (global + project)\n"
+             "Your standing rules are real files; read or edit them with the fs "
+             "tools. Global rules apply to every project; project rules override "
+             "them on conflict.\n"
+             "- GLOBAL file: %s   (AGENTS.md fallback: %s)\n"
+             "- PROJECT file: %s   (AGENTS.md fallback: %s)\n"
+             "- PROJECT extra: %s/*.md\n"
+             % (pp["global_rules"], pp["global_fallback"],
+                pp["project_rules"], pp["project_fallback"], pp["project_extra_dir"]))
+    chunks = [
+        _scope("GLOBAL rules (user, all projects)", c["global"], pp["global_fallback"]),
+        _scope("PROJECT rules (workspace: %s)" % c["workspace"], c["project"],
+               pp["project_fallback"], pp["project_extra_dir"]),
+    ]
+    block = intro + "\n" + "\n\n".join(chunks)
+    if len(block) > cap:
+        keep = max(0, cap - 16)
+        block = block[:keep] + "\n… [troncate]"
+    return block
+
+
 def save(scope, content, ws=None):
     """Write the global or project RULES.md atomically. scope in {global,project}."""
     if scope == "global":

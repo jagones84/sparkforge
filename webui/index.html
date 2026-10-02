@@ -330,6 +330,7 @@
           <div style="display:flex;gap:6px;margin-top:8px">
             <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;padding:6px 10px;font-size:12px">
             <button class="ghost" onclick="genPlan()">plan it</button>
+            <button class="ghost" onclick="resetPlan()" title="clear this session's task list (start a new task)">reset</button>
           </div>
         </div>
         <h2>Execution <span id="taskCount" class="remaining"></span> <span class="remaining">· run graph (current run)</span></h2>
@@ -340,6 +341,7 @@
             <input id="taskInp" class="inp" placeholder="add a graph node…" style="flex:1;padding:6px 10px;font-size:12px">
             <button class="ghost" onclick="addTask()" title="POST /graph/nodes {action:add}">+</button>
             <button class="ghost" onclick="replanGraph()" title="incremental re-plan">↻ replan</button>
+            <button class="ghost" onclick="resetRunGraph()" title="clear the current run graph">reset</button>
           </div>
           <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
           <div id="remaining" class="remaining" style="margin-top:8px"></div>
@@ -1023,6 +1025,21 @@ async function replanGraph() {
   if (r && r.error) { who("ai", "⚠ replan: " + r.error); return; }
   who("ai", "↻ re-plan: +" + ((r.added || []).length) + " nodes" +
       ((r.added_labels || []).length ? " — " + r.added_labels.join("; ") : ""));
+  loadGraph();
+}
+/* JAG-125: the user can reset the persistent plan and the current run graph. */
+async function resetPlan() {
+  if (!sessionId) { who("ai", "no session selected"); return; }
+  if (!(await confirmDelete("reset this session's plan (clear all steps)?"))) return;
+  await api("POST", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph/reset", {});
+  who("ai", "↺ plan reset");
+  loadPlan(); loadGraph();
+}
+async function resetRunGraph() {
+  if (!curRunId) { who("ai", "no run graph to reset"); return; }
+  if (!(await confirmDelete("clear the current run graph?"))) return;
+  await api("POST", "/api/runs/" + encodeURIComponent(curRunId) + "/graph/reset", {});
+  who("ai", "↺ run graph reset");
   loadGraph();
 }
 /* JAG-91: populate the LLM selector from the live router roster + persist choice */

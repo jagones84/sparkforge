@@ -39,7 +39,7 @@ def main():
     check("accent token #8b7bf0", "--accent: #8b7bf0" in src)
     check("shell 3 colonne", all(m in src for m in ('data-col="sessions"', 'data-col="chat"', 'data-col="context"')))
     check("topbar presente", 'id="topbar"' in src)
-    check("model selector", 'id="model-select"' in src)
+    check("model selector", 'id="model-btn"' in src and 'id="modelMenu"' in src)
     check("ctx meter", 'id="ctx-meter"' in src)
     check("server badge", 'id="server-badge"' in src)
     check("responsive 1100", "@media (max-width: 1100px)" in src)

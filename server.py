@@ -1050,25 +1050,30 @@ SYSTEM_PROMPT = (
     "the server name, e.g. `core-time::get_current_time`."
 )
 
-# JAG-114: standing rules — global (user) + project (workspace), AGENTS.md-style.
+# JAG-114/125: standing rules — global (user) + project (workspace), AGENTS.md-style.
+# The actual file paths are rendered by rules.rules_prompt_block (below), so the
+# model always knows WHERE its instructions live and can read/edit them.
 RULES_POLICY = (
     "## Rules (global + project)\n"
-    "The block below lists the standing rules for this work. GLOBAL rules come from "
-    "your user config; PROJECT rules come from the selected workspace and override "
-    "global ones when they conflict. Follow them; if a rule conflicts with the user's "
-    "explicit request in this turn, say so before proceeding."
+    "Your standing rules are FILES on disk (paths given below): a GLOBAL file for "
+    "every project and a PROJECT file for the current workspace, each with an "
+    "AGENTS.md fallback. GLOBAL rules come from your user config; PROJECT rules "
+    "override global ones on conflict. Follow them; if a rule conflicts with the "
+    "user's explicit request in this turn, say so before proceeding."
 )
 
 
 def rules_context(sess=None, ws=None):
-    """JAG-114/115: the composed global+project rules block for the prompt ('' when none).
+    """JAG-114/115/125: rules block for the prompt, ALWAYS carrying the paths.
 
     `ws` (or the session's own workspace) selects the project; without either the
-    global default workspace is used.
+    global default workspace is used. Uses `rules_prompt_block` (never empty) so
+    the model always sees where the global/project rules and their AGENTS.md
+    fallbacks live — not just their text.
     """
     try:
         import rules as rules_mod
-        return rules_mod.rules_block(ws=ws or rules_mod.resolve_workspace(sess))
+        return rules_mod.rules_prompt_block(ws=ws or rules_mod.resolve_workspace(sess))
     except Exception:  # noqa: BLE001 — rules must never break a prompt
         return ""
 
@@ -3314,6 +3319,10 @@ class Handler(BaseHTTPRequestHandler):
             # JAG-63: only the user clears the persistent task list (new task).
             sess_id = path[len("/api/sessions/"):-len("/graph/reset")].strip("/")
             return self._send(200, taskgraph.reset(sess_id))
+        if path.startswith("/api/runs/") and path.endswith("/graph/reset"):
+            # JAG-125: clear the CURRENT run graph from the UI (Execution panel).
+            run_id = path[len("/api/runs/"):-len("/graph/reset")].strip("/")
+            return self._send(200, taskgraph.reset(run_id))
         if path == "/api/context/compact":
             res = compact_session(body.get("session"), body.get("budget_tokens"))
             return self._send(200 if "error" not in res else 404, res)
