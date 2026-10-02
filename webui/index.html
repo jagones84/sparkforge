@@ -407,10 +407,8 @@
     </nav>
     <div id="panel-body">
       <section data-section="graph">
-        <h2>Plan <span class="remaining">· session task list (persistent)</span></h2>
+        <h2>TASK LIST (persistente) <span id="taskCount" class="remaining"></span></h2>
         <div class="card">
-          <div id="planGoal" class="remaining">no goal yet</div>
-          <div id="planSteps" style="margin-top:8px"></div>
           <div style="display:flex;gap:6px;margin-top:8px">
             <input id="planInp" class="inp" placeholder="goal…" style="flex:1;padding:6px 10px;font-size:12px">
             <button class="ghost" onclick="planGoal()" title="same as typing /goal in chat: plans AND runs to completion">▶ goal</button>
@@ -418,9 +416,6 @@
           </div>
           <div class="remaining" style="margin-top:6px">This panel is the persistent view of the plan.
             <b>/goal &lt;text&gt;</b> in chat does the same thing: plan + execute autonomously (no manual planning needed).</div>
-        </div>
-        <h2>TASK LIST (persistente) <span id="taskCount" class="remaining"></span></h2>
-        <div class="card">
           <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
           <div id="tasks"></div>
           <div style="display:flex;gap:6px;margin-top:8px">
@@ -1098,23 +1093,11 @@ async function compactNow() {
 /* JAG-91: the plan is the PERSISTENT per-session task graph (the same list the
  * model owns and re-receives every turn), not the orphaned global plan.json. */
 async function loadPlan() {
-  if (!sessionId) { $("planGoal").textContent = "no session selected"; $("planSteps").innerHTML = ""; return; }
+  if (!sessionId) { renderGraph(); return; }
   let g = null;
   try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
-  if (!g || !g.nodes || !g.nodes.length) {
-    $("planGoal").textContent = g && g.goal ? g.goal : "no goal yet";
-    $("planSteps").innerHTML = '<div class="remaining">no plan steps — send a request to generate them</div>';
-    return;
-  }
-  $("planGoal").textContent = g.goal || "no goal yet";
-  $("planSteps").innerHTML = "";
-  (g.nodes || []).forEach(n => {
-    const d = document.createElement("div");
-    d.className = "step" + (n.status === "done" ? " done" : "");
-    d.innerHTML = `<span>${n.status === "done" ? "☑" : (n.status === "doing" ? "▶" : "☐")}</span><span>${n.label}</span>`;
-    d.onclick = () => api("POST", "/api/runs/" + sessionId + "/graph/nodes", { id: n.id, action: "update", status: n.status === "done" ? "doing" : "done" }).then(loadPlan);
-    $("planSteps").appendChild(d);
-  });
+  if (g && g.nodes && g.nodes.length) { graph = g; }
+  renderGraph();
 }
 /* v0.8: dedupe identical plan steps (the "say hello" x9 bug) */
 function dedupePlan(steps) {
@@ -1137,6 +1120,8 @@ function planGoal() {
 let curRunId = localStorage.getItem("sf_run") || null;
 let graph = null;        // {run_id, session_id, goal, nodes:[], counts, node_count}
 let graphFresh = null;   // node id to highlight on the next render
+
+function listRunId() { return (graph && graph.run_id) || curRunId || null; }
 
 function countNodes(nodes) {
   const c = { todo: 0, doing: 0, done: 0, blocked: 0, cancelled: 0 };
@@ -1210,21 +1195,25 @@ async function graphNodeAction(id, a) {
     if (ev === null || !ev.trim()) return;
     body.action = "update"; body.status = "done"; body.evidence = ev;
   } else { body.action = "update"; body.status = a; }
-  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", body);
+  const rid = listRunId();
+  if (!rid) { who("ai", "no task list to update"); return; }
+  const r = await api("POST", "/api/runs/" + rid + "/graph/nodes", body);
   if (r && r.error) { who("ai", "⚠ graph: " + r.error); return; }
-  if (r && r.id) applyGraphEvent({ run: curRunId, node: r });
+  if (r && r.id) applyGraphEvent({ run: rid, node: r });
 }
 async function addTask() {
   const v = $("taskInp").value.trim(); if (!v) return;
   $("taskInp").value = "";
-  if (!curRunId) { await api("POST", "/api/tasks", { title: v }); return; }
-  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", { action: "add", label: v });
-  if (r && r.id) applyGraphEvent({ run: curRunId, node: r });
+  const rid = listRunId();
+  if (!rid) { await api("POST", "/api/tasks", { title: v }); return; }
+  const r = await api("POST", "/api/runs/" + rid + "/graph/nodes", { action: "add", label: v });
+  if (r && r.id) applyGraphEvent({ run: rid, node: r });
 }
 async function replanGraph() {
-  if (!curRunId) { who("ai", "no run graph to re-plan yet"); return; }
+  const rid = listRunId();
+  if (!rid) { who("ai", "no run graph to re-plan yet"); return; }
   const note = prompt("re-plan: what changed / what is still missing?", "");
-  const r = await api("POST", "/api/runs/" + curRunId + "/graph/nodes", { action: "replan", note: note || "" });
+  const r = await api("POST", "/api/runs/" + rid + "/graph/nodes", { action: "replan", note: note || "" });
   if (r && r.error) { who("ai", "⚠ replan: " + r.error); return; }
   who("ai", "↻ re-plan: +" + ((r.added || []).length) + " nodes" +
       ((r.added_labels || []).length ? " — " + r.added_labels.join("; ") : ""));
@@ -1239,9 +1228,10 @@ async function resetPlan() {
   loadPlan(); loadGraph();
 }
 async function resetRunGraph() {
-  if (!curRunId) { who("ai", "no run graph to reset"); return; }
+  const rid = listRunId();
+  if (!rid) { who("ai", "no run graph to reset"); return; }
   if (!(await confirmDelete("clear the current run graph?"))) return;
-  await api("POST", "/api/runs/" + encodeURIComponent(curRunId) + "/graph/reset", {});
+  await api("POST", "/api/runs/" + encodeURIComponent(rid) + "/graph/reset", {});
   who("ai", "↺ run graph reset");
   loadGraph();
 }

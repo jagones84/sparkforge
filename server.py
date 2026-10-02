@@ -1320,7 +1320,6 @@ def context_summary(session_id=None, graph_key=None):
     compaction or restarts. The old parallel `tasks.json` board is no longer
     injected here (it was the source of the "graph vs todo" confusion).
     """
-    plan = load_plan()
     lines = []
     key = graph_key or session_id
     g = None
@@ -1329,10 +1328,6 @@ def context_summary(session_id=None, graph_key=None):
             g = taskgraph.load(key)
         except Exception:  # noqa: BLE001 — context must never break a turn
             g = None
-    if plan.get("goal"):
-        lines.append("PLAN goal: " + plan["goal"])
-        for s in plan.get("steps", []):
-            lines.append(" - [%s] %s" % ("x" if s.get("done") else " ", s.get("title", "")))
     if g:
         todos = taskgraph.render_todos(g)
         if todos:
@@ -3220,10 +3215,16 @@ class Handler(BaseHTTPRequestHandler):
             # keep-alive is a /api/feed-only privilege (v0.6.1, JAG-48)
             return sse_response(self, feed_gen(since), keepalive=True)
         if path == "/api/plan":
-            # JAG-129B: alias di lettura della task list persistente.
+            # JAG-129B/F3: alias di lettura della task list persistente, con
+            # shape retro-compatibile {nodes,counts,goal,steps} (consumer storici).
             sid = qs.get("session") or ""
-            _g = taskgraph.load(sid) if sid else None
-            return self._send(200, taskgraph.public(_g) or {"nodes": [], "counts": {}})
+            g = taskgraph.load(sid) if sid else None
+            pub = taskgraph.public(g) or {"nodes": [], "counts": {}}
+            pub["goal"] = (g or {}).get("goal") or ""
+            pub["steps"] = [{"id": n.get("id"), "title": n.get("label"),
+                             "done": n.get("status") in ("done", "cancelled")}
+                            for n in (g or {}).get("nodes", [])]
+            return self._send(200, pub)
         if path == "/api/tasks":
             tasks = load_tasks()
             remaining = ["%s: %s" % (t["status"], t["title"]) for t in tasks.get("tasks", [])
@@ -3436,11 +3437,16 @@ class Handler(BaseHTTPRequestHandler):
             res = ensure_model(alias, on_event=lambda k, **d: publish(k, **d))
             return self._send(200 if res.get("loaded") else 502, res)
         if path == "/api/plan":
-            # JAG-129B: il "plan" legacy E' la task list persistente (una sola
-            # fonte di verita': il taskgraph della sessione).
+            # JAG-129B/F3: il "plan" legacy E' la task list persistente, con
+            # shape retro-compatibile {nodes,counts,goal,steps} (consumer storici).
             sid = body.get("session") or qs.get("session") or ""
-            _g = taskgraph.load(sid) if sid else None
-            return self._send(200, taskgraph.public(_g) or {"nodes": [], "counts": {}})
+            g = taskgraph.load(sid) if sid else None
+            pub = taskgraph.public(g) or {"nodes": [], "counts": {}}
+            pub["goal"] = (g or {}).get("goal") or ""
+            pub["steps"] = [{"id": n.get("id"), "title": n.get("label"),
+                             "done": n.get("status") in ("done", "cancelled")}
+                            for n in (g or {}).get("nodes", [])]
+            return self._send(200, pub)
         if path == "/api/plan/generate":
             goal = body.get("goal", "")
             if not goal:
