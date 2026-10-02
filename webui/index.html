@@ -34,6 +34,19 @@
   .pill { font-size: 10px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); white-space: nowrap; }
   .pill.ok { color: var(--ok); border-color: rgba(74,222,128,.35); }
   .pill.warn { color: var(--warn); border-color: rgba(251,191,36,.4); }
+  /* JAG-113: custom model picker (no native <select>) */
+  .model-btn { cursor: pointer; }
+  .model-btn .mc { color: var(--dim); margin-left: 2px; }
+  #modelMenu { position: fixed; top: 47px; right: 12px; width: 360px; max-height: 62vh; overflow-y: auto; z-index: 30;
+    padding: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(0,0,0,.55); }
+  #modelMenu[hidden] { display: none; }
+  #modelMenu .mh { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .6px; padding: 8px 8px 2px; }
+  #modelMenu .mi { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
+    cursor: pointer; font-size: 12px; color: var(--txt); }
+  #modelMenu .mi:hover { background: rgba(120,140,255,.14); }
+  #modelMenu .mi.active { background: rgba(120,140,255,.2); }
+  #modelMenu .mi .bg { margin-left: auto; font-size: 10px; color: var(--dim); }
   main { flex: 1; display: grid; grid-template-columns: 320px 1fr; min-height: 0; }
 
   /* ---------------- sidebar ---------------- */
@@ -209,9 +222,8 @@
   <span style="flex:1"></span>
   <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
   <button class="ghost" id="compactBtn" title="compact the session transcript now">🗜 compact</button>
-  <label class="pill" title="modello LLM">model:
-    <select id="model-select" style="background:transparent;border:none;color:inherit;font:inherit;outline:none;cursor:pointer;max-width:180px"></select>
-  </label>
+  <button class="pill model-btn" id="model-btn" title="modello LLM">model: … <span class="mc">▾</span></button>
+  <div id="modelMenu" hidden></div>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
   <span class="pill" id="server-badge">server</span>
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
@@ -267,6 +279,7 @@
       <button data-panel="mcp" onclick="openPanel('mcp')">MCP</button>
       <button data-panel="skills" onclick="openPanel('skills')">Skills</button>
       <button data-panel="providers" onclick="openPanel('providers')">Providers</button>
+      <button data-panel="keys" onclick="openPanel('keys')">Keys</button>
     </nav>
     <div id="panel-body">
       <section data-section="graph">
@@ -403,6 +416,14 @@
           <div class="remaining" style="margin-top:6px">salvati in config/providers.local.yaml (fuori dal repo)</div>
         </div>
       </section>
+      <section data-section="keys" hidden>
+        <h2>Keys · segreti</h2>
+        <div class="card">
+          <div class="remaining" id="keysSummary">caricamento…</div>
+          <div id="keysList" style="margin-top:8px"></div>
+          <div class="remaining" style="margin-top:8px">I valori NON stanno nel repo: mettili in <code>.env</code> o <code>~/.hermes/.env</code> (gitignorati). Provider e MCP referenziano la chiave solo per NOME.</div>
+        </div>
+      </section>
     </div>
   </aside>
 </main>
@@ -466,7 +487,7 @@ function who(role, text) {
 }
 /* v1.6.3 (JAG-55): inline tool-call mini-card, coherent with the run graph nodes */
 /* v0.8: expandable card (head + args/output body) */
-function toolCard(tool) {
+function toolCard(tool, args) {
   const name = tool || "tool";
   const id = "tc" + Math.random().toString(36).slice(2, 8);
   const wrap = document.createElement("div");
@@ -475,6 +496,10 @@ function toolCard(tool) {
     `<span class="tc-name">${name}</span><span class="tc-meta">running…</span><span class="tc-chev">▾</span></div>` +
     `<div class="toolcard-body" id="${id}"><pre class="tc-args"></pre><pre class="tc-out"></pre></div></div>`;
   const d = wrap.firstElementChild;
+  if (args) {
+    const a = d.querySelector(".tc-args");
+    if (a) a.textContent = "input: " + (typeof args === "string" ? args : JSON.stringify(args));
+  }
   d.classList.add("pending");
   $("log").appendChild(d); scroll(); return d;
 }
@@ -490,10 +515,10 @@ function updateToolCard(data) {
                 (data.summary || "")].filter(Boolean).join(" · ");
   card.querySelector(".tc-meta").textContent = meta;
   const argsEl = card.querySelector(".tc-args");
-  if (argsEl && data.args) argsEl.textContent = typeof data.args === "string" ? data.args : JSON.stringify(data.args);
+  if (argsEl && data.args) argsEl.textContent = "input: " + (typeof data.args === "string" ? data.args : JSON.stringify(data.args));
   const outEl = card.querySelector(".tc-out");
   const body = data.output || data.stdout || data.result || "";
-  if (outEl) outEl.textContent = String(body);
+  if (outEl) outEl.textContent = body ? ("output: " + String(body)) : "";
   scroll();
 }
 function ensureThink() {
@@ -568,7 +593,8 @@ async function loadSessions() {
   (out.sessions || []).filter(s => (!hideEmpty || (s.messages || 0) > 0) && ((s.title || s.id || "").toLowerCase().includes(q))).forEach(s => {
     const d = document.createElement("div");
     d.className = "sess" + (s.id === sessionId ? " active" : "");
-    d.innerHTML = `<span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg</span><span class="del" title="delete">✕</span>`;
+    const age = s.age ? (" · " + s.age) : "";
+    d.innerHTML = `<span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span><span class="del" title="delete">✕</span>`;
     d.onclick = e => {
       if (e.target.classList.contains("del")) return;
       sessionId = s.id; localStorage.setItem("sf_session", sessionId);
@@ -838,21 +864,48 @@ async function replanGraph() {
   loadGraph();
 }
 /* JAG-91: populate the LLM selector from the live router roster + persist choice */
+let _modelsCache = [];
+function currentModel() { return localStorage.getItem("sf_model") || ""; }
+function modelLabel() {
+  const b = $("model-btn");
+  if (b) b.firstChild.textContent = "model: " + (currentModel() || "—") + " ";
+}
 async function loadModels() {
   try {
     const d = await api("GET", "/api/models");
-    const models = d.router_models || (d.models || []);
-    const sel = $("model-select");
-    if (!models.length) { sel.innerHTML = '<option value="">—</option>'; return; }
-    const cur = localStorage.getItem("sf_model") || models.find(m => m.loaded)?.alias || models[0].alias || "";
-    sel.innerHTML = models.map(m =>
-      `<option value="${m.alias}" ${m.alias === cur ? "selected" : ""}>${m.alias}${m.loaded ? "" : " (not loaded)"}</option>`).join("");
-    if (!sel.value && cur) { sel.insertAdjacentHTML("afterbegin", `<option value="${cur}" selected>${cur}</option>`); }
+    _modelsCache = d.router_models || (d.models || []);
+    const cur = localStorage.getItem("sf_model")
+      || (_modelsCache.find(m => m.loaded) || {}).alias
+      || (_modelsCache[0] || {}).alias || "";
+    if (cur) localStorage.setItem("sf_model", cur);
+    modelLabel(); renderModelMenu();
   } catch (e) { /* selector must never break the app */ }
 }
-function currentModel() { return localStorage.getItem("sf_model") || ""; }
-$("model-select").addEventListener("change", e => {
-  localStorage.setItem("sf_model", e.target.value);
+function renderModelMenu() {
+  const box = $("modelMenu"); if (!box) return;
+  const cur = currentModel();
+  box.innerHTML = "";
+  const add = (m) => {
+    const it = document.createElement("div");
+    it.className = "mi" + (m.alias === cur ? " active" : "");
+    const dot = document.createElement("span"); dot.textContent = m.loaded ? "🟢" : "⚪";
+    const nm = document.createElement("span"); nm.style.flex = "1"; nm.textContent = m.alias;
+    const bg = document.createElement("span"); bg.className = "bg";
+    bg.textContent = m.loaded ? "loaded" : "unloaded";
+    it.append(dot, nm, bg);
+    it.onclick = () => { localStorage.setItem("sf_model", m.alias); modelLabel(); box.hidden = true; renderModelMenu(); };
+    box.appendChild(it);
+  };
+  const loaded = _modelsCache.filter(m => m.loaded);
+  const rest = _modelsCache.filter(m => !m.loaded);
+  if (loaded.length) { const h = document.createElement("div"); h.className = "mh"; h.textContent = "caricati"; box.appendChild(h); loaded.forEach(add); }
+  if (rest.length) { const h = document.createElement("div"); h.className = "mh"; h.textContent = "non caricati"; box.appendChild(h); rest.forEach(add); }
+  if (!_modelsCache.length) box.innerHTML = '<div class="mi">nessun modello</div>';
+}
+$("model-btn").onclick = (e) => { e.stopPropagation(); renderModelMenu(); const m = $("modelMenu"); m.hidden = !m.hidden; };
+document.addEventListener("click", e => {
+  const m = $("modelMenu");
+  if (m && !m.hidden && !m.contains(e.target) && e.target.id !== "model-btn") m.hidden = true;
 });
 async function loadStatus() {
   try {
@@ -940,7 +993,7 @@ function runAgent(goal) {
     const l = document.createElement("div"); l.className = "agentline";
     l.textContent = "👁 " + d.observation; $("log").appendChild(l); scroll(); });
   es.addEventListener("tool.call", e => { const d = JSON.parse(e.data);
-    toolCard(d.tool);
+    toolCard(d.tool, d.args);
     const l = document.createElement("div"); l.className = "agentline";
     l.innerHTML = `🛠 <b>${d.tool}</b> approval=${d.approval}`; $("log").appendChild(l); scroll(); });
   es.addEventListener("tool.result", e => updateToolCard(JSON.parse(e.data)));
@@ -1348,6 +1401,32 @@ async function saveProvider() {
   $("provResult").textContent = r.error ? ("errore: " + r.error) : ("salvato: " + r.id);
   if (!r.error) loadProviders();
 }
+/* ---- keys (JAG-113): which env NAMES are needed and if they are set ---- */
+async function loadKeys() {
+  try {
+    const d = await api("GET", "/api/keys");
+    const rows = d.keys || [];
+    $("keysSummary").textContent = rows.length + " chiavi richieste · " +
+      rows.filter(k => k.set).length + " impostate";
+    const box = $("keysList"); box.innerHTML = "";
+    rows.forEach(k => {
+      const row = document.createElement("div");
+      row.className = "card";
+      row.style.cssText = "padding:6px 8px;margin-bottom:6px;display:flex;gap:8px;align-items:center";
+      const dot = document.createElement("span"); dot.textContent = k.set ? "🟢" : "🟠";
+      const info = document.createElement("div"); info.style.cssText = "flex:1;min-width:0";
+      const t = document.createElement("div"); t.style.fontWeight = "600"; t.textContent = k.env;
+      const sub = document.createElement("div"); sub.className = "remaining";
+      sub.textContent = (k.where || []).join(", ");
+      info.append(t, sub);
+      const st = document.createElement("span"); st.className = "remaining";
+      st.textContent = k.set ? "impostata" : "mancante";
+      row.append(dot, info, st);
+      box.appendChild(row);
+    });
+    if (!rows.length) box.innerHTML = '<div class="remaining">nessuna chiave richiesta</div>';
+  } catch (e) { $("keysSummary").textContent = "errore: " + e; }
+}
 function skillsAutocomplete() {
   const inp = $("inp"); if (!inp) return;
   const box = $("slashMenu");
@@ -1375,6 +1454,7 @@ function openPanel(name) {
   else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); }
   else if (name === "skills") { loadSkills(); }
   else if (name === "providers") { loadProviders(); }
+  else if (name === "keys") { loadKeys(); }
   else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
@@ -1386,7 +1466,7 @@ function paletteItems() {
     { label: "\uFF0B Nuova sessione", run: () => newSession() },
     { label: "\u21BB Compatta contesto", run: () => compactNow() },
   ];
-  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
+  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers", "keys"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
   return items;
 }
 function renderPalette(q) {

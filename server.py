@@ -193,18 +193,44 @@ def save_session(sess):
     _write_json(os.path.join(SESSIONS_DIR, sess["id"] + ".json"), sess)
 
 
+def _rel_time(ts):
+    """JAG-113: short relative label ('ora', '3 min', '15 h', '2 g') for a timestamp."""
+    try:
+        d = max(0.0, time.time() - float(ts))
+    except (TypeError, ValueError):
+        return ""
+    if d < 60:
+        return "ora"
+    if d < 3600:
+        return "%d min" % int(d // 60)
+    if d < 86400:
+        return "%d h" % int(d // 3600)
+    return "%d g" % int(d // 86400)
+
+
 def list_sessions():
+    """JAG-113: sessions ordered by LAST USE (not creation), with an age label."""
     out = []
     try:
         for fn in sorted(os.listdir(SESSIONS_DIR)):
             if fn.endswith(".json"):
                 s = _read_json(os.path.join(SESSIONS_DIR, fn), None)
-                if s:
-                    out.append({"id": s["id"], "title": s.get("title", ""),
-                                "created": s.get("created"), "messages": len(s.get("messages", []))})
+                if not s:
+                    continue
+                msgs = s.get("messages", [])
+                stamps = [s.get("created") or 0]
+                if msgs:
+                    stamps.append(msgs[-1].get("ts") or 0)
+                cards = s.get("tool_cards") or []
+                if cards:
+                    stamps.append(cards[-1].get("ts") or 0)
+                upd = max(stamps)
+                out.append({"id": s["id"], "title": s.get("title", ""),
+                            "created": s.get("created"), "updated": upd,
+                            "age": _rel_time(upd), "messages": len(msgs)})
     except FileNotFoundError:
         pass
-    return sorted(out, key=lambda s: s.get("created") or 0, reverse=True)
+    return sorted(out, key=lambda s: s.get("updated") or 0, reverse=True)
 
 
 def get_or_create_session(sid, title=None):
@@ -257,6 +283,68 @@ def persist_tool_card(sess, tool, ok, args=None, result="", error="",
         return card
     except Exception:  # noqa: BLE001 — persisting a card must never break a turn
         return None
+
+
+# JAG-113: the live tool card must show input + output (truncated), like the
+# persisted one rebuilt on reload — the live SSE event used to carry neither.
+TOOL_EVENT_MAX = int(os.environ.get("SPARKFORGE_TOOL_EVENT_MAX", "2000"))
+
+
+def _trunc(text, n=None):
+    """Truncate to <= n chars INCLUDING the '… troncati' suffix (JAG-113)."""
+    s = text if isinstance(text, str) else json.dumps(text, ensure_ascii=False)
+    n = n or TOOL_EVENT_MAX
+    if len(s) <= n:
+        return s
+    keep = max(0, n - 48)
+    return s[:keep] + "\n… [%d caratteri troncati]" % (len(s) - keep)
+
+
+def _tool_event(tool, ok, args=None, output="", **extra):
+    """Payload for a live tool card (args + truncated output + meta)."""
+    args_s = args if isinstance(args, str) else json.dumps(args or {}, ensure_ascii=False)
+    ev = {"tool": str(tool), "ok": bool(ok), "args": _trunc(args_s),
+          "output": _trunc(output or "")}
+    ev.update(extra)
+    return ev
+
+
+def keys_status():
+    """JAG-113: which env-var NAMES the harness needs and whether they are set.
+
+    Aggregates provider `api_key_env` and MCP client `${VAR}` headers. Returns the
+    NAME + set/where only — never a secret VALUE (values live in a gitignored .env).
+    """
+    import re as _re
+    rows = {}
+
+    def _bump(env, where):
+        r = rows.setdefault(env, {"env": env, "where": [], "set": False})
+        r["where"].append(where)
+
+    try:
+        import providers
+        for p in providers.providers():
+            if p.get("api_key_env"):
+                _bump(p["api_key_env"], "provider:%s" % p.get("id"))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import mcp_client
+        for name, spec in (mcp_client.load_doc().get("clients") or {}).items():
+            for v in (spec.get("headers") or {}).values():
+                for env in _re.findall(r"\$\{([A-Z0-9_]+)\}", str(v)):
+                    _bump(env, "mcp:%s" % name)
+    except Exception:  # noqa: BLE001
+        pass
+    out = []
+    for env in sorted(rows):
+        r = rows[env]
+        r["where"] = sorted(set(r["where"]))
+        r["set"] = bool(os.environ.get(env))
+        out.append(r)
+    return {"keys": out, "env_files": [".env", "~/.hermes/.env"],
+            "note": "I valori vivono in .env / ~/.hermes/.env (gitignorati), mai nel repo."}
 
 
 # --- JAG-51 session contract: no request without a persisted answer ---------
@@ -1724,13 +1812,18 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                                   error=sub.get("stderr") or "",
                                   exit_code=sub.get("exit_code"),
                                   backend=sub.get("backend") or "harness")
-                on_event("tool.result", session=sess["id"], tool=tool, ok=ok, inline=True)
+                on_event("tool.result", session=sess["id"], **_tool_event(
+                    tool, ok, args=args, output=(sub.get("stdout") or obs or ""),
+                    exit_code=sub.get("exit_code"),
+                    backend=sub.get("backend") or "harness",
+                    inline=True, summary=("errore" if not ok else "")))
             except Exception as e:  # noqa: BLE001 — a tool failure must not kill chat
                 obs, ok = "tool error: %s" % e, False
                 persist_tool_card(sess, tool, False, args=args, error=str(e)[:200],
                                   backend="harness")
-                on_event("tool.result", session=sess["id"], tool=tool, ok=False,
-                         stderr=str(e)[:200], inline=True)
+                on_event("tool.result", session=sess["id"], **_tool_event(
+                    tool, False, args=args, output=str(e)[:200],
+                    backend="harness", inline=True, summary="errore"))
             # JAG-88: an oversized observation goes to a file (referenced) rather
             # than being truncated into the context — nothing is lost.
             obs = str(obs)
@@ -2899,6 +2992,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, status_payload())
         if path == "/api/models" or path == "/api/providers":
             return self._send(200, providers_catalog())
+        if path == "/api/keys":
+            return self._send(200, keys_status())
         if path == "/api/selfcheck":
             llm = qs.get("llm", "1").lower() not in ("0", "false", "no")
             return self._send(200, selfcheck_payload(
