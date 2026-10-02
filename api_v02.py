@@ -628,7 +628,7 @@ class LocalApi:
 _LAZY_MODS = {"memory": "_MEMORY", "mcp_client": "_MCP_CLIENT", "subagent": "_SUBAGENT",
               "meta": "_META", "swarm": "_SWARM", "acp": "_ACP",
               "checkpoints": "_CHECKPOINTS", "context_engine": "_CONTEXT",
-              "routing": "_ROUTING", "providers": "_PROVIDERS"}
+              "routing": "_ROUTING", "providers": "_PROVIDERS", "rules": "_RULES"}
 
 
 def _lazy(name):
@@ -774,6 +774,11 @@ def handle(handler, method, path, qs, body):
         if path == "/api/routing":
             _lazy('routing')
             return _r(handler, 200, _ROUTING.status())
+        # JAG-114: global/project rules + workspace selection
+        if path == "/api/rules":
+            return _r(handler, 200, rules_status())
+        if path == "/api/workspace":
+            return _r(handler, 200, workspace_get())
 
         return False
 
@@ -952,6 +957,13 @@ def handle(handler, method, path, qs, body):
         if path == "/api/routing":
             _lazy('routing')
             return _r(handler, 200, _ROUTING.update(body))
+        # --- JAG-114: global/project rules + workspace selection --------------
+        if path == "/api/rules":
+            res = rules_save(body)
+            return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/workspace":
+            res = workspace_set(body)
+            return _r(handler, 200 if res.get("ok") else 400, res)
 
         return False
 
@@ -1074,6 +1086,37 @@ def provider_reload():
     _lazy('providers')
     _PROVIDERS.reload()
     return {"ok": True}
+
+
+def rules_status():
+    """GET /api/rules — current workspace, global + project rules state."""
+    _lazy('rules')
+    return _RULES.status()
+
+
+def rules_save(body):
+    """POST /api/rules — save rules for scope 'global' or 'project'."""
+    _lazy('rules')
+    body = body or {}
+    res = _RULES.save(body.get("scope"), body.get("content"))
+    _publish("rules.update", scope=body.get("scope"), ok=bool(res.get("ok")))
+    return res
+
+
+def workspace_get():
+    """GET /api/workspace — selected workspace + full rules status."""
+    _lazy('rules')
+    return {"workspace": _RULES.get_workspace(), "status": _RULES.status()}
+
+
+def workspace_set(body):
+    """POST /api/workspace — select the project workspace folder."""
+    _lazy('rules')
+    body = body or {}
+    res = _RULES.set_workspace(body.get("path") or body.get("workspace"))
+    _publish("workspace.update", workspace=(body or {}).get("path"),
+             ok=bool(res.get("ok")))
+    return res
 
 
 def install_skill_raw(data, name=None, overwrite=False):

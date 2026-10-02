@@ -280,6 +280,7 @@
       <button data-panel="skills" onclick="openPanel('skills')">Skills</button>
       <button data-panel="providers" onclick="openPanel('providers')">Providers</button>
       <button data-panel="keys" onclick="openPanel('keys')">Keys</button>
+      <button data-panel="rules" onclick="openPanel('rules')">Rules</button>
     </nav>
     <div id="panel-body">
       <section data-section="graph">
@@ -423,6 +424,30 @@
           <div id="keysList" style="margin-top:8px"></div>
           <div class="remaining" style="margin-top:8px">I valori NON stanno nel repo: mettili in <code>.env</code> o <code>~/.hermes/.env</code> (gitignorati). Provider e MCP referenziano la chiave solo per NOME.</div>
         </div>
+      </section>
+      <section data-section="rules" hidden>
+        <h2>Workspace · progetto</h2>
+        <div class="card">
+          <div class="remaining" id="wsCurrent">caricamento…</div>
+          <input id="wsPath" class="inp" placeholder="percorso progetto (es. /home/jagones/Repositories/sparkforge)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <button class="ghost" onclick="setWorkspace()" style="margin-top:8px">usa questo workspace</button>
+          <div id="wsResult" class="remaining" style="margin-top:6px"></div>
+        </div>
+        <h2>Rules · globali</h2>
+        <div class="card">
+          <div class="remaining" id="rulesGlobalPath">…</div>
+          <textarea id="rulesGlobalText" style="width:100%;min-height:120px;margin-top:6px;font-size:12px;font-family:monospace;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--txt)"></textarea>
+          <button class="ghost" onclick="saveRules('global')" style="margin-top:8px">salva globali</button>
+        </div>
+        <h2>Rules · progetto</h2>
+        <div class="card">
+          <div class="remaining" id="rulesProjectPath">…</div>
+          <textarea id="rulesProjectText" style="width:100%;min-height:120px;margin-top:6px;font-size:12px;font-family:monospace;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--txt)"></textarea>
+          <button class="ghost" onclick="saveRules('project')" style="margin-top:8px">salva progetto</button>
+          <div id="rulesResult" class="remaining" style="margin-top:6px"></div>
+        </div>
+        <h2>File caricati</h2>
+        <div class="card"><div id="rulesFiles" class="remaining"></div></div>
       </section>
     </div>
   </aside>
@@ -1427,6 +1452,37 @@ async function loadKeys() {
     if (!rows.length) box.innerHTML = '<div class="remaining">nessuna chiave richiesta</div>';
   } catch (e) { $("keysSummary").textContent = "errore: " + e; }
 }
+/* ---- rules + workspace (JAG-114): global / project + workspace selection ---- */
+async function loadRules() {
+  try {
+    const d = await api("GET", "/api/rules");
+    const g = d.global || {}, p = d.project || {};
+    $("wsCurrent").textContent = "workspace: " + (d.workspace || "—") +
+      " · " + (d.total_chars || 0) + " char di regole";
+    $("wsPath").value = d.workspace || "";
+    $("rulesGlobalPath").textContent = "file: " + (g.path || "—") + (g.exists ? "" : " (non esiste)");
+    $("rulesProjectPath").textContent = "file: " + (p.path || "—") + (p.exists ? "" : " (non esiste)");
+    $("rulesGlobalText").value = g.text || "";
+    $("rulesProjectText").value = p.text || "";
+    const files = [];
+    (g.files || []).forEach(f => files.push("G " + f));
+    (p.files || []).forEach(f => files.push("P " + f));
+    $("rulesFiles").textContent = files.length ? files.join("  ·  ") : "nessun file di regole";
+  } catch (e) { $("wsCurrent").textContent = "errore: " + e; }
+}
+async function saveRules(scope) {
+  const content = $(scope === "global" ? "rulesGlobalText" : "rulesProjectText").value;
+  const r = await api("POST", "/api/rules", { scope, content });
+  $("rulesResult").textContent = r.error ? ("errore: " + r.error) : ("salvate (" + scope + "): " + (r.path || ""));
+  if (!r.error) loadRules();
+}
+async function setWorkspace() {
+  const path = $("wsPath").value.trim();
+  if (!path) { $("wsResult").textContent = "percorso obbligatorio"; return; }
+  const r = await api("POST", "/api/workspace", { path });
+  $("wsResult").textContent = r.error ? ("errore: " + r.error) : ("workspace: " + (r.workspace || path));
+  if (!r.error) loadRules();
+}
 function skillsAutocomplete() {
   const inp = $("inp"); if (!inp) return;
   const box = $("slashMenu");
@@ -1455,6 +1511,7 @@ function openPanel(name) {
   else if (name === "skills") { loadSkills(); }
   else if (name === "providers") { loadProviders(); }
   else if (name === "keys") { loadKeys(); }
+  else if (name === "rules") { loadRules(); }
   else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
@@ -1466,7 +1523,7 @@ function paletteItems() {
     { label: "\uFF0B Nuova sessione", run: () => newSession() },
     { label: "\u21BB Compatta contesto", run: () => compactNow() },
   ];
-  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers", "keys"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
+  ["graph", "config", "self", "settings", "approvals", "mcp", "skills", "providers", "keys", "rules"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
   return items;
 }
 function renderPalette(q) {

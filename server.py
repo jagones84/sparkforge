@@ -1012,6 +1012,24 @@ SYSTEM_PROMPT = (
     "the server name, e.g. `core-time::get_current_time`."
 )
 
+# JAG-114: standing rules — global (user) + project (workspace), AGENTS.md-style.
+RULES_POLICY = (
+    "## Rules (global + project)\n"
+    "The block below lists the standing rules for this work. GLOBAL rules come from "
+    "your user config; PROJECT rules come from the selected workspace and override "
+    "global ones when they conflict. Follow them; if a rule conflicts with the user's "
+    "explicit request in this turn, say so before proceeding."
+)
+
+
+def rules_context():
+    """JAG-114: the composed global+project rules block for the prompt ('' when none)."""
+    try:
+        import rules as rules_mod
+        return rules_mod.rules_block()
+    except Exception:  # noqa: BLE001 — rules must never break a prompt
+        return ""
+
 PLANNER_PROMPT = (
     "You are the planner module of the SparkForge harness. Break the goal into "
     "3-7 concrete strategy steps. Respond with ONLY a JSON array, each item "
@@ -2092,10 +2110,14 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_stat
 
     actions = []
     aborted = False
+    rb = rules_context()  # JAG-114: the agent loop honours the same standing rules
     try:
         for i in range(max_steps):
             api_v02.checkpoint(st)  # JAG-111: honour pause / abort between steps
-            sys = SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT + "\n\nHarness state (your persistent task list):\n" + context_summary(graph_key=trace.id)
+            sys = (SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT
+                   + "\n\n" + RULES_POLICY + ("\n" + rb if rb else "")
+                   + "\n\nHarness state (your persistent task list):\n"
+                   + context_summary(graph_key=trace.id))
             msgs = [{"role": "system", "content": sys},
                     {"role": "user", "content": "Goal: %s (iteration %d/%d)" % (goal, i + 1, max_steps)}]
             on_event("agent.iteration", i=i + 1, of=max_steps)
@@ -2670,7 +2692,9 @@ def _system_prompt(sess, tool_ctx=None):
                             + "\n".join(instr))
     except Exception:  # noqa: BLE001 — lessons must never break the prompt
         lesson_block = ""
+    rb = rules_context()
     return (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
+            + "\n\n" + RULES_POLICY + ("\n" + rb if rb else "")
             + "\n\n" + SKILLS_POLICY + ("\n" + sk_block if sk_block else "")
             + "\n\n" + MEMORY_POLICY + lesson_block
             + "\n\nHarness state (your persistent task list):\n"
