@@ -49,6 +49,14 @@ import registry
 REPO = registry.REPO
 CONFIG_PATH = os.path.join(REPO, "config", "mcp_clients.yaml")
 CONFIG_JSON_PATH = os.path.join(REPO, "config", "mcp_clients.json")
+# JAG-108: user-added clients live in a LOCAL, gitignored file so tokens/paths
+# never reach the tracked repo (workspace rule: no secrets in the repository).
+CONFIG_LOCAL_PATH = os.path.join(REPO, "config", "mcp_clients.local.yaml")
+CONFIG_LOCAL_JSON_PATH = os.path.join(REPO, "config", "mcp_clients.local.json")
+
+_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+# Keys a user may set from the API/UI (never arbitrary passthrough).
+ALLOWED_CLIENT_KEYS = ("enabled", "command", "args", "url", "headers", "env", "cwd")
 
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
@@ -332,27 +340,79 @@ def _load_env_files(paths):
             log("env file %s: %s", path, e)
 
 
+def _read_doc(path):
+    """Read a YAML (or JSON) config document; {} on any failure."""
+    if not path or not os.path.isfile(path):
+        return {}
+    try:
+        import yaml
+        with open(path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except ImportError:
+        pass
+    except Exception as e:
+        log("error reading %s: %s", path, e)
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception as e:
+        log("error reading %s: %s", path, e)
+        return {}
+
+
+def load_doc():
+    """Merged config: tracked base file + local (gitignored) user overrides.
+
+    Local entries override base ones by name; `env_files` are unioned. This is
+    the single place the effective MCP configuration is assembled.
+    """
+    base = _read_doc(CONFIG_PATH)
+    if not base and os.path.exists(CONFIG_JSON_PATH):
+        base = _read_doc(CONFIG_JSON_PATH)
+    local = _read_doc(CONFIG_LOCAL_PATH)
+    if not local and os.path.exists(CONFIG_LOCAL_JSON_PATH):
+        local = _read_doc(CONFIG_LOCAL_JSON_PATH)
+    env_files = list(base.get("env_files") or [])
+    for p in (local.get("env_files") or []):
+        if p not in env_files:
+            env_files.append(p)
+    clients = dict(base.get("clients") or {})
+    clients.update(local.get("clients") or {})
+    return {"env_files": env_files, "clients": clients}
+
+
+def _load_local_doc():
+    """Raw local-only document (the file user edits are persisted into)."""
+    doc = _read_doc(CONFIG_LOCAL_PATH)
+    if not doc and os.path.exists(CONFIG_LOCAL_JSON_PATH):
+        doc = _read_doc(CONFIG_LOCAL_JSON_PATH)
+    if not isinstance(doc, dict):
+        doc = {}
+    doc.setdefault("clients", {})
+    return doc
+
+
+def _save_local_doc(doc):
+    """Persist the user document to the gitignored local file (YAML or JSON)."""
+    os.makedirs(os.path.dirname(CONFIG_LOCAL_PATH), exist_ok=True)
+    try:
+        import yaml
+        with open(CONFIG_LOCAL_PATH, "w", encoding="utf-8") as f:
+            yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True,
+                           default_flow_style=False)
+        return CONFIG_LOCAL_PATH
+    except ImportError:
+        with open(CONFIG_LOCAL_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(doc, f, indent=2, ensure_ascii=False)
+        return CONFIG_LOCAL_JSON_PATH
+
+
 def _load_config():
-    """Load client config from yaml or json."""
-    if os.path.exists(CONFIG_PATH):
-        try:
-            import yaml  # noqa: F811
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-            _load_env_files(data.get("env_files"))
-            return data.get("clients") or {}
-        except ImportError:
-            log("PyYAML not installed but %s exists", CONFIG_PATH)
-            return {}
-        except Exception as e:
-            log("error loading %s: %s", CONFIG_PATH, e)
-            return {}
-    if os.path.exists(CONFIG_JSON_PATH):
-        with open(CONFIG_JSON_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        _load_env_files(data.get("env_files"))
-        return data.get("clients") or {}
-    return {}
+    """Effective clients for the manager, from the merged document."""
+    doc = load_doc()
+    _load_env_files(doc.get("env_files"))
+    return doc.get("clients") or {}
 
 
 class MCPClientManager:
@@ -499,14 +559,31 @@ class MCPClientManager:
         self._started = False
 
     def status(self):
-        return {
-            "clients": {n: {"connected": s.connected,
-                            "tools": len(s.tools),
-                            "uptime": round(time.time() - s._connect_time, 1)
-                            if s._connect_time else 0}
-                       for n, s in self.sessions.items()},
-            "external_tools": len(_EXTERNAL_TOOLS),
-        }
+        """Effective client view: configured entries (connected or not) merged
+        with live session state — single source for the API/UI (JAG-108)."""
+        clients = {}
+        for name, cfg in (_load_config() or {}).items():
+            s = self.sessions.get(name)
+            clients[name] = {
+                "connected": bool(s and s.connected),
+                "tools": len(s.tools) if s else 0,
+                "uptime": round(time.time() - s._connect_time, 1)
+                if (s and s._connect_time) else 0,
+                "enabled": bool(cfg.get("enabled", True)),
+                "transport": "stdio" if cfg.get("command")
+                else ("http" if cfg.get("url") else "?"),
+                "command": cfg.get("command"),
+                "args": cfg.get("args"),
+                "url": cfg.get("url"),
+            }
+        for name, s in self.sessions.items():
+            clients.setdefault(name, {
+                "connected": s.connected, "tools": len(s.tools),
+                "uptime": round(time.time() - s._connect_time, 1)
+                if s._connect_time else 0,
+                "enabled": True, "transport": "?"})
+        return {"clients": clients, "external_tools": len(_EXTERNAL_TOOLS),
+                "config": CONFIG_PATH, "local_config": CONFIG_LOCAL_PATH}
 
 
 # Module-level registry of external tools (populated by the manager)
@@ -538,3 +615,90 @@ def status():
 
 def start():
     return get_manager().start_all()
+
+
+def reload():
+    """Tear down every session and re-read the config, so user edits apply
+    without a server restart (JAG-108)."""
+    m = get_manager()
+    m.disconnect_all()
+    m.start_all()
+    return m.status()
+
+
+def test_client(spec):
+    """Connect a candidate client WITHOUT persisting it; report the tools.
+
+    Lets the UI validate a stdio command / HTTP url before saving it.
+    """
+    cfg = dict(spec or {})
+    session = MCPSession("__test__", cfg)
+    try:
+        if cfg.get("command"):
+            ok = session._connect_stdio(cfg["command"], list(cfg.get("args") or []),
+                                        cfg.get("env") or {})
+        elif cfg.get("url"):
+            ok = session._connect_http(cfg["url"], cfg.get("headers") or {})
+        else:
+            return {"ok": False, "error": "command (stdio) or url (http) required"}
+        if not ok:
+            return {"ok": False, "error": "transport connect failed"}
+        if not session.initialize():
+            return {"ok": False, "error": "initialize failed (handshake)"}
+        tools = session.fetch_tools()
+        names = [t.get("name") for t in tools]
+        return {"ok": True, "count": len(names), "tools": names}
+    except Exception as e:  # noqa: BLE001 — a bad spec must never crash the API
+        return {"ok": False, "error": str(e)}
+    finally:
+        try:
+            session.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def upsert_client(name, spec):
+    """Add or update a client in the LOCAL config and reload (JAG-108).
+
+    Only whitelisted keys are accepted; the name must be a safe identifier.
+    Persisting to the local file keeps secrets out of the tracked repo.
+    """
+    name = str(name or "").strip()
+    if not _NAME_RE.match(name):
+        return {"error": "invalid name: use letters/digits/._- (start alnum)"}
+    if not isinstance(spec, dict):
+        return {"error": "spec must be an object"}
+    if not spec.get("command") and not spec.get("url"):
+        return {"error": "either command+args (stdio) or url (http) is required"}
+    if spec.get("args") is not None and not isinstance(spec.get("args"), list):
+        return {"error": "args must be a list"}
+    doc = _load_local_doc()
+    entry = doc["clients"].get(name) or {}
+    for k in ALLOWED_CLIENT_KEYS:
+        if k in spec and spec[k] is not None:
+            entry[k] = spec[k]
+    entry.setdefault("enabled", True)
+    doc["clients"][name] = entry
+    path = _save_local_doc(doc)
+    st = reload()
+    return {"ok": True, "name": name, "path": path, "client": entry, **st}
+
+
+def remove_client(name):
+    """Remove a user client (or disable a base one) and reload (JAG-108)."""
+    name = str(name or "").strip()
+    if not name:
+        return {"error": "name required"}
+    doc = _load_local_doc()
+    removed = False
+    if name in doc["clients"]:
+        doc["clients"].pop(name, None)
+        removed = True
+    else:
+        base = _read_doc(CONFIG_PATH) or {}
+        if name in (base.get("clients") or {}):
+            doc["clients"][name] = {"enabled": False}
+            removed = True
+    _save_local_doc(doc)
+    st = reload()
+    return {"ok": removed, "name": name, **st}

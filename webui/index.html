@@ -77,6 +77,7 @@
   .meter > i { display: block; height: 100%; border-radius: 999px;
     background: linear-gradient(90deg, var(--acc), var(--acc2)); transition: width .4s ease; }
   .meter > i.hot { background: linear-gradient(90deg, var(--warn), var(--err)); }
+  .meter > i.near { background: linear-gradient(90deg, var(--warn), var(--acc2)); }
   .ctxrow { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
 
   /* approvals */
@@ -256,6 +257,7 @@
       <button data-panel="self" onclick="openPanel('self')">Self</button>
       <button data-panel="settings" onclick="openPanel('settings')">Settings</button>
       <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
+      <button data-panel="mcp" onclick="openPanel('mcp')">MCP</button>
     </nav>
     <div id="panel-body">
       <section data-section="graph">
@@ -313,6 +315,39 @@
         <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
         <div class="card">
           <div id="approvals" class="remaining">no pending approvals</div>
+        </div>
+      </section>
+      <section data-section="mcp" hidden>
+        <h2>MCP · server esterni</h2>
+        <div class="card">
+          <div class="remaining" id="mcpSummary">caricamento…</div>
+          <div id="mcpList" style="margin-top:8px"></div>
+        </div>
+        <h2>Aggiungi / modifica</h2>
+        <div class="card">
+          <input id="mcpName" class="inp" placeholder="nome (es. filesystem)" style="width:100%;padding:6px 10px;font-size:12px">
+          <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+            <select id="mcpTransport" class="inp" style="flex:1;padding:6px 8px;font-size:12px" onchange="mcpTransportChanged()">
+              <option value="stdio">stdio (command)</option>
+              <option value="http">http (url)</option>
+            </select>
+            <label class="remaining" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="mcpEnabled" checked> enabled</label>
+          </div>
+          <div id="mcpStdio" style="margin-top:6px">
+            <input id="mcpCommand" class="inp" placeholder="command (es. npx)" style="width:100%;padding:6px 10px;font-size:12px">
+            <input id="mcpArgs" class="inp" placeholder="args separati da spazio (es. -y @modelcontextprotocol/server-filesystem /home/jagones)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          </div>
+          <div id="mcpHttp" style="margin-top:6px;display:none">
+            <input id="mcpUrl" class="inp" placeholder="url (es. http://127.0.0.1:8791/mcp)" style="width:100%;padding:6px 10px;font-size:12px">
+            <input id="mcpHeaders" class="inp" placeholder='headers JSON ({"Authorization":"Bearer ${TOKEN}"})' style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="ghost" onclick="testMcpClient()">prova</button>
+            <button class="ghost" onclick="saveMcpClient()">salva</button>
+            <button class="ghost" onclick="reloadMcp()">ricarica tutti</button>
+          </div>
+          <div id="mcpResult" class="remaining" style="margin-top:6px"></div>
+          <div class="remaining" style="margin-top:6px">salvati in config/mcp_clients.local.yaml (fuori dal repo · niente segreti committati)</div>
         </div>
       </section>
     </div>
@@ -580,9 +615,12 @@ async function loadCtx() {
     $("ctxBudget").textContent = d.budget || "n/d";
     $("ctxBudget").style.color = state === "over" ? "var(--err)" : "var(--dim)";
     const bar = $("ctxBar"); bar.style.width = (d.bar_pct != null ? d.bar_pct : 0) + "%";
-    bar.className = d.bar_hot ? "hot" : "";
-    $("ctx-meter").textContent = d.meter || "ctx: n/d";
-    $("ctx-meter").className = "pill" + (state === "over" ? " warn" : "");
+    bar.className = d.bar_hot ? "hot" : (state === "near" ? "near" : "");
+    const pill = $("ctx-meter");
+    pill.textContent = d.short || d.meter || "ctx: n/d";
+    pill.className = "pill" + (state === "near" || state === "over" ? " warn" : "");
+    pill.style.color = state === "over" ? "var(--err)"
+      : (state === "near" ? "var(--warn)" : "var(--dim)");
   } catch {}
 }
 async function compactNow() {
@@ -1005,11 +1043,113 @@ function renderProviders(el, d) {
   }).join("");
 }
 
+/* ---- JAG-108: user-managed external MCP servers (engine = server /api/mcp/*) ---- */
+function mcpTransportChanged() {
+  const t = $("mcpTransport").value;
+  $("mcpStdio").style.display = t === "stdio" ? "" : "none";
+  $("mcpHttp").style.display = t === "http" ? "" : "none";
+}
+function mcpSpecFromForm() {
+  const spec = { name: $("mcpName").value.trim(), enabled: $("mcpEnabled").checked };
+  if ($("mcpTransport").value === "stdio") {
+    spec.command = $("mcpCommand").value.trim();
+    const a = $("mcpArgs").value.trim();
+    spec.args = a ? a.split(/\s+/) : [];
+  } else {
+    spec.url = $("mcpUrl").value.trim();
+    const h = $("mcpHeaders").value.trim();
+    if (h) { try { spec.headers = JSON.parse(h); } catch (e) { throw new Error("headers JSON non valido"); } }
+  }
+  return spec;
+}
+async function loadMcpClients() {
+  try {
+    const d = await api("GET", "/api/mcp/clients");
+    const cs = d.clients || {};
+    const names = Object.keys(cs);
+    $("mcpSummary").textContent = names.length + " configurati · " + (d.external_tools || 0) + " tool esterni";
+    const box = $("mcpList"); box.innerHTML = "";
+    if (!names.length) {
+      const e = document.createElement("div"); e.className = "remaining";
+      e.textContent = "nessun server MCP configurato"; box.appendChild(e); return;
+    }
+    names.forEach(n => {
+      const c = cs[n];
+      const row = document.createElement("div");
+      row.className = "card";
+      row.style.cssText = "padding:6px 8px;margin-bottom:6px;display:flex;gap:8px;align-items:center";
+      const dot = document.createElement("span");
+      dot.textContent = c.connected ? "🟢" : (c.enabled ? "🟠" : "⚪");
+      const info = document.createElement("div"); info.style.cssText = "flex:1;min-width:0";
+      const title = document.createElement("div"); title.style.fontWeight = "600"; title.textContent = n;
+      const sub = document.createElement("div"); sub.className = "remaining"; sub.style.wordBreak = "break-all";
+      sub.textContent = (c.transport === "stdio"
+        ? ((c.command || "") + " " + ((c.args || []).join(" ")))
+        : (c.url || "")) + " · " + (c.tools || 0) + " tool";
+      info.append(title, sub);
+      const edit = document.createElement("button"); edit.className = "ghost"; edit.textContent = "✎";
+      edit.onclick = () => editMcp(n);
+      const del = document.createElement("button"); del.className = "ghost"; del.textContent = "🗑";
+      del.onclick = () => removeMcpClient(n);
+      row.append(dot, info, edit, del);
+      box.appendChild(row);
+    });
+  } catch (e) { $("mcpSummary").textContent = "errore: " + e; }
+}
+async function editMcp(name) {
+  $("mcpName").value = name;
+  try {
+    const d = await api("GET", "/api/mcp/clients");
+    const c = (d.clients || {})[name]; if (!c) return;
+    $("mcpEnabled").checked = !!c.enabled;
+    if (c.transport === "http") {
+      $("mcpTransport").value = "http"; $("mcpUrl").value = c.url || "";
+    } else {
+      $("mcpTransport").value = "stdio";
+      $("mcpCommand").value = c.command || "";
+      $("mcpArgs").value = (c.args || []).join(" ");
+    }
+    mcpTransportChanged();
+  } catch (e) { /* ignore */ }
+}
+async function testMcpClient() {
+  let spec; try { spec = mcpSpecFromForm(); } catch (e) { $("mcpResult").textContent = e.message; return; }
+  $("mcpResult").textContent = "provo…";
+  try {
+    const r = await api("POST", "/api/mcp/clients/test", spec);
+    $("mcpResult").textContent = r.ok
+      ? ("ok · " + r.count + " tool: " + (r.tools || []).slice(0, 8).join(", "))
+      : ("errore: " + (r.error || "?"));
+  } catch (e) { $("mcpResult").textContent = "errore: " + e; }
+}
+async function saveMcpClient() {
+  let spec; try { spec = mcpSpecFromForm(); } catch (e) { $("mcpResult").textContent = e.message; return; }
+  if (!spec.name) { $("mcpResult").textContent = "nome richiesto"; return; }
+  const r = await api("POST", "/api/mcp/clients", spec);
+  $("mcpResult").textContent = r.error ? ("errore: " + r.error) : ("salvato: " + spec.name);
+  if (!r.error) loadMcpClients();
+}
+async function removeMcpClient(name) {
+  if (!(await confirmDelete("rimuovere il server MCP '" + name + "'?"))) return;
+  const r = await api("POST", "/api/mcp/clients/remove", { name: name });
+  $("mcpResult").textContent = r.ok ? ("rimosso: " + name) : "errore";
+  loadMcpClients();
+}
+async function reloadMcp() {
+  $("mcpResult").textContent = "ricarico…";
+  try {
+    const r = await api("POST", "/api/mcp/reload", {});
+    $("mcpResult").textContent = "ricaricati " + Object.keys(r.clients || {}).length + " client";
+    loadMcpClients();
+  } catch (e) { $("mcpResult").textContent = "errore: " + e; }
+}
+
 function openPanel(name) {
   document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
   document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
   if (name === "graph") { loadPlan(); loadGraph(); loadCtx(); }
   else if (name === "approvals") { loadApprovals(); }
+  else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); }
   else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
@@ -1021,7 +1161,7 @@ function paletteItems() {
     { label: "\uFF0B Nuova sessione", run: () => newSession() },
     { label: "\u21BB Compatta contesto", run: () => compactNow() },
   ];
-  ["graph", "config", "self", "settings", "approvals"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
+  ["graph", "config", "self", "settings", "approvals", "mcp"].forEach(p => items.push({ label: "\u25B8 Pannello " + p, run: () => openPanel(p) }));
   return items;
 }
 function renderPalette(q) {

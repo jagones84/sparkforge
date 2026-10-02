@@ -16,4 +16,9 @@ eval/results/
 # of the repo; official scripts live at the repo root or under scripts/).
 trash/
 
+# JAG-108: user-added external MCP clients are persisted here (commands, headers
+# and tokens must never reach the tracked repo).
+config/mcp_clients.local.yaml
+config/mcp_clients.local.json
+
 .superpowers/

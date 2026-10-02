@@ -798,6 +798,26 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, st.public())
         if path in ("/mcp", "/api/mcp"):
             return _r(handler, 200, _mcp_message(body))
+
+        # --- JAG-108: user-managed external MCP clients (engine lives in mcp_client) ---
+        if path == "/api/mcp/clients":
+            _lazy('mcp_client')
+            res = _MCP_CLIENT.upsert_client(body.get("name"), body)
+            _publish("mcp.clients", action="upsert", name=body.get("name"),
+                     ok=bool(res.get("ok")))
+            return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/mcp/clients/remove":
+            _lazy('mcp_client')
+            res = _MCP_CLIENT.remove_client(body.get("name"))
+            _publish("mcp.clients", action="remove", name=body.get("name"),
+                     ok=bool(res.get("ok")))
+            return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/mcp/clients/test":
+            _lazy('mcp_client')
+            return _r(handler, 200, _MCP_CLIENT.test_client(body))
+        if path == "/api/mcp/reload":
+            _lazy('mcp_client')
+            return _r(handler, 200, _MCP_CLIENT.reload())
         if path == "/api/agent/run":
             goal = body.get("goal", "")
             if not goal:
@@ -908,6 +928,16 @@ def handle(handler, method, path, qs, body):
             _lazy('routing')
             return _r(handler, 200, _ROUTING.update(body))
 
+        return False
+
+    if method == "DELETE":
+        # JAG-108: delete a user-managed external MCP client by name.
+        if path == "/api/mcp/clients":
+            _lazy('mcp_client')
+            res = _MCP_CLIENT.remove_client(qs.get("name"))
+            _publish("mcp.clients", action="remove", name=qs.get("name"),
+                     ok=bool(res.get("ok")))
+            return _r(handler, 200 if res.get("ok") else 400, res)
         return False
     return False
 
