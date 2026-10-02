@@ -53,7 +53,7 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 ./run.sh --host 0.0.0.0      # expose on the Tailscale IP for the phone
 ```
 
-Then open `http://127.0.0.1:8790` (or `http://100.102.61.23:8790` from the phone).
+Then open `http://127.0.0.1:8790` (or `http://<dgx-tailscale-ip>:8790` from the phone).
 
 ```bash
 python3 forge.py chat "hello, who are you?"       # one-shot chat

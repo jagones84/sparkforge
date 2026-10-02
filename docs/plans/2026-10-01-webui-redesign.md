@@ -415,7 +415,7 @@ Expected: ≥ valore del baseline (Task 0 Step 3).
 
 - [ ] **Step 3: Verifica manuale guidata**
 
-Aprire `http://100.102.61.23:8790/?token=<T>` e provare: (a) resize → drawer a 1100/820px;
+Aprire `http://<dgx-tailscale-ip>:8790/?token=<T>` e provare: (a) resize → drawer a 1100/820px;
 (b) aprire i 5 pannelli e confrontare con `curl /api/...`; (c) mandare un messaggio → tool card;
 (d) cercare una sessione; (e) aprire ⌘K. Annotare i fallimenti.
 

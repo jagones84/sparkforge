@@ -12,6 +12,7 @@ stream legitimately stays open (the harness waits for approval), so we stop
 after `max_seconds` and still report what we saw. Exit 0 = all PASS.
 """
 import json
+import os
 import socket
 import sys
 import time
@@ -19,9 +20,11 @@ import urllib.parse
 import urllib.request
 import uuid
 
-BASE = "http://127.0.0.1:8790"
-TOK = "REDACTED-COMPROMISED-TOKEN"
-HDR = {"Authorization": "Bearer " + TOK}
+BASE = os.environ.get("SPARKFORGE_URL", "http://127.0.0.1:8790")
+# JAG-127: never hardcode the token — read it from the environment (a leaked
+# token in a committed test is published forever).
+TOK = os.environ.get("SPARKFORGE_TOKEN", "")
+HDR = {"Authorization": "Bearer " + TOK} if TOK else {}
 
 results = []
 
