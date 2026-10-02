@@ -77,8 +77,15 @@ def _skills_sig():
         for cat in sorted(os.listdir(SKILLS_DIR)):
             cd = os.path.join(SKILLS_DIR, cat)
             try:
-                if os.path.isdir(cd):
-                    parts.append((cat, os.stat(cd).st_mtime_ns))
+                if not os.path.isdir(cd):
+                    continue
+                parts.append((cat, os.stat(cd).st_mtime_ns))
+                for name in sorted(os.listdir(cd)):
+                    sd = os.path.join(cd, name)
+                    try:
+                        parts.append((cat, name, os.stat(sd).st_mtime_ns))
+                    except OSError:
+                        continue
             except OSError:
                 continue
     except OSError:
