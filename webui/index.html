@@ -312,9 +312,21 @@
   .diffrow.r-chg > .dl { background: rgba(255,110,110,.14); border-left-color: var(--err); }
   .diffrow.r-chg > .dr { background: rgba(80,200,120,.14); border-left-color: var(--ok); }
   .diffrow.r-ctx > span { color: var(--dim); }
+  /* JAG-127e: in-app image preview — clicking an image URL in a reply opens it
+   * in a separate overlay instead of doing nothing. */
+  #imgBackdrop { position: fixed; inset: 0; z-index: 47; background: rgba(0,0,0,.72); }
+  #imgBackdrop[hidden] { display: none; }
+  #imgView { position: fixed; z-index: 48; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column; gap: 8px;
+    background: #0f1320; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+  #imgView[hidden] { display: none; }
+  #imgView img { max-width: 88vw; max-height: 74vh; display: block; border-radius: 8px; }
+  #imgView .cap { font-size: 11px; color: var(--dim); word-break: break-all; }
   /* JAG-127: a produced readable file renders as a link in the reply */
-  a.filelink { color: var(--accent); text-decoration: underline; cursor: pointer; }
-  a.filelink:hover { color: var(--txt); }
+  a.filelink, a.weblink, a.imglink { color: var(--accent); text-decoration: underline; cursor: pointer; }
+  a.filelink:hover, a.weblink:hover, a.imglink:hover { color: var(--txt); }
+  a.weblink { color: var(--info); }
+  a.imglink { color: var(--acc2); }
 </style>
 </head>
 <body>
@@ -643,6 +655,16 @@
   </div>
   <div class="remaining" id="diffSub" style="margin:4px 0 8px"></div>
   <div id="diffBody"></div>
+</div>
+<div id="imgBackdrop" hidden onclick="closeImage()"></div>
+<div id="imgView" hidden>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="font-weight:600;flex:1">🖼 image</div>
+    <a id="imgOpen" class="ghost" href="#" target="_blank" rel="noopener noreferrer" style="text-decoration:none">↗ open in new tab</a>
+    <button class="ghost" onclick="closeImage()">✕ close</button>
+  </div>
+  <img id="imgEl" alt="preview">
+  <div class="cap" id="imgCap"></div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -2253,27 +2275,59 @@ async function undoEdits(path) {
    image, …) is turned into a link in the reply; clicking it opens the file in
    the Files editor (left panel), where it can be read (and edited if text). */
 const READABLE_RE = /((?:\/|~\/)[\w.\-\/ ]*\.(?:md|markdown|txt|rst|json|ya?ml|csv|tsv|log|pdf|html?|xml|ini|toml|cfg|conf|env|png|jpe?g|gif|svg|webp|mp4|mp3|wav))/gi;
+/* JAG-127e: external URLs in a reply were plain text (nothing to click). */
+const URL_RE = /https?:\/\/[^\s<>"'`)\]]+/gi;
 function _readable(p) {
   return /\.(md|markdown|txt|rst|json|ya?ml|csv|tsv|log|pdf|html?|xml|ini|toml|cfg|conf|env|png|jpe?g|gif|svg|webp|mp4|mp3|wav)$/i.test(p || "");
+}
+function _isImage(u) {
+  return /\.(png|jpe?g|gif|svg|webp|bmp|avif|ico)(\?|#|$)/i.test(String(u || ""));
 }
 async function openInEditor(path) {
   openPanel("files");
   try { await loadFiles(); } catch (e) {}
   await openFile(path);
 }
+function showImage(url) {
+  $("imgEl").src = url; $("imgCap").textContent = url;
+  $("imgOpen").href = url;
+  $("imgBackdrop").hidden = false; $("imgView").hidden = false;
+}
+function closeImage() {
+  $("imgView").hidden = true; $("imgBackdrop").hidden = true; $("imgEl").src = "";
+}
 function linkifyFiles(bubble) {
   if (!bubble || bubble.dataset.linked || !bubble.textContent) return;
   const raw = bubble.textContent;
-  if (!READABLE_RE.test(raw)) return;
-  READABLE_RE.lastIndex = 0;
+  const re = new RegExp("(" + URL_RE.source + ")|(" + READABLE_RE.source + ")", "gi");
+  if (!re.test(raw)) return;
+  re.lastIndex = 0;
+  let out = "", last = 0, m;
+  while ((m = re.exec(raw)) !== null) {
+    out += esc(raw.slice(last, m.index));
+    if (m[1]) {  // http(s) URL: site -> new tab, image -> in-app preview
+      let u = m[1];
+      const trail = u.match(/[.,;:!?]+$/);
+      if (trail) u = u.slice(0, -trail[0].length);
+      out += _isImage(u)
+        ? '<a href="#" class="imglink" data-u="' + _attr(u) + '">' + esc(u) + "</a>"
+        : '<a href="' + _attr(u) + '" target="_blank" rel="noopener noreferrer" class="weblink">' + esc(u) + "</a>";
+      last = m.index + u.length;
+    } else {  // local file path -> open in the Files editor
+      out += '<a href="#" class="filelink" data-p="' + _attr(m[2]) + '">' + esc(m[2]) + "</a>";
+      last = m.index + m[0].length;
+    }
+  }
+  out += esc(raw.slice(last));
   bubble.dataset.linked = "1";
-  bubble.innerHTML = esc(raw).replace(READABLE_RE, m =>
-    '<a href="#" class="filelink" data-p="' + _attr(m) + '">' + esc(m) + "</a>");
+  bubble.innerHTML = out;
   bubble.querySelectorAll("a.filelink").forEach(a =>
     a.onclick = e => { e.preventDefault(); openInEditor(a.dataset.p); });
+  bubble.querySelectorAll("a.imglink").forEach(a =>
+    a.onclick = e => { e.preventDefault(); showImage(a.dataset.u); });
 }
 function linkifyAll() {
-  document.querySelectorAll("#log .msg.ai .bubble").forEach(linkifyFiles);
+  document.querySelectorAll("#log .msg .bubble").forEach(linkifyFiles);
 }
 
 /* ---- v0.8 command palette (Cmd/Ctrl+K) ---- */
@@ -2349,7 +2403,7 @@ addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key === "s" && document.activeElement === $("fileText")) {
     e.preventDefault(); saveFile();
   }
-  if (e.key === "Escape") { closePalette(); closeNewSess(); closeDirPicker(); closeSkillView(); }
+  if (e.key === "Escape") { closePalette(); closeNewSess(); closeDirPicker(); closeSkillView(); closeImage(); }
 });
 /* JAG-121c: Enter = newline, Ctrl/Cmd+Enter = send (chat textarea) */
 $("inp").addEventListener("keydown", e => {
