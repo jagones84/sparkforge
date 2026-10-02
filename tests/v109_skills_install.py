@@ -112,6 +112,13 @@ check("S8 remove local ok", r.get("ok") is True and not skills.is_local("sysonly
 r = skills.remove("devonly")
 check("S8 remove non-local rejected", "error" in r, str(r))
 
+# S10 la route API esiste nel sorgente e la lista porta il flag local
+src = open(os.path.join(REPO, "api_v02.py"), encoding="utf-8").read()
+check("S10 GET /api/skills route present", '"/api/skills"' in src)
+check("S10 DELETE route present", '"/api/skills/' in src and "DELETE" in src)
+lst = skills.list_skills(reload=True)
+check("S10 list has local flag", all("local" in s for s in lst), str(lst[:1]))
+
 total = len(results)
 passed = sum(results)
 print("%d/%d" % (passed, total))

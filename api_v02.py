@@ -713,6 +713,19 @@ def handle(handler, method, path, qs, body):
             _lazy('mcp_client')
             return _r(handler, 200, _MCP_CLIENT.status())
 
+        # --- JAG-109: skills (engine in skills.py) ---
+        if path == "/api/skills":
+            import skills as skills_mod
+            items = skills_mod.list_skills()
+            return _r(handler, 200, {"skills": items, "count": len(items),
+                                     "local_dir": skills_mod._local_dir()})
+        if path.startswith("/api/skills/"):
+            import skills as skills_mod
+            nm = path[len("/api/skills/"):]
+            sk = skills_mod.get_skill(nm)
+            return _r(handler, 200, sk) if sk else \
+                _r(handler, 404, {"error": "skill not found: %s" % nm})
+
         if path == "/api/subagent":
             _lazy('subagent')
             sid = qs.get("id")
@@ -937,6 +950,14 @@ def handle(handler, method, path, qs, body):
             res = _MCP_CLIENT.remove_client(qs.get("name"))
             _publish("mcp.clients", action="remove", name=qs.get("name"),
                      ok=bool(res.get("ok")))
+            return _r(handler, 200 if res.get("ok") else 400, res)
+
+        # JAG-109: remove a user-installed (local) skill.
+        if path.startswith("/api/skills/"):
+            import skills as skills_mod
+            nm = path[len("/api/skills/"):]
+            res = skills_mod.remove(nm)
+            _publish("skills.remove", name=nm, ok=bool(res.get("ok")))
             return _r(handler, 200 if res.get("ok") else 400, res)
         return False
     return False
