@@ -64,6 +64,8 @@ python3 forge.py tasks ls                         # task board + remaining bulle
 python3 forge.py models                           # router model roster/status
 ```
 
+> 📖 **Full CLI reference** — every command, every endpoint, examples: **[CLI.md](CLI.md)**.
+
 ### v0.2 — tools, sandbox, approvals, MCP
 
 ```bash

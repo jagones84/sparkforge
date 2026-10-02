@@ -6,10 +6,20 @@ Usage:
   python3 forge.py agent "goal" [--max-steps N]
   python3 forge.py plan show | plan generate "goal" | plan toggle ID
   python3 forge.py tasks ls | tasks add "title" | tasks done ID | tasks set ID STATUS
-  python3 forge.py tools ls | tools call <tool> '<json-args>'
+  python3 forge.py tools ls | tools call <tool> '<json-args>' | tools running | tools cancel JOB
   python3 forge.py approvals ls | approvals show ID | approvals approve ID | approvals deny ID
   python3 forge.py runs ls | runs show RUN_ID | control pause|resume|abort RUN_ID
-  python3 forge.py status | models | feed | sandbox | mcp
+  python3 forge.py sessions ls | sessions new "title" | sessions rm ID | sessions history ID
+                          | sessions graph ID | sessions reset ID
+  python3 forge.py context show [--session ID] | context compact [--session ID]
+                          | context preview "message" [--session ID]
+  python3 forge.py checkpoints ls | checkpoints create "label" [--session ID]
+                          | checkpoints show CP_ID | checkpoints rollback CP_ID
+  python3 forge.py routing show | routing update '{"chat":"qwen"}'
+  python3 forge.py eval tasks | eval run [--task ID] [--model ALIAS] [--max-steps N] [--no-save]
+  python3 forge.py voice status | voice stt "text" | voice tts "text"
+  python3 forge.py status | models | providers | self | selfcheck | sandbox | mcp | hooks
+  python3 forge.py feed | events [--since N] [--limit N]
   python3 forge.py memory store <kind> <content> | search <query> [--kind K] [--semantic]
   python3 forge.py subagent spawn <goal> [--max-steps N] | collect <id> | status [id]
   python3 forge.py meta run [--n-candidates N] | status | best
@@ -151,6 +161,10 @@ def cmd_plan(args):
             print(" •", s.get("title"))
     elif args.action == "toggle":
         print(json.dumps(req("POST", "/api/plan/toggle", {"id": args.id}), indent=2))
+    elif args.action == "set":
+        steps = json.loads(args.steps) if args.steps else []
+        print(json.dumps(req("POST", "/api/plan", {"goal": args.goal, "steps": steps}),
+                         indent=2, ensure_ascii=False))
 
 
 def cmd_tasks(args):
@@ -195,6 +209,20 @@ def cmd_tools(args):
             sys.exit(2)
         out = req("POST", "/api/tools/call", {"tool": args.value, "args": tool_args})
         print(json.dumps(out, indent=2, ensure_ascii=False))
+    elif args.action == "running":
+        print(json.dumps(req("GET", "/api/tools/running"), indent=2, ensure_ascii=False))
+    elif args.action == "cancel":
+        print(json.dumps(req("POST", "/api/tools/cancel", {"job": args.value}),
+                         indent=2, ensure_ascii=False))
+    elif args.action == "policy":
+        body = {"tool": args.value}
+        if getattr(args, "enable", False):
+            body["enabled"] = True
+        if getattr(args, "disable", False):
+            body["enabled"] = False
+        if getattr(args, "approval", None):
+            body["approval"] = args.approval
+        print(json.dumps(req("POST", "/api/tools", body), indent=2, ensure_ascii=False))
 
 
 def cmd_approvals(args):
@@ -216,6 +244,18 @@ def cmd_runs(args):
         for r in req("GET", "/api/agent/runs").get("runs", []):
             print(" [%-9s] %-16s steps=%-2s %s" % (r["status"], r["id"], r["steps"],
                                                    (r.get("goal") or "")[:60]))
+    elif args.action == "summary":
+        print(json.dumps(req("GET", "/api/runs"), indent=2, ensure_ascii=False))
+    elif args.action == "trace":
+        print(json.dumps(req("GET", "/api/runs/%s/trace" % args.value), indent=2, ensure_ascii=False))
+    elif args.action == "node":
+        try:
+            body = json.loads(args.value2) if args.value2 else {}
+        except json.JSONDecodeError as e:
+            print("bad json:", e, file=sys.stderr)
+            sys.exit(2)
+        print(json.dumps(req("POST", "/api/runs/%s/graph/nodes" % args.value, body),
+                         indent=2, ensure_ascii=False))
     else:
         print(json.dumps(req("GET", "/api/agent/runs/" + args.value), indent=2, ensure_ascii=False))
 
@@ -292,6 +332,10 @@ def cmd_blackboard(args):
     elif args.action == "stats":
         out = req("GET", "/api/blackboard")
         print(json.dumps(out.get("stats", {}), indent=2))
+    elif args.action == "watch":
+        print("watching blackboard (Ctrl-C to stop)…")
+        for ev, payload in sse("/api/blackboard/watch"):
+            print("%-14s %s" % (ev, (payload or "")[:160]))
 
 
 def cmd_acp(args):
@@ -332,7 +376,11 @@ def cmd_mcp(_):
         print(" -", t["name"], "::", t["description"][:70])
 
 
-def cmd_models(_):
+def cmd_models(args):
+    if getattr(args, "action", None) == "ensure":
+        print(json.dumps(req("POST", "/api/model/ensure", {"model": args.value}),
+                         indent=2, ensure_ascii=False))
+        return
     out = req("GET", "/api/models")
     for m in out.get("models", []):
         print(" %-60s %s" % (m.get("alias"), "LOADED" if m.get("loaded") else m.get("status")))
@@ -355,6 +403,126 @@ def cmd_feed(_):
         pass
 
 
+def cmd_sessions(args):
+    if args.action == "ls":
+        out = req("GET", "/api/sessions")
+        for s in out.get("sessions", []):
+            print(" %-24s %4s msg  %s" % (s.get("id"), s.get("messages"), s.get("title") or ""))
+    elif args.action == "new":
+        out = req("POST", "/api/sessions", {"title": args.value})
+        print(json.dumps({k: out.get(k) for k in ("id", "title", "messages")},
+                         indent=2, ensure_ascii=False))
+    elif args.action == "rm":
+        print(json.dumps(req("DELETE", "/api/sessions/" + args.value), indent=2))
+    elif args.action == "history":
+        out = req("GET", "/api/history?session=" + args.value)
+        if "error" in out:
+            print("error:", out["error"], file=sys.stderr)
+            sys.exit(1)
+        for m in out.get("messages", []):
+            print("[%-9s] %s" % (m.get("role"), (m.get("content") or "").replace("\n", " ")[:200]))
+        for c in out.get("tool_cards", []) or []:
+            print("[tool     ] %s ok=%s backend=%s" % (c.get("tool"), c.get("ok"), c.get("backend")))
+    elif args.action == "graph":
+        print(json.dumps(req("GET", "/api/sessions/%s/graph" % args.value),
+                         indent=2, ensure_ascii=False))
+    elif args.action == "reset":
+        print(json.dumps(req("POST", "/api/sessions/%s/graph/reset" % args.value, {}),
+                         indent=2, ensure_ascii=False))
+
+
+def cmd_context(args):
+    sid = args.session
+    if args.action == "show":
+        url = "/api/context" + ("?session=" + sid if sid else "")
+        print(json.dumps(req("GET", url), indent=2, ensure_ascii=False))
+    elif args.action == "compact":
+        print(json.dumps(req("POST", "/api/context/compact", {"session": sid}),
+                         indent=2, ensure_ascii=False))
+    elif args.action == "preview":
+        out = req("POST", "/api/context/preview", {"session": sid, "message": args.value})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+def cmd_hooks(_):
+    print(json.dumps(req("GET", "/api/hooks"), indent=2, ensure_ascii=False))
+
+
+def cmd_routing(args):
+    if args.action == "show":
+        print(json.dumps(req("GET", "/api/routing"), indent=2, ensure_ascii=False))
+    else:
+        try:
+            body = json.loads(args.value) if args.value else {}
+        except json.JSONDecodeError as e:
+            print("bad json:", e, file=sys.stderr)
+            sys.exit(2)
+        print(json.dumps(req("POST", "/api/routing", body), indent=2, ensure_ascii=False))
+
+
+def cmd_checkpoints(args):
+    if args.action == "ls":
+        out = req("GET", "/api/checkpoints")
+        for c in out.get("checkpoints", []):
+            print(" %-14s %-20s %s" % (c.get("id"), c.get("label") or "", c.get("ts") or ""))
+    elif args.action == "create":
+        print(json.dumps(req("POST", "/api/checkpoints",
+                             {"label": args.value, "session": args.session}),
+                         indent=2, ensure_ascii=False))
+    elif args.action == "show":
+        print(json.dumps(req("GET", "/api/checkpoints/" + args.value), indent=2, ensure_ascii=False))
+    elif args.action == "rollback":
+        print(json.dumps(req("POST", "/api/checkpoints/%s/rollback" % args.value, {}),
+                         indent=2, ensure_ascii=False))
+
+
+def cmd_self(_):
+    print(json.dumps(req("GET", "/api/self"), indent=2, ensure_ascii=False))
+
+
+def cmd_selfcheck(_):
+    print(json.dumps(req("GET", "/api/selfcheck"), indent=2, ensure_ascii=False))
+
+
+def cmd_providers(_):
+    print(json.dumps(req("GET", "/api/providers"), indent=2, ensure_ascii=False))
+
+
+def cmd_eval(args):
+    if args.action == "tasks":
+        out = req("GET", "/api/eval/tasks")
+        rows = out.get("tasks", []) if isinstance(out, dict) else (out if isinstance(out, list) else [])
+        for t in rows:
+            if isinstance(t, dict):
+                print(" %-22s %s" % (t.get("id"), (t.get("goal") or t.get("prompt")
+                                                     or t.get("description") or "")[:70]))
+            else:
+                print(" ", t)
+    else:
+        out = req("POST", "/api/eval/run", {"model": args.model, "max_steps": args.max_steps,
+                                            "task_id": args.task, "save": not args.no_save})
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+
+
+def cmd_voice(args):
+    if args.action == "status":
+        print(json.dumps(req("GET", "/api/voice/status"), indent=2, ensure_ascii=False))
+    elif args.action == "stt":
+        print(json.dumps(req("POST", "/api/voice/stt", {"text": args.value}),
+                         indent=2, ensure_ascii=False))
+    elif args.action == "tts":
+        print(json.dumps(req("POST", "/api/voice/tts", {"text": args.value}),
+                         indent=2, ensure_ascii=False))
+
+
+def cmd_events(args):
+    out = req("GET", "/api/feed/recent?since=%d&limit=%d" % (args.since, args.limit))
+    for e in out.get("events", []):
+        print("%5s %-18s %s" % (e.get("id"), e.get("kind"), json.dumps(
+            {k: v for k, v in e.items() if k not in ("id", "kind")},
+            ensure_ascii=False)[:140]))
+
+
 def main():
     ap = argparse.ArgumentParser(prog="forge")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -362,23 +530,28 @@ def main():
         p.add_argument("--model"); p.add_argument("--stream", action="store_true"); p.set_defaults(fn=cmd_chat)
     p = sub.add_parser("agent"); p.add_argument("goal"); p.add_argument("--max-steps", type=int, default=6); \
         p.add_argument("--model"); p.set_defaults(fn=cmd_agent)
-    p = sub.add_parser("plan"); p.add_argument("action", choices=["show", "generate", "toggle"]); \
-        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_plan)
+    p = sub.add_parser("plan"); p.add_argument("action", choices=["show", "generate", "toggle", "set"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("--steps"); p.set_defaults(fn=cmd_plan)
     p = sub.add_parser("tasks"); p.add_argument("action", choices=["ls", "add", "done", "set"]); \
         p.add_argument("value", nargs="?"); p.add_argument("--status"); p.set_defaults(fn=cmd_tasks)
-    p = sub.add_parser("tools"); p.add_argument("action", choices=["ls", "call"]); \
-        p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); p.set_defaults(fn=cmd_tools)
+    p = sub.add_parser("tools"); \
+        p.add_argument("action", choices=["ls", "call", "running", "cancel", "policy"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); \
+        p.add_argument("--enable", action="store_true"); p.add_argument("--disable", action="store_true"); \
+        p.add_argument("--approval"); p.set_defaults(fn=cmd_tools)
     p = sub.add_parser("approvals"); \
         p.add_argument("action", choices=["ls", "show", "approve", "deny"]); \
         p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_approvals)
-    p = sub.add_parser("runs"); p.add_argument("action", choices=["ls", "show"]); \
-        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_runs)
+    p = sub.add_parser("runs"); \
+        p.add_argument("action", choices=["ls", "show", "trace", "summary", "node"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); p.set_defaults(fn=cmd_runs)
     p = sub.add_parser("control"); p.add_argument("action", choices=["pause", "resume", "abort"]); \
         p.add_argument("run"); p.set_defaults(fn=cmd_control)
     sub.add_parser("sandbox").set_defaults(fn=cmd_sandbox)
     sub.add_parser("mcp").set_defaults(fn=cmd_mcp)
     sub.add_parser("status").set_defaults(fn=cmd_status)
-    sub.add_parser("models").set_defaults(fn=cmd_models)
+    p = sub.add_parser("models"); p.add_argument("action", nargs="?", default="ls", choices=["ls", "ensure"]); \
+        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_models)
     sub.add_parser("feed").set_defaults(fn=cmd_feed)
     p = sub.add_parser("memory"); p.add_argument("action", choices=["store", "search"]); \
         p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); \
@@ -389,7 +562,8 @@ def main():
         p.set_defaults(fn=cmd_subagent)
     p = sub.add_parser("meta"); p.add_argument("action", choices=["run", "status", "best"]); \
         p.add_argument("--n-candidates", type=int, default=8); p.set_defaults(fn=cmd_meta)
-    p = sub.add_parser("blackboard"); p.add_argument("action", choices=["post", "get", "search", "stats"]); \
+    p = sub.add_parser("blackboard"); \
+        p.add_argument("action", choices=["post", "get", "search", "stats", "watch"]); \
         p.add_argument("value", nargs="?"); p.add_argument("value2", nargs="?"); \
         p.add_argument("--id"); p.add_argument("--topic"); p.add_argument("--tags"); \
         p.add_argument("--limit", type=int, default=20); p.set_defaults(fn=cmd_blackboard)
@@ -398,9 +572,28 @@ def main():
         p.add_argument("--token"); p.set_defaults(fn=cmd_acp)
     p = sub.add_parser("swarm"); p.add_argument("goal"); p.add_argument("--n-workers", type=int, default=3); \
         p.add_argument("--max-steps", type=int, default=4); p.set_defaults(fn=cmd_swarm)
+    p = sub.add_parser("sessions"); p.add_argument("action", choices=["ls", "new", "rm", "history", "graph", "reset"]); \
+        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_sessions)
+    p = sub.add_parser("context"); p.add_argument("action", choices=["show", "compact", "preview"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("--session"); p.set_defaults(fn=cmd_context)
+    p = sub.add_parser("hooks"); p.set_defaults(fn=cmd_hooks)
+    p = sub.add_parser("routing"); p.add_argument("action", choices=["show", "update"]); \
+        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_routing)
+    p = sub.add_parser("checkpoints"); p.add_argument("action", choices=["ls", "create", "show", "rollback"]); \
+        p.add_argument("value", nargs="?"); p.add_argument("--session"); p.set_defaults(fn=cmd_checkpoints)
+    sub.add_parser("self").set_defaults(fn=cmd_self)
+    sub.add_parser("selfcheck").set_defaults(fn=cmd_selfcheck)
+    sub.add_parser("providers").set_defaults(fn=cmd_providers)
+    p = sub.add_parser("eval"); p.add_argument("action", choices=["tasks", "run"]); \
+        p.add_argument("--task"); p.add_argument("--model"); p.add_argument("--max-steps", type=int, default=6); \
+        p.add_argument("--no-save", action="store_true"); p.set_defaults(fn=cmd_eval)
+    p = sub.add_parser("voice"); p.add_argument("action", choices=["status", "stt", "tts"]); \
+        p.add_argument("value", nargs="?"); p.set_defaults(fn=cmd_voice)
+    p = sub.add_parser("events"); p.add_argument("--since", type=int, default=0); \
+        p.add_argument("--limit", type=int, default=40); p.set_defaults(fn=cmd_events)
     args = ap.parse_args()
     if args.cmd == "plan":
-        args.goal = args.value if getattr(args, "action", None) == "generate" else None
+        args.goal = args.value if getattr(args, "action", None) in ("generate", "set") else None
         args.id = args.value if getattr(args, "action", None) == "toggle" else None
     if args.cmd == "control":
         args.value, args.value2 = args.action, args.run
