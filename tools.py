@@ -566,6 +566,11 @@ def _improve(args, run_id=None):
     if improve.AGENT_WRITE.get(scope) == "forbidden":
         return {"error": "scope not writable"}
     rec = improve.propose(scope, content, reason=str((args or {}).get("reason", "")))
+    try:
+        import server as _srv
+        _srv.publish("improve.proposal", **rec)
+    except Exception:  # noqa: BLE001 — l'evento non deve rompere il tool
+        pass
     return {"ok": True, "proposal": rec}
 
 

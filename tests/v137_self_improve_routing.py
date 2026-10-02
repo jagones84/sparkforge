@@ -77,10 +77,59 @@ check("R12 improve tool declared with propose action",
       "propose" in (sch.get("properties", {}).get("action", {}).get("enum") or []), "")
 
 srv = read(os.path.join(REPO, "server.py"))
-check("R13 route /api/improve present", '"/api/improve"' in srv, "")
+
+
+def _method_body(src, name):
+    i = src.find("def %s(" % name)
+    if i < 0:
+        return ""
+    j = src.find("\n    def ", i + 1)
+    return src[i:j if j > 0 else len(src)]
+
+
+_get_body = _method_body(srv, "do_GET")
+_post_body = _method_body(srv, "do_POST")
+check("R13 route /api/improve in do_GET and do_POST",
+      '"/api/improve"' in _get_body and '"/api/improve"' in _post_body,
+      "GET=%s POST=%s" % ('"/api/improve"' in _get_body,
+                          '"/api/improve"' in _post_body))
 web = read(os.path.join(REPO, "webui", "index.html"))
 check("R14 webui listens to improve.proposal",
       'improve.proposal' in web and "function improveCard" in web, "")
+
+import tempfile  # noqa: E402
+import shutil  # noqa: E402
+import tools  # noqa: E402
+import server as server_mod  # noqa: E402
+
+_tmp = tempfile.mkdtemp(prefix="v137-prop-")
+_old_dir = improve.PROPOSAL_DIR
+_old_publish = server_mod.publish
+_captured = []
+
+
+def _fake_publish(kind, **data):
+    _captured.append((kind, data))
+    return {"id": len(_captured), "ts": 0.0, "kind": kind, **data}
+
+
+improve.PROPOSAL_DIR = _tmp
+server_mod.publish = _fake_publish
+try:
+    _res = tools._improve({"action": "propose", "scope": "project",
+                           "content": "X", "reason": "r"})
+    _pid = (_res.get("proposal") or {}).get("id")
+    _props = [d for (k, d) in _captured if k == "improve.proposal"]
+    check("R15 improve tool emits improve.proposal",
+          len(_props) == 1, str([k for k, _ in _captured]))
+    _ev = _props[0] if _props else {}
+    check("R16 event carries proposal id + scope",
+          bool(_pid) and _ev.get("id") == _pid and _ev.get("scope") == "project",
+          "pid=%s ev=%s" % (_pid, _ev))
+finally:
+    improve.PROPOSAL_DIR = _old_dir
+    server_mod.publish = _old_publish
+    shutil.rmtree(_tmp, ignore_errors=True)
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
