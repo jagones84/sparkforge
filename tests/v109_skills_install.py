@@ -84,6 +84,34 @@ r = skills.install_zip(z, name="big")
 check("S5 oversize rejected", "error" in r, str(r))
 os.environ.pop("SPARKFORGE_SKILL_MAX_ZIP", None)
 
+# nome dedotto dal frontmatter (name: demo)
+z = make_zip({"whatever/SKILL.md": SKILL_MD})
+r = skills.install_zip(z, name=None, overwrite=True)
+check("Sx name from frontmatter", r.get("name") == "demo", str(r))
+
+# S6 collisione senza overwrite -> errore; con overwrite -> ok
+z = make_zip({"a/SKILL.md": SKILL_MD})
+r = skills.install_zip(z, name="demo")
+check("S6 conflict without overwrite", "error" in r, str(r))
+r = skills.install_zip(z, name="demo", overwrite=True)
+check("S6 overwrite ok", r.get("ok") is True, str(r))
+
+# S7 una skill di sistema (categoria dev) non viene toccata; il locale è separato
+sysdir = os.path.join(skills.SKILLS_DIR, "dev", "devonly")
+os.makedirs(sysdir, exist_ok=True)
+with open(os.path.join(sysdir, "SKILL.md"), "w", encoding="utf-8") as f:
+    f.write(SKILL_MD)
+z = make_zip({"a/SKILL.md": SKILL_MD})
+skills.install_zip(z, name="sysonly", overwrite=True)
+check("S7 system dir untouched", os.path.isfile(os.path.join(sysdir, "SKILL.md")))
+check("S7 local created separately", skills.is_local("sysonly"))
+
+# S8 remove: locale ok, non locale rifiutato
+r = skills.remove("sysonly")
+check("S8 remove local ok", r.get("ok") is True and not skills.is_local("sysonly"), str(r))
+r = skills.remove("devonly")
+check("S8 remove non-local rejected", "error" in r, str(r))
+
 total = len(results)
 passed = sum(results)
 print("%d/%d" % (passed, total))

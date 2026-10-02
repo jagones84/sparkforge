@@ -193,6 +193,25 @@ def install_zip(data, name=None, overwrite=False):
                 shutil.rmtree(stage, ignore_errors=True)
 
 
+def is_local(name):
+    """True se esiste una skill caricata dall'utente con questo nome."""
+    safe = _safe_name(name)
+    return bool(safe) and os.path.isdir(os.path.join(_local_dir(), safe))
+
+
+def remove(name):
+    """Rimuove una skill LOCALE. Non tocca mai le skill di sistema."""
+    safe = _safe_name(name)
+    if not safe:
+        return {"error": "invalid name: %r" % name}
+    target = os.path.join(_local_dir(), safe)
+    if not os.path.isdir(target):
+        return {"error": "local skill not found: %s" % safe}
+    shutil.rmtree(target)
+    list_skills(reload=True)
+    return {"ok": True, "name": safe}
+
+
 def get_skill(name):
     """Full SKILL.md content for a skill (matched by directory name)."""
     for s in list_skills():
