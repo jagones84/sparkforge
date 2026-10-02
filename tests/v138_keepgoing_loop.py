@@ -56,6 +56,13 @@ check("K12 tool_hash deterministic",
 check("K13 cfg() exposes overrides",
       keepgoing.cfg({"keepgoing_max": 20})["keepgoing_max"] == 20, "")
 
+srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+check("S1 chat loop imports keepgoing", "import keepgoing" in srv, "")
+check("S2 emits plan.continuing", "plan.continuing" in srv, "")
+check("S3 emits plan.stopped with reason", "plan.stopped" in srv and '"reason"' in srv, "")
+check("S4 no one-shot verify gate left", "verify_nudged" not in srv, "")
+check("S5 re-injects the todo list", "render_todos" in srv and "CONTINUA" in srv, "")
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)

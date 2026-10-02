@@ -1168,6 +1168,36 @@ def drain_steer(sess_id):
         STEER_INBOX[sess_id] = []
         return q
 
+
+def has_steer(sess_id):
+    """JAG-129A: True quando c'e' almeno un messaggio di steering in coda."""
+    with _steer_lock:
+        return bool(STEER_INBOX.get(sess_id))
+
+
+# JAG-129A: abort di un turno di chat in corso (distinto dallo steer: steer
+# reindirizza, abort ferma). Il loop controlla il flag ad ogni giro.
+ABORT_INBOX = set()
+_abort_lock = threading.Lock()
+
+
+def push_abort(sess_id):
+    if not sess_id:
+        return False
+    with _abort_lock:
+        ABORT_INBOX.add(sess_id)
+    return True
+
+
+def _is_aborted(sess_id):
+    with _abort_lock:
+        return sess_id in ABORT_INBOX
+
+
+def clear_abort(sess_id):
+    with _abort_lock:
+        ABORT_INBOX.discard(sess_id)
+
 SKILLS_POLICY = (
     "Skills: you have an installed skill library — the SKILLS list below is "
     "live and includes all symlinked distributions. Before solving a task, SCAN "
@@ -1837,7 +1867,6 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     answer, think = "", ""
     final_answer = ""
     announce_nudged = False
-    verify_nudged = False  # JAG-87: the "verify before you finish" gate fired once
     # JAG-84: only REAL tool calls consume the work budget. Plan/todo bookkeeping
     # (write_todos / update_todos / replan_todos) and invalid-JSON retries used to
     # eat the same 4-step budget, so a "plan then work" turn ran out of steps right
@@ -1877,6 +1906,13 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     work_steps = 0
     iters = 0
     used_tools = []
+    # JAG-129A: stato del loop di completamento (vedi keepgoing.decide).
+    import keepgoing as _kg
+    _kg_rounds = 0
+    _kg_prev = None
+    _kg_stale = 0
+    _kg_started = time.time()
+    _kg_last_tool = None
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
         # JAG-127b: inject any steering message typed while this turn was running.
@@ -2020,25 +2056,35 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          "or — if there is nothing left to do — reply with the final "
                          "result in plain prose. Do not just repeat the announcement."})
             continue
-        if not verify_nudged and tool_ctx:
-            # JAG-87 — VERIFICATION GATE before finishing (harness layer L7).
-            # The plan is execution state: if steps are still OPEN, the turn must
-            # not end silently. Nudge ONCE (bounded) to either close them with
-            # evidence, re-plan them away, or justify why they are done. This is
-            # the "verify before you declare done" rule the best harnesses ship
-            # (Devin/Codex: run the checks; Anthropic: no completion without proof).
-            _open_n = _open_plan_steps(sess)
-            if _open_n:
-                verify_nudged = True
+        if tool_ctx:
+            # JAG-129A: l'harness (la "segretaria") decide se l'agente puo' davvero
+            # chiudere. Con passi aperti re-inietta la lista e CONTINUA.
+            _g = taskgraph.load(sess["id"]) or {}
+            _nodes = _g.get("nodes", [])
+            _open = [n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES]
+            _cur = _kg.state_hash(_nodes)
+            _kg_stale = (_kg_stale + 1) if (_kg_prev is not None and _cur == _kg_prev) else 0
+            _dec = _kg.decide(open_nodes=len(_open), rounds=_kg_rounds, stale=_kg_stale,
+                              started=_kg_started, aborted=_is_aborted(sess["id"]),
+                              blocked=any(n.get("status") == "blocked" for n in _nodes),
+                              steer=has_steer(sess["id"]))
+            if _dec["continue"]:
+                _kg_rounds += 1
+                _kg_prev = _cur
+                on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
+                         open=len(_open), total=len(_nodes))
                 msgs.append({"role": "assistant", "content": answer})
                 msgs.append({"role": "user", "content": (
-                    "VERIFICATION GATE: your task list still has %d open step(s). Do "
-                    "NOT just reply. Do one of these: (a) finish them NOW and mark "
-                    "each 'done' with evidence; (b) if they are no longer needed, "
-                    'emit {"action":"replan_todos","note":"<why>"}; or (c) if the '
-                    "work really is complete, reply explaining step by step why each "
-                    "open item is done or irrelevant." % _open_n)})
+                    "CONTINUA: la tua TASK LIST ha ancora %d passo/i aperto/i. NON "
+                    "fermarti e non chiedere il permesso. Per OGNI passo aperto: "
+                    "esegui l'azione con una tool call, poi marcalo 'done' con "
+                    "update_todos e l'evidenza concreta; se non serve piu', "
+                    "ripianifica. Lista attuale:\n%s"
+                    % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))))})
                 continue
+            on_event("plan.stopped", session=sess["id"], reason=_dec["reason"],
+                     open=len(_open), total=len(_nodes), rounds=_kg_rounds,
+                     duration_s=round(time.time() - _kg_started, 1))
         for ch, t in collected:
             on_delta(ch, t)
         final_answer, think = answer, think
@@ -2115,10 +2161,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     hint="valuta cosa persistere: memoria (libera) o proposta regole (improve tool)")
     except Exception:  # noqa: BLE001 — il nudge non deve mai rompere un turno
         pass
-    # JAG-127f: task-completion WARNING (user's choice: only a notice, no forced
-    # continuation). If the persistent task graph still has OPEN nodes when the
-    # model ends the turn, surface it so the UI can offer a "continua" button.
-    # No extra LLM call and no loop here — the turn ends normally.
+    # JAG-129A: rete di sicurezza — se il turno finisce con passi aperti (es. dopo
+    # un abort), pubblica comunque le metriche di fine turno. `plan.incomplete`
+    # convive con `plan.stopped` emesso dal loop.
     try:
         _g = taskgraph.load(sess["id"])
         _nodes = (_g or {}).get("nodes", [])
@@ -2127,7 +2172,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             publish("plan.incomplete", session=sess["id"], open=len(_open),
                     total=len(_nodes),
                     items=[str(n.get("label", "")) for n in _open][:12])
-    except Exception:  # noqa: BLE001 — a warning must never break the turn
+    except Exception:  # noqa: BLE001
         pass
     try:  # JAG-69: deterministic Stop hooks at the end of the turn
         import hooks
