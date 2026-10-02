@@ -1512,6 +1512,21 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             except (TypeError, ValueError):
                 pass
 
+    def _emit_context():
+        """JAG-98: re-emit the live ctx size with the model's REAL prompt_tokens
+        (falling back to the chars/4 estimate before the first call), so the
+        meter is accurate and grows with the tool observations in this turn."""
+        payload = {}
+        if ctx_stats:
+            payload = {k: ctx_stats.get(k) for k in (
+                "budget_tokens", "retrieved_memories", "final_messages",
+                "final_tokens") if ctx_stats.get(k) is not None}
+        real = chat_usage.get("prompt_tokens")
+        if real and int(real) > 0:
+            payload["final_tokens"] = int(real)
+        if payload:
+            on_event("context.built", session=sess["id"], **payload)
+
     work_steps = 0
     iters = 0
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
@@ -1530,6 +1545,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         answer, think, model = stream_with_fallback(msgs, model, "chat", _capture,
                                                     usage=chat_usage)
         _record_usage()
+        _emit_context()  # JAG-98: live meter now uses the model's real count
         act = extract_json(answer)
         if isinstance(act, dict) and act.get("action") == "write_todos":
             n = _apply_chat_todos(sess, act, on_event)
