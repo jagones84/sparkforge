@@ -128,7 +128,8 @@ check("A2b agent.aborted emitted", any(k == "agent.aborted" for k, _ in seen2),
 captured = {}
 
 
-def _slow_agent(goal, max_steps, model, on_event, trace=None, run_state=None):
+def _slow_agent(goal, max_steps, model, on_event, trace=None, run_state=None,
+                workspace=None):
     captured["st"] = run_state
     on_event("agent.start", goal=goal, run=run_state.id)
     import time

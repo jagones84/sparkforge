@@ -52,11 +52,31 @@ def get_workspace():
     return os.environ.get("SPARKFORGE_WORKSPACE") or REPO
 
 
-def set_workspace(path):
-    """Persist the workspace (must be an existing directory). Returns {ok,...}."""
+def check_dir(path):
+    """Normalise + validate an existing directory; returns the abs path or None."""
     path = os.path.abspath(os.path.expanduser((path or "").strip()))
-    if not path or not os.path.isdir(path):
-        return {"ok": False, "error": "cartella inesistente: %s" % (path or "(vuoto)")}
+    return path if path and os.path.isdir(path) else None
+
+
+def resolve_workspace(sess=None):
+    """The workspace for a turn: a session's own folder, else the global default.
+
+    Precedence: session["workspace"] (if it still exists) -> config.json -> env -> repo.
+    """
+    if isinstance(sess, dict):
+        ws = check_dir(sess.get("workspace"))
+        if ws:
+            return ws
+    return get_workspace()
+
+
+def set_workspace(path):
+    """Persist the GLOBAL default workspace (must be an existing directory)."""
+    raw = (path or "").strip()
+    real = check_dir(raw)
+    if not real:
+        return {"ok": False, "error": "cartella inesistente: %s" % (raw or "(vuoto)")}
+    path = real
     cfg_dir = _config_dir()
     os.makedirs(cfg_dir, exist_ok=True)
     cfg = {}
@@ -111,10 +131,13 @@ def _collect_scope(native, agents, extra_dir=None):
     return text, files
 
 
-def collect():
-    """Everything the model would see: global + project rules and their files."""
+def collect(ws=None):
+    """Everything the model would see: global + project rules and their files.
+
+    `ws` selects the project root (defaults to the global workspace).
+    """
     gtext, gfiles = _collect_scope(global_rules_path(), global_agents_path())
-    ws = get_workspace()
+    ws = ws or get_workspace()
     ptext, pfiles = _collect_scope(project_rules_path(ws), project_agents_path(ws),
                                    extra_dir=os.path.join(project_dir(ws), "rules"))
     return {
@@ -125,10 +148,10 @@ def collect():
     }
 
 
-def rules_block(max_bytes=None):
+def rules_block(max_bytes=None, ws=None):
     """The prompt block (global then project, capped). Empty string when none."""
     cap = max_bytes or MAX_BYTES
-    c = collect()
+    c = collect(ws)
     chunks = []
     if c["global"]["text"]:
         chunks.append("### GLOBAL rules (user, all projects)\n" + c["global"]["text"])
@@ -144,12 +167,12 @@ def rules_block(max_bytes=None):
     return block
 
 
-def save(scope, content):
+def save(scope, content, ws=None):
     """Write the global or project RULES.md atomically. scope in {global,project}."""
     if scope == "global":
         path = global_rules_path()
     elif scope == "project":
-        path = project_rules_path()
+        path = project_rules_path(ws or get_workspace())
     else:
         return {"ok": False, "error": "scope deve essere 'global' o 'project'"}
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -160,9 +183,9 @@ def save(scope, content):
     return {"ok": True, "scope": scope, "path": path, "chars": len(content or "")}
 
 
-def status():
+def status(ws=None):
     """UI-friendly snapshot: paths, existence and sizes for both scopes."""
-    c = collect()
+    c = collect(ws)
     def _scope(key, path, files):
         return {"path": path, "exists": os.path.isfile(path),
                 "chars": len(c[key]["text"]), "text": c[key]["text"], "files": files}

@@ -227,7 +227,8 @@ def list_sessions():
                 upd = max(stamps)
                 out.append({"id": s["id"], "title": s.get("title", ""),
                             "created": s.get("created"), "updated": upd,
-                            "age": _rel_time(upd), "messages": len(msgs)})
+                            "age": _rel_time(upd), "messages": len(msgs),
+                            "workspace": s.get("workspace")})
     except FileNotFoundError:
         pass
     return sorted(out, key=lambda s: s.get("updated") or 0, reverse=True)
@@ -1022,11 +1023,15 @@ RULES_POLICY = (
 )
 
 
-def rules_context():
-    """JAG-114: the composed global+project rules block for the prompt ('' when none)."""
+def rules_context(sess=None, ws=None):
+    """JAG-114/115: the composed global+project rules block for the prompt ('' when none).
+
+    `ws` (or the session's own workspace) selects the project; without either the
+    global default workspace is used.
+    """
     try:
         import rules as rules_mod
-        return rules_mod.rules_block()
+        return rules_mod.rules_block(ws=ws or rules_mod.resolve_workspace(sess))
     except Exception:  # noqa: BLE001 — rules must never break a prompt
         return ""
 
@@ -2081,7 +2086,8 @@ def _mirror_graph(run_id, act, observation, session=None):
     return observation
 
 
-def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_state=None):
+def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_state=None,
+              workspace=None):
     """Sense-think-act loop. No shell, no filesystem writes except harness stores."""
     if on_event is None:
         on_event = lambda kind, **d: publish(kind, **d)
@@ -2110,7 +2116,7 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_stat
 
     actions = []
     aborted = False
-    rb = rules_context()  # JAG-114: the agent loop honours the same standing rules
+    rb = rules_context(ws=workspace)  # JAG-114/115: the agent loop honours the same rules
     try:
         for i in range(max_steps):
             api_v02.checkpoint(st)  # JAG-111: honour pause / abort between steps
@@ -2559,7 +2565,7 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
             ensure_reply_persisted(sess, since, error="stream ended without a reply")
 
 
-def agent_stream_gen(goal, max_steps, model):
+def agent_stream_gen(goal, max_steps, model, workspace=None):
     q = queue.Queue()
     # JAG-111: create the run HERE so the generator can abort it when the client
     # disconnects; pass it to agent_run so /api/agent/control can stop it too.
@@ -2572,7 +2578,7 @@ def agent_stream_gen(goal, max_steps, model):
 
     def worker():
         try:
-            agent_run(goal, max_steps, model, on_event, run_state=st)
+            agent_run(goal, max_steps, model, on_event, run_state=st, workspace=workspace)
         except Exception as e:  # noqa: BLE001
             q.put("event: error\ndata: %s\n\n" % json.dumps({"error": str(e)}))
         finally:
@@ -2692,7 +2698,7 @@ def _system_prompt(sess, tool_ctx=None):
                             + "\n".join(instr))
     except Exception:  # noqa: BLE001 — lessons must never break the prompt
         lesson_block = ""
-    rb = rules_context()
+    rb = rules_context(sess)  # JAG-115: honour the session's own workspace
     return (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
             + "\n\n" + RULES_POLICY + ("\n" + rb if rb else "")
             + "\n\n" + SKILLS_POLICY + ("\n" + sk_block if sk_block else "")
@@ -3063,7 +3069,11 @@ class Handler(BaseHTTPRequestHandler):
             goal = qs.get("goal", "")
             if not goal:
                 return self._send(400, {"error": "goal required"})
-            return sse_response(self, agent_stream_gen(goal, int(qs.get("max_steps", 6)), qs.get("model")))
+            _ws_sess = load_session(qs.get("session")) if qs.get("session") else None
+            import rules as _rules_mod
+            _ws = _rules_mod.resolve_workspace(_ws_sess)
+            return sse_response(self, agent_stream_gen(goal, int(qs.get("max_steps", 6)),
+                                                       qs.get("model"), workspace=_ws))
         if path.startswith("/api/runs/"):
             parts = path.strip("/").split("/")
             if len(parts) == 4 and parts[3] == "trace":

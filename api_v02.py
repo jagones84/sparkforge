@@ -301,7 +301,8 @@ def tool_context():
     return "\n".join(lines)
 
 
-def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_id=None):
+def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_id=None,
+                 workspace=None):
     """Sense-think-act loop with real tools behind the approval gate + HITL."""
     srv = _srv()
     if on_event is None:
@@ -347,6 +348,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
     # forever (the exact failure that looked like "the model cannot install the
     # app"). We carry assistant actions + observations across the whole run.
     hist = []
+    rb = srv.rules_context(ws=workspace)  # JAG-114/115: standing rules for this run
     try:
         for i in range(max_steps):
             checkpoint(st)
@@ -360,6 +362,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                          action=action, scripted=True)
             else:
                 sysp = (srv.SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT_V2 + "\n\n"
+                        + srv.RULES_POLICY + ("\n" + rb if rb else "") + "\n\n"
                         + tool_context() + "\n\nHarness state (your persistent task list):\n"
                         + srv.context_summary(graph_key=st.id))
                 if not hist:
@@ -503,7 +506,7 @@ def _result(st, goal, model):
             "summary": st.summary, "trace": st.trace, "prm": prm_report}
 
 
-def agent_stream_gen_v2(goal, max_steps, model, run_id, script=None):
+def agent_stream_gen_v2(goal, max_steps, model, run_id, script=None, workspace=None):
     srv = _srv()
     q = queue.Queue()
 
@@ -514,7 +517,8 @@ def agent_stream_gen_v2(goal, max_steps, model, run_id, script=None):
 
     def worker():
         try:
-            agent_run_v2(goal, max_steps, model, on_event, script=script, run_id=run_id)
+            agent_run_v2(goal, max_steps, model, on_event, script=script, run_id=run_id,
+                         workspace=workspace)
         except Exception as e:  # noqa: BLE001
             q.put("event: error\ndata: %s\n\n" % json.dumps({"error": str(e)}))
         finally:
@@ -695,7 +699,9 @@ def handle(handler, method, path, qs, body):
                 return _r(handler, 400, {"error": "goal required"})
             max_steps = int(qs.get("max_steps", 6))
             st = new_run(goal, qs.get("model"), max_steps)
-            return _sse(handler, agent_stream_gen_v2(goal, max_steps, qs.get("model"), st.id))
+            ws, _sess = _session_ws(qs.get("session"))  # JAG-115: the session's folder
+            return _sse(handler, agent_stream_gen_v2(goal, max_steps, qs.get("model"),
+                                                     st.id, workspace=ws))
 
         # --- Sperimentale GET routes ---
         if path == "/api/memory":
@@ -776,9 +782,9 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, _ROUTING.status())
         # JAG-114: global/project rules + workspace selection
         if path == "/api/rules":
-            return _r(handler, 200, rules_status())
+            return _r(handler, 200, rules_status(qs))
         if path == "/api/workspace":
-            return _r(handler, 200, workspace_get())
+            return _r(handler, 200, workspace_get(qs))
 
         return False
 
@@ -1088,35 +1094,62 @@ def provider_reload():
     return {"ok": True}
 
 
-def rules_status():
-    """GET /api/rules — current workspace, global + project rules state."""
+def _session_ws(session_id):
+    """Resolve the workspace for a session id (or the global default when none)."""
     _lazy('rules')
-    return _RULES.status()
+    sess = _srv().load_session(session_id) if session_id else None
+    return _RULES.resolve_workspace(sess), sess
+
+
+def rules_status(qs=None):
+    """GET /api/rules — workspace + global/project rules state for a session."""
+    sid = (qs or {}).get("session")
+    ws, sess = _session_ws(sid)
+    st = _RULES.status(ws=ws)
+    st["session"] = sid
+    st["source"] = "session" if (sess and sess.get("workspace")) else "default"
+    return st
 
 
 def rules_save(body):
-    """POST /api/rules — save rules for scope 'global' or 'project'."""
-    _lazy('rules')
+    """POST /api/rules — save rules for 'global' or 'project' (session-aware)."""
     body = body or {}
-    res = _RULES.save(body.get("scope"), body.get("content"))
+    sid = body.get("session")
+    ws, _sess = _session_ws(sid)
+    res = _RULES.save(body.get("scope"), body.get("content"), ws=ws)
     _publish("rules.update", scope=body.get("scope"), ok=bool(res.get("ok")))
     return res
 
 
-def workspace_get():
-    """GET /api/workspace — selected workspace + full rules status."""
-    _lazy('rules')
-    return {"workspace": _RULES.get_workspace(), "status": _RULES.status()}
+def workspace_get(qs=None):
+    """GET /api/workspace — the resolved workspace + the global default + status."""
+    sid = (qs or {}).get("session")
+    ws, sess = _session_ws(sid)
+    return {"workspace": ws, "default": _RULES.get_workspace(), "session": sid,
+            "source": "session" if (sess and sess.get("workspace")) else "default",
+            "status": rules_status(qs)}
 
 
 def workspace_set(body):
-    """POST /api/workspace — select the project workspace folder."""
+    """POST /api/workspace — link a folder to a session, or set the global default."""
     _lazy('rules')
     body = body or {}
-    res = _RULES.set_workspace(body.get("path") or body.get("workspace"))
-    _publish("workspace.update", workspace=(body or {}).get("path"),
-             ok=bool(res.get("ok")))
-    return res
+    asked = body.get("path") or body.get("workspace")
+    real = _RULES.check_dir(asked)
+    if not real:
+        return {"ok": False, "error": "cartella inesistente: %s" % (asked or "(vuoto)")}
+    sid = body.get("session")
+    if sid:
+        sess = _srv().load_session(sid)
+        if not sess:
+            return {"ok": False, "error": "sessione inesistente: %s" % sid}
+        sess["workspace"] = real
+        _srv().save_session(sess)
+        _publish("workspace.update", session=sid, workspace=real, ok=True)
+        return {"ok": True, "scope": "session", "session": sid, "workspace": real}
+    res = _RULES.set_workspace(real)
+    _publish("workspace.update", workspace=real, ok=bool(res.get("ok")))
+    return dict(res, scope="default")
 
 
 def install_skill_raw(data, name=None, overwrite=False):

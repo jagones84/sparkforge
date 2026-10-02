@@ -82,6 +82,7 @@
   .sess.active { border-color: rgba(108,140,255,.45); background: rgba(108,140,255,.1); }
   .sess .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sess .n { color: var(--dim); font-size: 10px; flex-shrink: 0; }
+  .sess .ws { font-size: 11px; flex-shrink: 0; opacity: .8; }
   .sess .del { color: var(--err); font-size: 13px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: .6; }
   .sess .del:hover { opacity: 1; background: rgba(248,113,113,.12); }
 
@@ -426,11 +427,12 @@
         </div>
       </section>
       <section data-section="rules" hidden>
-        <h2>Workspace · progetto</h2>
+        <h2>Workspace · cartella</h2>
         <div class="card">
           <div class="remaining" id="wsCurrent">caricamento…</div>
-          <input id="wsPath" class="inp" placeholder="percorso progetto (es. /home/jagones/Repositories/sparkforge)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <button class="ghost" onclick="setWorkspace()" style="margin-top:8px">usa questo workspace</button>
+          <input id="wsPath" class="inp" placeholder="percorso cartella (es. /home/jagones/Repositories/sparkforge)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="wsDefault"> imposta come default per nuove sessioni</label>
+          <button class="ghost" onclick="setWorkspace()" style="margin-top:8px">usa questa cartella</button>
           <div id="wsResult" class="remaining" style="margin-top:6px"></div>
         </div>
         <h2>Rules · globali</h2>
@@ -619,7 +621,8 @@ async function loadSessions() {
     const d = document.createElement("div");
     d.className = "sess" + (s.id === sessionId ? " active" : "");
     const age = s.age ? (" · " + s.age) : "";
-    d.innerHTML = `<span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span><span class="del" title="delete">✕</span>`;
+    const fol = s.workspace ? `<span class="ws" title="workspace: ${s.workspace}">📁</span>` : "";
+    d.innerHTML = `${fol}<span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span><span class="del" title="delete">✕</span>`;
     d.onclick = e => {
       if (e.target.classList.contains("del")) return;
       sessionId = s.id; localStorage.setItem("sf_session", sessionId);
@@ -1452,13 +1455,14 @@ async function loadKeys() {
     if (!rows.length) box.innerHTML = '<div class="remaining">nessuna chiave richiesta</div>';
   } catch (e) { $("keysSummary").textContent = "errore: " + e; }
 }
-/* ---- rules + workspace (JAG-114): global / project + workspace selection ---- */
+/* ---- rules + workspace (JAG-114/115): global / project + per-session folder ---- */
 async function loadRules() {
   try {
-    const d = await api("GET", "/api/rules");
+    const qs = sessionId ? ("?session=" + encodeURIComponent(sessionId)) : "";
+    const d = await api("GET", "/api/rules" + qs);
     const g = d.global || {}, p = d.project || {};
-    $("wsCurrent").textContent = "workspace: " + (d.workspace || "—") +
-      " · " + (d.total_chars || 0) + " char di regole";
+    $("wsCurrent").textContent = (d.source === "session" ? "sessione ▸ " : "default ▸ ") +
+      (d.workspace || "—") + " · " + (d.total_chars || 0) + " char di regole";
     $("wsPath").value = d.workspace || "";
     $("rulesGlobalPath").textContent = "file: " + (g.path || "—") + (g.exists ? "" : " (non esiste)");
     $("rulesProjectPath").textContent = "file: " + (p.path || "—") + (p.exists ? "" : " (non esiste)");
@@ -1472,16 +1476,22 @@ async function loadRules() {
 }
 async function saveRules(scope) {
   const content = $(scope === "global" ? "rulesGlobalText" : "rulesProjectText").value;
-  const r = await api("POST", "/api/rules", { scope, content });
+  const body = { scope, content };
+  if (sessionId) body.session = sessionId;
+  const r = await api("POST", "/api/rules", body);
   $("rulesResult").textContent = r.error ? ("errore: " + r.error) : ("salvate (" + scope + "): " + (r.path || ""));
   if (!r.error) loadRules();
 }
 async function setWorkspace() {
   const path = $("wsPath").value.trim();
   if (!path) { $("wsResult").textContent = "percorso obbligatorio"; return; }
-  const r = await api("POST", "/api/workspace", { path });
-  $("wsResult").textContent = r.error ? ("errore: " + r.error) : ("workspace: " + (r.workspace || path));
-  if (!r.error) loadRules();
+  const body = { path };
+  if ($("wsDefault").checked || !sessionId) { /* default globale */ }
+  else { body.session = sessionId; }
+  const r = await api("POST", "/api/workspace", body);
+  $("wsResult").textContent = r.error ? ("errore: " + r.error)
+    : (r.scope === "session" ? ("sessione → " + r.workspace) : ("default → " + r.workspace));
+  if (!r.error) { loadRules(); loadSessions(); }
 }
 function skillsAutocomplete() {
   const inp = $("inp"); if (!inp) return;
