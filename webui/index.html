@@ -17,6 +17,15 @@
     --bg-2: #121722; --bg-3: #161b25; --line-2: #1e2431; --ink: #c3cad6; --muted: #7b8494;
   }
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  /* JAG-127b: scrollbars themed to the blue/purple GUI (the native blue-grey
+   * default clashed). Thin, accent-tinted, transparent track. */
+  * { scrollbar-width: thin; scrollbar-color: rgba(139,123,240,.45) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(139,123,240,.35); border-radius: 999px;
+    border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(139,123,240,.62); background-clip: padding-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
   html, body { height: 100%; }
   body {
     background: radial-gradient(1200px 800px at 80% -10%, #141a3a 0%, var(--bg) 55%),
@@ -153,6 +162,14 @@
   #inp, .inp { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
     border-radius: var(--radius); padding: 12px 16px; font: inherit; outline: none; }
   #inp { flex: 1; resize: none; max-height: 160px; overflow-y: auto; line-height: 1.45; }
+  /* JAG-127b: queued/steer messages typed while a turn is still running */
+  #queueBar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 4px 0; }
+  #queueBar[hidden] { display: none; }
+  .qchip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+    background: rgba(139,123,240,.14); border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 6px 3px 10px; font-size: 11px; color: var(--txt); }
+  .qchip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
+  .qchip button { font-size: 11px; padding: 0 5px; line-height: 1.4; }
   #inp:focus, .inp:focus { border-color: rgba(108,140,255,.5); box-shadow: 0 0 0 3px rgba(108,140,255,.12); }
 
   /* CoT live drawer (mobile) */
@@ -334,9 +351,14 @@
       <div class="t thinking"></div>
     </div>
     <div id="composer">
+      <div id="queueBar" hidden></div>
       <div id="slashMenu" class="card" hidden style="position:absolute;bottom:100%;left:22px;right:22px;max-height:220px;overflow-y:auto;padding:4px 0;margin-bottom:4px"></div>
       <textarea id="inp" rows="1" placeholder="command the forge… (Ctrl+Enter to send · / for commands & skills)" autofocus></textarea>
       <button onclick="send()">send</button>
+      <select id="qmode" title="mentre un turno sta girando: queue (aspetta) o steer (inietta subito)" style="font-size:11px;background:transparent;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:4px">
+        <option value="queue">＋ queue</option>
+        <option value="steer">⇢ steer</option>
+      </select>
       <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
       <button class="ghost" id="stopBtn" onclick="stopRun()" title="interrompi agent / chat">⏹ stop</button>
     </div>
@@ -731,7 +753,7 @@ function updateToolCard(data) {
 function ensureThink() {
   if (!curThink) {
     const d = document.createElement("div"); d.className = "msg ai";
-    d.innerHTML = `<div class="who">SPARKFORGE</div><details class="think"><summary>🧠 chain-of-thought (live)…</summary><div class="t"></div></details>`;
+    d.innerHTML = `<div class="who">SPARKFORGE</div><details class="think" open><summary>🧠 chain-of-thought (live)…</summary><div class="t"></div></details>`;
     $("log").appendChild(d); curThink = d; scroll();
   }
   return curThink.querySelector(".t");
@@ -756,10 +778,55 @@ function cotFeed(text) {
   const dt = $("cotDrawer"); dt.scrollTop = dt.scrollHeight;
 }
 
+/* JAG-127b: queue / steer — messages typed while a turn is still running.
+ * Default: they wait in a visible queue and are flushed one-by-one when the
+ * turn ends. The "⇢" chip steers them into the RUNNING turn instead (injected
+ * server-side at the next loop boundary — no second turn). */
+let msgQueue = [];
+function enqueueMsg(m) { msgQueue.push(m); renderQueue(); }
+function renderQueue() {
+  const bar = $("queueBar"); if (!bar) return;
+  bar.innerHTML = ""; bar.hidden = !msgQueue.length;
+  msgQueue.forEach((m, i) => {
+    const chip = document.createElement("span"); chip.className = "qchip";
+    const t = document.createElement("span"); t.textContent = (i + 1) + ". " + m; t.title = m;
+    const st = document.createElement("button"); st.className = "ghost"; st.textContent = "⇢";
+    st.title = "steer into the running turn now";
+    st.onclick = () => steerQueued(i);
+    const x = document.createElement("button"); x.className = "ghost"; x.textContent = "×";
+    x.title = "remove from queue";
+    x.onclick = () => { msgQueue.splice(i, 1); renderQueue(); };
+    chip.appendChild(t); chip.appendChild(st); chip.appendChild(x); bar.appendChild(chip);
+  });
+}
+function steerQueued(i) {
+  const m = msgQueue.splice(i, 1)[0]; if (m === undefined) return; renderQueue();
+  who("user", "🎯 steer: " + m);
+  api("POST", "/api/chat/steer", { session: sessionId, message: m }).catch(() => {});
+}
+function flushQueue() {
+  if (activeSSE || !msgQueue.length) return;
+  const m = msgQueue.shift(); renderQueue(); send(m);
+}
+
 function send(text) {
   const inp = $("inp");
-  let msg = (text !== undefined ? text : inp.value).trim();
-  if (!msg) return;
+  let raw = (text !== undefined ? text : inp.value).trim();
+  if (!raw) return;
+  // JAG-127b: a turn is already streaming → never open a second SSE (that is
+  // what silently fought the running one). Queue it (flushed on `done`), or the
+  // user can press ⇢ on the chip to steer the live turn.
+  if (activeSSE) {
+    // JAG-127b/c: the #qmode picker next to "send" decides queue vs steer.
+    if ((localStorage.getItem("sf_qmode") || "queue") === "steer") {
+      who("user", "🎯 steer: " + raw);
+      api("POST", "/api/chat/steer", { session: sessionId, message: raw }).catch(() => {});
+    } else {
+      enqueueMsg(raw);
+    }
+    inp.value = ""; if (inp.style) inp.style.height = ""; return;
+  }
+  let msg = raw;
   // JAG-92: "/goal <..." runs the SAME chat loop in autonomous mode (JAG-78) —
   // the model plans (write_todos) then executes end-to-end without asking.
   let mode = "";
@@ -781,8 +848,13 @@ function send(text) {
   // v1.6.3 (JAG-55): tool calls happen inline in the chat when the turn runs a tool
   es.addEventListener("tool.call", e => toolCard(JSON.parse(e.data).tool));
   es.addEventListener("tool.result", e => updateToolCard(JSON.parse(e.data)));
-  es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); });
-  es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); });
+  // JAG-127b: surface the approval gate inline in the CHAT stream too (before it
+  // relied only on the global /api/feed SSE, which the phone UI may not keep
+  // open) — otherwise a `required` tool looked like a silent 30s freeze.
+  es.addEventListener("approval.request", e => { approvalCard(JSON.parse(e.data)); loadApprovals(); });
+  es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); who("user", "🎯 steer: " + (d.text || "")); });
+  es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
+  es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); flushQueue(); });
 }
 
 async function api(method, path, body) {
@@ -1265,6 +1337,10 @@ async function decide(id, decision) {
 /* JAG-92: inline approve/deny card in the chat, so approvals are actionable
  * from the PC (not only in the hidden rail panel). */
 function approvalCard(d) {
+  // JAG-127b: publish() renames a payload `id` to `id_id` (the envelope `id` is
+  // the feed sequence), so d.id is a NUMBER, not the approval id — clicking the
+  // old card always failed. Use the real approval id.
+  const aid = d.id_id || d.id;
   const card = document.createElement("div");
   card.className = "msg ai";
   const whoEl = document.createElement("div"); whoEl.className = "who"; whoEl.textContent = "SPARKFORGE · approval";
@@ -1275,8 +1351,8 @@ function approvalCard(d) {
   const row = document.createElement("div"); row.style.cssText = "display:flex;gap:6px;margin-top:6px";
   const ok = document.createElement("button"); ok.className = "ghost"; ok.style.color = "var(--ok)"; ok.textContent = "✅ approve";
   const no = document.createElement("button"); no.className = "ghost"; no.style.color = "var(--err)"; no.textContent = "⛔ deny";
-  ok.onclick = () => decide(d.id, "approve").then(() => { ok.textContent = "✅ approved"; no.remove(); });
-  no.onclick = () => decide(d.id, "deny").then(() => { no.textContent = "⛔ denied"; ok.remove(); });
+  ok.onclick = () => decide(aid, "approve").then(() => { ok.textContent = "✅ approved"; no.remove(); });
+  no.onclick = () => decide(aid, "deny").then(() => { no.textContent = "⛔ denied"; ok.remove(); });
   row.appendChild(ok); row.appendChild(no);
   bub.appendChild(title); bub.appendChild(sum); bub.appendChild(row);
   card.appendChild(whoEl); card.appendChild(bub);
@@ -1323,8 +1399,8 @@ function runAgent(goal) {
   es.addEventListener("agent.aborted", e => { const d = JSON.parse(e.data);
     who("ai", "⛔ run interrotta dall'operatore" + (d.run ? " (" + d.run + ")" : "")); });
   es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
-    who("ai", "🏁 " + (d.summary || "done")); es.close(); activeSSE = null; activeRunId = null; loadPlan(); loadGraph(); loadCtx(); });
-  es.addEventListener("error", () => { es.close(); activeSSE = null; activeRunId = null; });
+    who("ai", "🏁 " + (d.summary || "done")); es.close(); activeSSE = null; activeRunId = null; loadPlan(); loadGraph(); loadCtx(); flushQueue(); });
+  es.addEventListener("error", () => { es.close(); activeSSE = null; activeRunId = null; flushQueue(); });
 }
 
 /* ---- feed ---- */
@@ -1372,6 +1448,7 @@ function connectFeed() {
   es.addEventListener("prm.feedback", e => { const d = JSON.parse(e.data || "{}"); push("📉 verify: score " + d.score + " — " + (d.feedback || "").slice(0, 90)); });
   es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); approvalCard(d); loadApprovals(); });
   es.addEventListener("approval.auto", e => { const d = JSON.parse(e.data); push("✅ auto-approved: " + (d.summary || "").slice(0, 50)); });
+  es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); push("🎯 steer: " + (d.text || "").slice(0, 60)); });
   es.addEventListener("tool.result", e => { const d = JSON.parse(e.data);
     const bits = [d.tool, (d.exit_code != null ? "exit=" + d.exit_code : ""), (d.backend ? "backend=" + d.backend : ""), (d.ok === false ? "FAILED" : "")].filter(Boolean);
     push("🛠 " + bits.join(" ")); });
@@ -1445,7 +1522,26 @@ function renderTools(el, d) {
   const tools = (d && d.tools) || d || [];
   if (!Array.isArray(tools)) { json_pre(el, d); return; }
   if (!tools.length) { el.innerHTML = '<div class="remaining">no tools</div>'; return; }
-  el.innerHTML = '<div class="remaining" style="margin-bottom:8px">Single place for <b>auto-approve</b>. Click a tool\'s policy to cycle: <b>auto</b> = never ask · <b>required</b> = always ask · <b>denied</b> = blocked. A file read/write <b>outside</b> the session folder is always <b>required</b>.</div>' +
+  // JAG-127c: global approval policy (persisted server-side in the overlay).
+  const pol = (d && d.policy) || {};
+  const mode = pol.mode || "normal";
+  const ow = pol.outside_workspace || "required";
+  const mk = (k, v, cur, extra) => `<button class="ghost" data-pol="${k}" data-val="${v}" style="${cur === v ? "color:var(--ok);border-color:rgba(74,222,128,.5)" : ""}">${extra || v}</button>`;
+  const policyCard =
+    `<div class="card" style="margin-bottom:10px">
+       <div style="font-weight:600;margin-bottom:6px">🔓 Global approval policy</div>
+       <div class="remaining" style="margin-bottom:8px"><b>FULL</b> = never ask for anything (a hard-denied tool is still blocked). <b>Outside workspace</b> = whether a file op outside the session folder must be confirmed.</div>
+       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+         <span style="font-size:11px;color:var(--dim);min-width:126px">Approval mode</span>
+         ${mk("mode", "normal", mode)} ${mk("mode", "full", mode, "FULL — never ask")}
+       </div>
+       <div style="display:flex;gap:6px;align-items:center">
+         <span style="font-size:11px;color:var(--dim);min-width:126px">Outside workspace</span>
+         ${mk("outside_workspace", "required", ow)} ${mk("outside_workspace", "auto", ow)}
+       </div>
+     </div>`;
+  el.innerHTML = policyCard +
+    '<div class="remaining" style="margin-bottom:8px">Per-tool policy — click to cycle: <b>auto</b> = never ask · <b>required</b> = always ask · <b>denied</b> = blocked.</div>' +
     tools.map(t => {
     const on = t.enabled !== false;
     const ap = t.approval || "auto";
@@ -1458,6 +1554,9 @@ function renderTools(el, d) {
       `<button class="ghost" style="font-size:10px" data-tool="${nm}" data-on="${on}">${on ? "disable" : "enable"}</button></div>` +
       (t.description ? `<div class="remaining" style="margin:-4px 0 8px 22px">${t.description}</div>` : "");
   }).join("");
+  el.querySelectorAll("button[data-pol]").forEach(b =>
+    b.onclick = () => api("POST", "/api/tools", { approvals: { [b.dataset.pol]: b.dataset.val } })
+      .then(() => api("GET", "/api/tools")).then(d2 => renderTools(el, d2)));
   el.querySelectorAll("button[data-ap]").forEach(b =>
     b.onclick = () => {
       const cur = b.textContent.replace("⟳", "").trim();
@@ -2207,7 +2306,11 @@ function bindResizer(handle, colSel, sign, key) {
     e.preventDefault(); handle.classList.add("active");
     const startX = e.clientX, startW = col.getBoundingClientRect().width;
     const move = ev => {
-      const w = Math.max(170, Math.min(560, startW + sign * (ev.clientX - startX)));
+      // JAG-127b: the old hard cap of 560px was too small — let a side panel
+      // grow up to ~72% of the window (capped at 1200px) while keeping the chat
+      // legible.
+      const maxW = Math.max(560, Math.min(1200, window.innerWidth * 0.72));
+      const w = Math.max(170, Math.min(maxW, startW + sign * (ev.clientX - startX)));
       col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
     };
     const up = () => {
@@ -2231,6 +2334,9 @@ $("toggle-right").onclick = () => {
 $("palette-input").addEventListener("input", e => renderPalette(e.target.value));
 $("palette").addEventListener("click", e => { if (e.target.id === "palette") closePalette(); });
 $("session-search").addEventListener("input", loadSessions);
+{ const _qm = $("qmode");
+  if (_qm) { _qm.value = localStorage.getItem("sf_qmode") || "queue";
+    _qm.onchange = () => localStorage.setItem("sf_qmode", _qm.value); } }
 $("hide-empty").addEventListener("change", loadSessions);
 addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); openPalette(); }

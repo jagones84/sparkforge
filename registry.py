@@ -465,9 +465,21 @@ def classify(tool, args, workspace=None):
         return "denied", "matches hard-deny pattern %r" % hit
     if spec["approval"] == "denied":
         return "denied", "tool policy is 'denied'"
-    if workspace and tool in ("fs.read", "fs.write", "fs.edit"):
+    # JAG-127c: global approval switch, set from the Config panel (persisted in
+    # the overlay). `full` = never ask for anything (hard-deny/disabled still
+    # win); `outside_workspace` = required|auto controls the sandbox-escalation.
+    ap = load_config().get("approvals") or {}
+    if str(ap.get("mode", "normal")).lower() in ("full", "auto", "yolo"):
+        return "auto", "approvals.mode=full — never ask"
+    if workspace and tool in ("fs.read", "fs.write", "fs.edit") \
+            and str(ap.get("outside_workspace", "required")).lower() == "required":
         p, _err = resolve_path(str((args or {}).get("path", "")), spec["roots"])
-        if p and not _under(p, workspace):
+        # JAG-127b: the per-run sandbox (data/sandbox/<run>) is the agent's own
+        # scratch area — it is always "inside" even when the session folder is
+        # elsewhere. Without this every sandbox file op was escalated to
+        # `required`, so a `fs.read` on the agent's OWN project raised an
+        # approval the user never asked for (policy `auto` ignored).
+        if p and not _under(p, workspace) and not _under(p, workspace_dir()):
             return "required", "path outside the session workspace"
     if spec["approval"] == "auto":
         return "auto", "tool policy is 'auto'"

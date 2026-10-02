@@ -668,6 +668,7 @@ def handle(handler, method, path, qs, body):
         if path == "/api/tools":
             return _r(handler, 200, {"tools": registry.catalog(),
                                      "sandbox": sandbox.probe(force=qs.get("probe") == "1"),
+                                     "policy": registry.load_config().get("approvals") or {},
                                      "approvals": approvals.stats()})
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
@@ -1046,10 +1047,22 @@ def _reload_policy(cfg=None):
 
 def update_policy(body):
     """POST /api/tools — flip enabled / approval / auto_approve for a tool."""
+    cfg = registry.load_config()
+    # JAG-127c: the GLOBAL approval policy (Config panel) — no `tool` needed.
+    #   approvals.mode: normal | full ("never ask, only hard-deny blocks")
+    #   approvals.outside_workspace: required | auto
+    if isinstance(body.get("approvals"), dict):
+        ap = cfg.setdefault("approvals", {})
+        for k in ("mode", "outside_workspace", "timeout_secs"):
+            if k in body["approvals"]:
+                ap[k] = body["approvals"][k]
+        registry.save_config(cfg)
+        registry.load_config(reload=True)
+        _publish("tools.update", policy=dict(ap))
+        return {"ok": True, "tools": registry.catalog(), "policy": dict(ap)}
     name = body.get("tool") or body.get("name")
     if not name:
         return {"error": "tool required", "tools": registry.catalog()}
-    cfg = registry.load_config()
     entry = cfg.setdefault("tools", {}).setdefault(name, {})
     if "enabled" in body:
         entry["enabled"] = bool(body["enabled"])

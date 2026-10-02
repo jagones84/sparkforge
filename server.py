@@ -1136,6 +1136,32 @@ MEMORY_POLICY = (
 # the chat stream was experienced as "si blocca" and let mobile NAT kill the SSE.
 CHAT_APPROVAL_WAIT = 30
 
+# JAG-127b: mid-run steering. A message the user types while a turn is still
+# streaming (or a queued message the app flushes) is dropped here and injected
+# as a user message at the next loop boundary — the modern-IDE "steer" behaviour,
+# with no second turn and no second SSE stream.
+STEER_INBOX = {}
+_steer_lock = threading.Lock()
+
+
+def push_steer(sess_id, text):
+    """Queue a steering message for a running session. Returns the new depth."""
+    text = str(text or "").strip()
+    if not sess_id or not text:
+        return 0
+    with _steer_lock:
+        q = STEER_INBOX.setdefault(sess_id, [])
+        q.append(text)
+        return len(q)
+
+
+def drain_steer(sess_id):
+    """Pop all steering messages for a session (called per loop iteration)."""
+    with _steer_lock:
+        q = STEER_INBOX.get(sess_id) or []
+        STEER_INBOX[sess_id] = []
+        return q
+
 SKILLS_POLICY = (
     "Skills: you have an installed skill library — the SKILLS list below is "
     "live and includes all symlinked distributions. Before solving a task, SCAN "
@@ -1846,6 +1872,11 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     iters = 0
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
+        # JAG-127b: inject any steering message typed while this turn was running.
+        for _s in drain_steer(sess["id"]):
+            msgs.append({"role": "user", "content":
+                         "[user steering — take this into account now] " + _s})
+            on_event("chat.steer", session=sess["id"], text=_s)
         collected = []
 
         def _capture(ch, t, _c=collected):
@@ -1888,6 +1919,13 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             continue
         tc = _chat_tool_call(act, api_v02) if tool_ctx else None
         if tc:
+            # JAG-127b: surface the model's own `thought` for this step as a
+            # "think" delta BEFORE the tool card — otherwise, with models that do
+            # not emit reasoning_content, the chat showed tool cards back-to-back
+            # with no visible reasoning in between ("non vedo thinking").
+            _th = str((act or {}).get("thought") or "").strip()
+            if _th:
+                on_delta("think", _th + "\n")
             tool, args = tc
             work_steps += 1
             on_event("tool.call", session=sess["id"], tool=tool, args=args, inline=True)
@@ -3281,8 +3319,17 @@ class Handler(BaseHTTPRequestHandler):
                                     "reply": reply["content"], "reasoning": reply.get("reasoning"),
                                     "messages": len(sess["messages"]),
                                     "error": bool(reply.get("error"))})
+        if path == "/api/chat/steer":
+            # JAG-127b: drop a steering message into a RUNNING turn's loop (see
+            # push_steer/drain_steer). No new turn, no new SSE.
+            sid = body.get("session") or qs.get("session")
+            text = body.get("message") or qs.get("message", "")
+            if not sid or not text:
+                return self._send(400, {"error": "session and message required"})
+            depth = push_steer(sid, text)
+            publish("chat.steer", session=sid, text=text, queued=depth)
+            return self._send(200, {"ok": True, "queued": depth})
         if path == "/api/chat/stream":
-            # v0.5.1: POST alias of GET /api/chat/stream (mobile clients prefer
             # a JSON body over query params). Same SSE contract.
             message = body.get("message") or qs.get("message", "")
             if not message:
