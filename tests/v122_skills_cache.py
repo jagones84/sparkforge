@@ -86,10 +86,10 @@ def main():
     # ---- C: UI labels are distinct ------------------------------------------
     with open(os.path.join(REPO, "webui", "index.html"), "r", encoding="utf-8") as f:
         html = f.read()
-    ok &= check("C1 heading renamed to Piano (sessione)",
-                "Piano <span" in html and "task list della sessione" in html)
-    ok &= check("C2 heading renamed to Esecuzione (run)",
-                "Esecuzione <span" in html and "run graph (run corrente)" in html)
+    ok &= check("C1 heading 'Plan · session task list'",
+                "Plan <span" in html and "session task list" in html)
+    ok &= check("C2 heading 'Execution · run graph'",
+                "Execution <span" in html and "run graph (current run)" in html)
 
     RESULTS["passed"] = bool(ok)
     if not ok:

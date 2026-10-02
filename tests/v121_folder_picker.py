@@ -55,7 +55,7 @@ check("F4 file is not a directory", bool(d4.get("error")), str(d4.get("error")))
 html = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8").read()
 check("U picker markup + browse button + js",
       'id="dirPicker"' in html and "openDirPicker" in html and "async function loadDirs" in html
-      and "📁 sfoglia" in html and "/api/fs/dirs" in html, "")
+      and "📁 browse" in html and "/api/fs/dirs" in html, "")
 
 total = len(results)
 passed = sum(results)
