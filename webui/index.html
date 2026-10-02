@@ -50,6 +50,7 @@
     cursor: pointer; font-size: 12px; color: var(--txt); }
   #modelMenu .mi:hover { background: rgba(120,140,255,.14); }
   #modelMenu .mi.active { background: rgba(120,140,255,.2); }
+  #modelMenu .mi.hl { background: rgba(120,140,255,.22); outline: 1px solid var(--accent); }
   #modelMenu .mi .bg { margin-left: auto; font-size: 10px; color: var(--dim); }
   main { flex: 1; display: grid; grid-template-columns: 320px 1fr; min-height: 0; }
 
@@ -334,7 +335,7 @@
     </div>
     <div id="composer">
       <div id="slashMenu" class="card" hidden style="position:absolute;bottom:100%;left:22px;right:22px;max-height:220px;overflow-y:auto;padding:4px 0;margin-bottom:4px"></div>
-      <textarea id="inp" rows="1" placeholder="command the forge… (Ctrl+Enter to send · / for skills)" autofocus></textarea>
+      <textarea id="inp" rows="1" placeholder="command the forge… (Ctrl+Enter to send · / for commands & skills)" autofocus></textarea>
       <button onclick="send()">send</button>
       <button class="ghost" id="agentBtn" title="run the agent loop">⚡ agent</button>
       <button class="ghost" id="stopBtn" onclick="stopRun()" title="interrompi agent / chat">⏹ stop</button>
@@ -366,10 +367,12 @@
           <div id="planGoal" class="remaining">no goal yet</div>
           <div id="planSteps" style="margin-top:8px"></div>
           <div style="display:flex;gap:6px;margin-top:8px">
-            <input id="planInp" class="inp" placeholder="new goal…" style="flex:1;padding:6px 10px;font-size:12px">
-            <button class="ghost" onclick="genPlan()">plan it</button>
+            <input id="planInp" class="inp" placeholder="goal…" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" onclick="planGoal()" title="same as typing /goal in chat: plans AND runs to completion">▶ goal</button>
             <button class="ghost" onclick="resetPlan()" title="clear this session's task list (start a new task)">reset</button>
           </div>
+          <div class="remaining" style="margin-top:6px">This panel is the persistent view of the plan.
+            <b>/goal &lt;text&gt;</b> in chat does the same thing: plan + execute autonomously (no manual planning needed).</div>
         </div>
         <h2>Execution <span id="taskCount" class="remaining"></span> <span class="remaining">· run graph (current run)</span></h2>
         <div class="card">
@@ -1009,18 +1012,12 @@ function dedupePlan(steps) {
     return true;
   });
 }
-async function genPlan() {
+/* JAG-127: the panel's goal button uses the SAME path as typing /goal in chat
+   (autonomous plan + run). No second agent loop, no manual "plan only". */
+function planGoal() {
   const goal = $("planInp").value.trim(); if (!goal) return;
-  $("planInp").value = ""; who("user", "⚙ plan: " + goal); curThink = curAns = null;
-  const es = new EventSource("/api/agent/run?goal=" + encodeURIComponent(goal) + "&max_steps=6" + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : ""));
-  es.addEventListener("agent.think", e => { const d = JSON.parse(e.data);
-    if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); scroll(); } });
-  es.addEventListener("agent.observation", e => { const d = JSON.parse(e.data);
-    const l = document.createElement("div"); l.className = "agentline";
-    l.textContent = "👁 " + d.observation; $("log").appendChild(l); scroll(); });
-  es.addEventListener("agent.finish", e => { const d = JSON.parse(e.data);
-    who("ai", "🏁 " + (d.summary || "done")); es.close(); loadPlan(); loadGraph(); });
-  es.addEventListener("error", () => es.close());
+  $("planInp").value = "";
+  send("/goal " + goal);
 }
 /* ---- run task graph (v0.6: LLM-generated, live, interactive) ---- */
 let curRunId = localStorage.getItem("sf_run") || null;
@@ -1134,46 +1131,98 @@ async function resetRunGraph() {
   who("ai", "↺ run graph reset");
   loadGraph();
 }
-/* JAG-91: populate the LLM selector from the live router roster + persist choice */
-let _modelsCache = [];
+/* JAG-91/JAG-127: LLM selector — ALL providers' models, grouped, keyboard-navigable,
+   persisted in localStorage (ref = "<provider>:<model>"). */
+let _modelsCache = [];   // flat [{ref,id,provider,pname,local,available,ctx,loaded}]
+let _modelItems = [];    // items currently rendered, in visual order
+let _modelHi = 0;        // highlighted index (keyboard)
+
 function currentModel() { return localStorage.getItem("sf_model") || ""; }
+function _modelShort(ref) { const i = String(ref || "").indexOf(":"); return i >= 0 ? ref.slice(i + 1) : (ref || ""); }
 function modelLabel() {
   const b = $("model-btn");
-  if (b) b.firstChild.textContent = "model: " + (currentModel() || "—") + " ";
+  if (b) b.firstChild.textContent = "model: " + (_modelShort(currentModel()) || "—") + " ";
 }
 async function loadModels() {
   try {
     const d = await api("GET", "/api/models");
-    _modelsCache = d.router_models || (d.models || []);
+    const flat = [];
+    (d.providers || []).forEach(p => (p.models || []).forEach(m => flat.push({
+      ref: m.ref || (p.id + ":" + m.id), id: m.id, provider: p.id,
+      pname: p.name || p.id, local: !!p.local, available: p.available !== false,
+      ctx: m.context_length || 0, loaded: !!m.loaded,
+    })));
+    _modelsCache = flat;
     const cur = localStorage.getItem("sf_model")
-      || (_modelsCache.find(m => m.loaded) || {}).alias
-      || (_modelsCache[0] || {}).alias || "";
+      || (flat.find(x => x.loaded) || {}).ref
+      || d.default || (flat[0] || {}).ref || "";
     if (cur) localStorage.setItem("sf_model", cur);
     modelLabel(); renderModelMenu();
   } catch (e) { /* selector must never break the app */ }
 }
-function renderModelMenu() {
+function renderModelMenu(q) {
   const box = $("modelMenu"); if (!box) return;
   const cur = currentModel();
-  box.innerHTML = "";
-  const add = (m) => {
-    const it = document.createElement("div");
-    it.className = "mi" + (m.alias === cur ? " active" : "");
-    const dot = document.createElement("span"); dot.textContent = m.loaded ? "🟢" : "⚪";
-    const nm = document.createElement("span"); nm.style.flex = "1"; nm.textContent = m.alias;
-    const bg = document.createElement("span"); bg.className = "bg";
-    bg.textContent = m.loaded ? "loaded" : "unloaded";
-    it.append(dot, nm, bg);
-    it.onclick = () => { localStorage.setItem("sf_model", m.alias); modelLabel(); box.hidden = true; renderModelMenu(); };
-    box.appendChild(it);
-  };
-  const loaded = _modelsCache.filter(m => m.loaded);
-  const rest = _modelsCache.filter(m => !m.loaded);
-  if (loaded.length) { const h = document.createElement("div"); h.className = "mh"; h.textContent = "loaded"; box.appendChild(h); loaded.forEach(add); }
-  if (rest.length) { const h = document.createElement("div"); h.className = "mh"; h.textContent = "not loaded"; box.appendChild(h); rest.forEach(add); }
-  if (!_modelsCache.length) box.innerHTML = '<div class="mi">no model</div>';
+  const query = (q || "").toLowerCase();
+  box.innerHTML = '<input id="modelSearch" class="inp" placeholder="search models…  (↑↓ · ⏎ · esc)" ' +
+    'style="width:calc(100% - 16px);margin:6px 8px;padding:6px 8px;font-size:12px" value="' + _attr(query) + '">';
+  _modelItems = [];
+  const groups = {};
+  _modelsCache.forEach(m => {
+    if (query && !(m.ref.toLowerCase().includes(query) || m.id.toLowerCase().includes(query))) return;
+    const g = groups[m.provider] = groups[m.provider] || { name: m.pname, local: m.local, available: m.available, items: [] };
+    g.items.push(m);
+  });
+  Object.keys(groups)
+    .sort((a, b) => (groups[b].local - groups[a].local) || a.localeCompare(b))
+    .forEach(pid => {
+      const g = groups[pid];
+      const h = document.createElement("div"); h.className = "mh";
+      h.textContent = g.name + (g.local ? " · local" : "") + (g.available ? "" : " · no key");
+      box.appendChild(h);
+      g.items.forEach(m => {
+        const it = document.createElement("div");
+        it.className = "mi" + (m.ref === cur ? " active" : "");
+        const dot = document.createElement("span"); dot.textContent = m.loaded ? "🟢" : (m.available ? "⚪" : "🔒");
+        const nm = document.createElement("span");
+        nm.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+        nm.textContent = m.id;
+        const bg = document.createElement("span"); bg.className = "bg";
+        bg.textContent = m.loaded ? "loaded" : (m.ctx ? Math.round(m.ctx / 1024) + "k ctx" : "");
+        it.append(dot, nm, bg);
+        it.title = m.ref;
+        it.onclick = () => chooseModel(m.ref);
+        it.onmouseenter = () => { _modelHi = _modelItems.indexOf(m); paintModelHi(); };
+        _modelItems.push(m);
+        box.appendChild(it);
+      });
+    });
+  if (!_modelItems.length) box.insertAdjacentHTML("beforeend", '<div class="mi">no model</div>');
+  _modelHi = Math.max(0, _modelItems.findIndex(m => m.ref === cur));
+  paintModelHi();
+  const inp = $("modelSearch");
+  if (inp) { inp.oninput = () => renderModelMenu(inp.value); inp.onkeydown = modelKey; inp.focus(); }
 }
-$("model-btn").onclick = (e) => { e.stopPropagation(); renderModelMenu(); const m = $("modelMenu"); m.hidden = !m.hidden; };
+function paintModelHi() {
+  const box = $("modelMenu"); if (!box) return;
+  const els = box.querySelectorAll(".mi");
+  els.forEach((el, i) => el.classList.toggle("hl", i === _modelHi));
+  const el = els[_modelHi];
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+}
+function modelKey(e) {
+  if (e.key === "ArrowDown") { e.preventDefault(); _modelHi = Math.min(_modelHi + 1, _modelItems.length - 1); paintModelHi(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); _modelHi = Math.max(_modelHi - 1, 0); paintModelHi(); }
+  else if (e.key === "Enter") { if (_modelItems[_modelHi]) { e.preventDefault(); chooseModel(_modelItems[_modelHi].ref); } }
+  else if (e.key === "Escape") { e.preventDefault(); $("modelMenu").hidden = true; }
+}
+function chooseModel(ref) {
+  localStorage.setItem("sf_model", ref);
+  modelLabel();
+  const m = $("modelMenu"); if (m) m.hidden = true;
+  renderModelMenu();
+}
+$("model-btn").onclick = (e) => { e.stopPropagation(); const m = $("modelMenu"); const open = m.hidden; m.hidden = !open; if (open) renderModelMenu(); };
 document.addEventListener("click", e => {
   const m = $("modelMenu");
   if (m && !m.hidden && !m.contains(e.target) && e.target.id !== "model-btn") m.hidden = true;
@@ -1762,22 +1811,47 @@ async function setWorkspace() {
     : (r.scope === "session" ? ("session → " + r.workspace) : ("default → " + r.workspace));
   if (!r.error) { loadRules(); loadSessions(); }
 }
+/* JAG-127: slash menu shows COMMANDS first (/goal, /skills, /compact) then skills. */
+const SLASH_COMMANDS = [
+  { cmd: "goal", hint: "plan + run autonomously — type your goal after it" },
+  { cmd: "skills", hint: "open the Skills panel" },
+  { cmd: "compact", hint: "compact this session's context now" },
+];
 function skillsAutocomplete() {
   const inp = $("inp"); if (!inp) return;
   const box = $("slashMenu");
   const v = inp.value;
   if (!v.startsWith("/") || v.includes(" ")) { box.hidden = true; return; }
   const q = v.slice(1).toLowerCase();
+  const cmds = SLASH_COMMANDS.filter(c => c.cmd.startsWith(q));
   const hits = _skillsCache.filter(s => s.name.toLowerCase().startsWith(q)).slice(0, 8);
-  if (!hits.length) { box.hidden = true; return; }
+  if (!cmds.length && !hits.length) { box.hidden = true; return; }
   box.innerHTML = "";
-  hits.forEach(s => {
+  const addRow = (label, hint, onPick) => {
     const li = document.createElement("div");
     li.style.cssText = "padding:6px 10px;cursor:pointer;font-size:12px";
-    li.textContent = "/" + s.name + "  ·  " + (s.title || s.description || "");
-    li.onclick = () => { inp.value = "/" + s.name + " "; box.hidden = true; inp.focus(); };
+    li.innerHTML = label + (hint ? ' <span class="remaining">· ' + esc(hint) + "</span>" : "");
+    li.onclick = onPick;
     box.appendChild(li);
-  });
+  };
+  if (cmds.length) {
+    const h = document.createElement("div");
+    h.className = "remaining"; h.style.cssText = "padding:4px 10px;font-size:10px;text-transform:uppercase";
+    h.textContent = "commands"; box.appendChild(h);
+    cmds.forEach(c => addRow("/" + c.cmd, c.hint, () => {
+      if (c.cmd === "skills") { inp.value = ""; box.hidden = true; openPanel("skills"); }
+      else if (c.cmd === "compact") { inp.value = ""; box.hidden = true; compactNow(); }
+      else { inp.value = "/goal "; box.hidden = true; inp.focus(); }
+    }));
+  }
+  if (hits.length) {
+    const h = document.createElement("div");
+    h.className = "remaining"; h.style.cssText = "padding:4px 10px;font-size:10px;text-transform:uppercase";
+    h.textContent = "skills"; box.appendChild(h);
+    hits.forEach(s => addRow("/" + s.name, s.title || s.description || "", () => {
+      inp.value = "/" + s.name + " "; box.hidden = true; inp.focus();
+    }));
+  }
   box.hidden = false;
 }
 
