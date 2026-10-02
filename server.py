@@ -336,6 +336,11 @@ AUTOCOMPACT_TARGET_PCT = float(os.environ.get(
 # fraction of the transcript's CURRENT size — using the full model budget made
 # the button a no-op for any session under 100% (so it "did nothing").
 COMPACT_FORCE_RATIO = float(os.environ.get("SPARKFORGE_COMPACT_FORCE_RATIO", "0.5"))
+# JAG-110: how many newest turns the MANUAL "compact now" keeps verbatim. The
+# automatic path keeps 8; the manual action is a deliberate shrink, so it keeps
+# only this few — otherwise a short session (<=8 msgs) compacted nothing and the
+# summarizer was never called (no GPU activity, "0 msgs compacted").
+COMPACT_MANUAL_KEEP_RECENT = int(os.environ.get("SPARKFORGE_COMPACT_MANUAL_KEEP_RECENT", "2"))
 
 
 def model_context_window(alias=None):
@@ -2608,7 +2613,7 @@ def prepare_session_for_turn(sess, model=None):
         return sess
 
 
-def _summarize_with_llm(messages, model=None):
+def _summarize_with_llm(messages, model=None, meta=None):
     """JAG-103: let the MODEL do the compaction.
 
     Summarize the OLDER turns into one faithful, compact block (decisions, facts,
@@ -2616,6 +2621,9 @@ def _summarize_with_llm(messages, model=None):
     language. Reuses `stream_with_fallback` (role "summarizer") — no bespoke router
     code. Returns the summary text, or None on ANY failure so the caller falls back
     to the local extractive merge (compaction must never stall a turn).
+
+    JAG-110: when `meta` (a dict) is passed, records `meta["model"] = <alias that
+    actually answered>`, so the UI can show WHICH model did the compaction.
     """
     lines = []
     for m in messages:
@@ -2633,16 +2641,18 @@ def _summarize_with_llm(messages, model=None):
         "Drop chit-chat and repetition. Reply with the summary text ONLY (no preamble), "
         "at most ~200 words.\n\nTRANSCRIPT:\n" + transcript)
     try:
-        answer, _think, _used = stream_with_fallback(
+        answer, _think, used = stream_with_fallback(
             [{"role": "user", "content": prompt}], model, "summarizer",
             lambda ch, t: None, timeout=180)
         answer = (answer or "").strip()
+        if answer and meta is not None:
+            meta["model"] = used
         return answer or None
     except Exception:  # noqa: BLE001 — never let summarization break compaction
         return None
 
 
-def compact_session(session, budget_tokens=None):
+def compact_session(session, budget_tokens=None, keep_recent=None):
     """Compact a session transcript in place under the token budget (v0.5).
 
     Uses the v0.3 extractive compaction; the newest messages stay verbatim,
@@ -2654,6 +2664,12 @@ def compact_session(session, budget_tokens=None):
     the full model budget, which made it a no-op for any session under 100% — the
     button appeared to do nothing. The single source of this policy lives here, so
     the WebUI and the app need no duplicated logic.
+
+    JAG-110: the manual action also FORCES compaction and keeps only
+    `COMPACT_MANUAL_KEEP_RECENT` recent turns, so a short session actually shrinks
+    and the LLM summarizer runs (previously `keep_recent=8` left <=8-message
+    sessions untouched: no model call, no GPU). The automatic path is unchanged
+    (engine default 8, never forced).
     """
     import context_engine
     sess = load_session(session) if session else None
@@ -2672,8 +2688,15 @@ def compact_session(session, budget_tokens=None):
         # sessions; a 1024 floor made the button a near no-op under ~1k tokens.
         budget = current
         room = max(256, int(current * COMPACT_FORCE_RATIO))
-    msgs, stats = context_engine.compact(
-        messages, room, summarizer=lambda old: _summarize_with_llm(old))
+    manual = not budget_tokens
+    if manual and keep_recent is None:
+        keep_recent = COMPACT_MANUAL_KEEP_RECENT
+    meta = {}
+    kwargs = {"summarizer": lambda old: _summarize_with_llm(old, meta=meta),
+              "force": manual}
+    if keep_recent is not None:
+        kwargs["keep_recent"] = keep_recent
+    msgs, stats = context_engine.compact(messages, room, **kwargs)
     sess["messages"] = msgs
     save_session(sess)
     # JAG-104: the cached "real" prompt size belongs to the turn BEFORE the
@@ -2683,6 +2706,7 @@ def compact_session(session, budget_tokens=None):
     _REAL_PROMPT_TOKENS.pop(session, None)
     stats.update({"session": session, "budget_tokens": budget,
                   "transcript_room": room,
+                  "summarizer": meta.get("model"),
                   "tokens_after": sum(context_engine.count_tokens(m.get("content", ""))
                                       for m in msgs)})
     publish("context.compact", **stats)

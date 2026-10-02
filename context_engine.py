@@ -33,7 +33,8 @@ def _msgs_tokens(msgs):
     return sum(count_tokens(m.get("content", "")) for m in msgs)
 
 
-def compact(messages, budget_tokens, keep_recent=DEFAULT_KEEP_RECENT, summarizer=None):
+def compact(messages, budget_tokens, keep_recent=DEFAULT_KEEP_RECENT, summarizer=None,
+            force=False):
     """Compact a transcript under a token budget.
 
     Returns (msgs, stats). Keeps the newest `keep_recent` messages verbatim;
@@ -44,13 +45,17 @@ def compact(messages, budget_tokens, keep_recent=DEFAULT_KEEP_RECENT, summarizer
     are summarized BY THE MODEL (a faithful prose summary) instead of the local
     extractive merge. A None/empty return (router down, timeout) falls back to the
     extractive path, so compaction can never stall a turn.
+
+    JAG-110: `force=True` skips the "already under budget" early return, so the
+    MANUAL "compact now" action always merges the older turns even on a short
+    transcript (previously it silently did nothing and never touched the model).
     """
     stats = {"input_messages": len(messages),
              "input_tokens": _msgs_tokens(messages),
              "compacted": 0, "kept": 0, "dropped": 0, "summary": None}
     if not messages:
         return [], stats
-    if stats["input_tokens"] <= budget_tokens:
+    if not force and stats["input_tokens"] <= budget_tokens:
         stats["kept"] = len(messages)
         return list(messages), stats
     cut = max(0, len(messages) - keep_recent)

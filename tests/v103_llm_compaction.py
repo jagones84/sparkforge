@@ -66,7 +66,7 @@ check("L3 a raising summarizer falls back to extractive",
       st3["summary"] == "extractive", "summary=%s" % st3["summary"])
 
 # --- L4: the server wires the LLM summarizer into compact_session ------------
-server._summarize_with_llm = lambda messages, model=None: "SERVER-LLM-SUMMARY"
+server._summarize_with_llm = lambda messages, model=None, meta=None: "SERVER-LLM-SUMMARY"
 sess = server.get_or_create_session("wire")
 for m in transcript(20):
     server.append_message(sess, m["role"], m["content"])
