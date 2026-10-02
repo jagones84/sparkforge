@@ -3388,13 +3388,30 @@ def main():
     try:
         import providers
         providers.load_env()
+    except Exception:  # noqa: BLE001 — provider metadata is optional
+        pass
+    # JAG-123: CLAIM THE PORT FIRST, before any side effect. A second instance
+    # (systemd auto-restart after a manual/orphan server already owns :8790) used
+    # to run _ensure_dirs + providers.warm + backfill_session_workspaces and
+    # publish("service.start") — writing to events.db and rewriting every session
+    # every RestartSec — and ONLY THEN failed to bind. That crash looped 15k+
+    # times, flooding the event feed and contending on SQLite with the live
+    # server (chat "si blocca"). Failing before any write makes a duplicate start
+    # a silent, harmless no-op.
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), Handler)
+    except OSError as e:
+        print("SparkForge: cannot bind %s:%d (%s) — another instance is already "
+              "serving. Exiting without side effects." % (args.host, args.port, e))
+        raise SystemExit(3)
+    server.host, server.port = args.host, args.port
+    try:
+        import providers
         providers.warm()  # JAG-72: fetch remote model windows off the request path
     except Exception:  # noqa: BLE001 — provider metadata is optional
         pass
     backfill_session_workspaces()  # JAG-117: every session gets a folder
     publish("service.start", host=args.host, port=args.port, router=ROUTER_BASE)
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    server.host, server.port = args.host, args.port
     print("SparkForge v%s on http://%s:%d  (router: %s)" % (
         VERSION, args.host, args.port, ROUTER_BASE))
     server.serve_forever()
