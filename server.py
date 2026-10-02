@@ -1876,6 +1876,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
 
     work_steps = 0
     iters = 0
+    used_tools = []
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
         # JAG-127b: inject any steering message typed while this turn was running.
@@ -1934,6 +1935,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 on_delta("think", _th + "\n")
             tool, args = tc
             work_steps += 1
+            used_tools.append(tool)
             on_event("tool.call", session=sess["id"], tool=tool, args=args, inline=True)
             try:
                 # JAG-80: a `required` tool must never freeze the turn. We wait a
@@ -2101,6 +2103,18 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                            meta=meta)
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
             model=model, think_chars=len(think), error=bool(meta.get("error")))
+    # JAG-128B: nudge di fine turno — quando il turno ha usato parecchi tool (o e'
+    # andato in errore), invita a valutare cosa persistere (memoria libera oppure
+    # una proposta di regola via il tool `improve`). Mai bloccante: qualunque
+    # eccezione viene inghiottita per non rompere il turno.
+    try:
+        import improve as improve_mod
+        if improve_mod.should_nudge(used_tools=len(used_tools or []),
+                                    errored=bool(meta.get("error"))):
+            publish("improve.nudge", session=sess["id"],
+                    hint="valuta cosa persistere: memoria (libera) o proposta regole (improve tool)")
+    except Exception:  # noqa: BLE001 — il nudge non deve mai rompere un turno
+        pass
     # JAG-127f: task-completion WARNING (user's choice: only a notice, no forced
     # continuation). If the persistent task graph still has OPEN nodes when the
     # model ends the turn, surface it so the UI can offer a "continua" button.
@@ -3166,6 +3180,10 @@ class Handler(BaseHTTPRequestHandler):
             remaining = ["%s: %s" % (t["status"], t["title"]) for t in tasks.get("tasks", [])
                          if t.get("status") != "done"]
             return self._send(200, {**tasks, "remaining": remaining})
+        if path == "/api/improve":
+            # JAG-128B: elenco proposte di self-improvement per la card WebUI.
+            import improve as improve_mod
+            return self._send(200, {"proposals": improve_mod.list_proposals()})
         if path == "/api/sessions":
             return self._send(200, {"sessions": list_sessions()})
         if path == "/api/sessions/new":
@@ -3333,6 +3351,13 @@ class Handler(BaseHTTPRequestHandler):
             depth = push_steer(sid, text)
             publish("chat.steer", session=sid, text=text, queued=depth)
             return self._send(200, {"ok": True, "queued": depth})
+        if path == "/api/improve":
+            # JAG-128B: approva/rifiuta una proposta di self-improvement.
+            import improve as improve_mod
+            pid = body.get("id") or qs.get("id", "")
+            decision = body.get("decision") or qs.get("decision", "")
+            res = improve_mod.decide(pid, decision)
+            return self._send(200 if res.get("ok") else 400, res)
         if path == "/api/chat/stream":
             # a JSON body over query params). Same SSE contract.
             message = body.get("message") or qs.get("message", "")

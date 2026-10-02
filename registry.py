@@ -145,6 +145,16 @@ TOOL_SCHEMAS = {
         "required": [],
         "subject": "action",
     },
+    "improve": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["propose"]},
+            "scope": {"type": "string", "enum": ["skill", "project", "global"]},
+            "content": {"type": "string"},
+            "reason": {"type": "string"},
+        },
+        "required": ["action", "scope", "content"],
+    },
     "web": {
         "description": ("Public-internet access (JAG-83). action=search runs a web "
                         "search and returns titles/urls/snippets (Tavily or Brave "

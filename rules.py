@@ -318,6 +318,19 @@ def save(scope, content, ws=None):
     return {"ok": True, "scope": scope, "path": path, "chars": len(content or "")}
 
 
+def append(scope, content, ws=None):
+    """Aggiunge testo alle regole (global|project) in modo additivo."""
+    path = global_rules_path() if scope == "global" else project_rules_path(ws or get_workspace())
+    cur = ""
+    try:
+        with open(path, encoding="utf-8") as f:
+            cur = f.read()
+    except OSError:
+        cur = ""
+    sep = "" if cur.endswith("\n") or not cur else "\n"
+    return save(scope, cur + sep + (content or ""), ws=ws)
+
+
 def status(ws=None):
     """UI-friendly snapshot: paths, existence and sizes for both scopes."""
     c = collect(ws)
