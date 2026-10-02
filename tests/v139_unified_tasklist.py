@@ -23,6 +23,10 @@ web = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8", errors="
 check("B3 WebUI has ONE task-list section",
       web.count("TASK LIST") >= 1 and "RUN GRAPH" not in web, "")
 
+check("B4 chat shows plan.continuing", "plan.continuing" in web, "")
+check("B5 chat shows plan.stopped", "plan.stopped" in web, "")
+check("B6 nested checklist renderer", "function taskTree" in web or "parent" in web, "")
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)

@@ -889,6 +889,8 @@ function send(text) {
   es.addEventListener("approval.request", e => { approvalCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); who("user", "🎯 steer: " + (d.text || "")); });
   es.addEventListener("plan.incomplete", e => planIncomplete(JSON.parse(e.data)));
+  es.addEventListener("plan.continuing", e => { planContinuing(JSON.parse(e.data)); });
+  es.addEventListener("plan.stopped", e => planStopped(JSON.parse(e.data)));
   es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
   es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); flushQueue(); });
@@ -1406,6 +1408,28 @@ function planIncomplete(d) {
   go.onclick = () => { go.disabled = true; go.textContent = "▶ ripreso"; send("Continua: completa i passi aperti del piano."); };
   row.appendChild(go); bub.appendChild(row);
   card.appendChild(bub); $("log").appendChild(card); scroll();
+}
+/* JAG-129B: il piano puo' proseguire da solo (round multipli) o fermarsi per
+ * un motivo esplicito; la checklist viene renderizzata annidata (figli sotto
+ * il padre, stile TRAE). */
+function planContinuing(d) {
+  who("ai", `🔁 continuo da solo — ${d.open}/${d.total} passi aperti (giro ${d.round})`);
+}
+function planStopped(d) {
+  const map = { goal_reached: "✅ goal raggiunto", no_progress: "⚠ nessun progresso",
+                budget: "⏱ budget esaurito", blocked: "⛔ bloccato",
+                user_stop: "⏹ fermato da te" };
+  who("ai", `${map[d.reason] || d.reason} — ${d.open} aperti / ${d.total} · ${d.rounds} giri · ${d.duration_s}s`);
+}
+function taskTree(nodes) {
+  // checklist annidata: i figli (parent) sono indentati sotto il padre (stile TRAE).
+  const byParent = {};
+  nodes.forEach(n => { const p = n.parent || "_root"; (byParent[p] ||= []).push(n); });
+  const mark = { todo: "☐", doing: "◐", done: "☑", blocked: "⛔", cancelled: "⊘" };
+  const walk = (p, depth) => (byParent[p] || []).map(n =>
+    `<div style="margin-left:${depth * 14}px">${mark[n.status] || "☐"} ${esc(n.label)}</div>`
+    + walk(n.id, depth + 1)).join("");
+  return walk("_root", 0);
 }
 /* JAG-128B: la proposta di self-improvement arriva come evento SSE e resta
  * azionabile dalla chat (accetta/rifiuta -> POST /api/improve). */
