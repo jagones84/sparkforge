@@ -27,13 +27,19 @@ def start(key, model=None):
     return rec
 
 
-def finish(key, outcome="done", stop_reason=None, iterations=0, steps=0, tokens=0):
+def finish(key, outcome="done", stop_reason=None, iterations=0, steps=0, tokens=0,
+           prompt_tokens=0, completion_tokens=0, model=None):
     rec = get(key)
     if not rec:
         rec = start(key)
     now = round(time.time(), 3)
     rec.update({"ended": now, "iterations": int(iterations), "steps": int(steps),
-                "tokens": int(tokens), "outcome": outcome, "stop_reason": stop_reason})
+                "tokens": int(tokens),
+                "prompt_tokens": int(prompt_tokens),
+                "completion_tokens": int(completion_tokens),
+                "outcome": outcome, "stop_reason": stop_reason})
+    if model:
+        rec["model"] = model
     started = _START.get(key) or rec.get("started") or now
     rec["duration_s"] = round(now - float(started), 1)
     _write(key, rec)

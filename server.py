@@ -2152,11 +2152,14 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     reply = append_message(sess, "assistant", content, reasoning=think.strip() or None,
                            meta=meta)
     try:
-        runmetrics.finish(sess["id"], outcome=("error" if meta.get("error") else "done"),
+        runmetrics.finish(sess["id"], outcome="done",
                           stop_reason=_kg_stop_reason, iterations=_kg_rounds,
                           steps=work_steps,
+                          prompt_tokens=int(chat_usage.get("prompt_tokens") or 0),
+                          completion_tokens=int(chat_usage.get("completion_tokens") or 0),
                           tokens=int(chat_usage.get("prompt_tokens") or 0)
-                                 + int(chat_usage.get("completion_tokens") or 0))
+                                 + int(chat_usage.get("completion_tokens") or 0),
+                          model=model)
         publish("run.metrics", session=sess["id"], metrics=runmetrics.get(sess["id"]))
     except Exception:  # noqa: BLE001 — le metriche non devono mai rompere un turno
         pass
@@ -2783,6 +2786,14 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
             # persist the explicit assistant error turn, then tell the client.
             ensure_reply_persisted(sess, since, error=e, model=target)
             publish("chat.error", session=sess["id"], error=str(e))
+            try:
+                import runmetrics
+                runmetrics.finish(sess["id"], outcome="error", stop_reason="error",
+                                  model=target)
+                publish("run.metrics", session=sess["id"],
+                        metrics=runmetrics.get(sess["id"]))
+            except Exception:  # noqa: BLE001
+                pass
             q.put("event: error\ndata: %s\n\n" % json.dumps(
                 {"error": str(e), "session": sess["id"], "stored": True},
                 ensure_ascii=False))
