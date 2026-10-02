@@ -58,10 +58,12 @@ check("T2 tools.py handles core/set_core",
       'action in ("core"' in tools and 'action in ("set_core"' in tools, "")
 
 srv = read(os.path.join(REPO, "server.py"))
-check("P1 the prompt injects a Core memory block", "Core memory (always visible" in srv, "")
+prompt_src = read(os.path.join(REPO, "prompt.py"))
+check("P1 the prompt injects a Core memory block",
+      "Core memory (always visible" in (srv + prompt_src), "")
 check("P2 MEMORY_POLICY mentions the core block",
       "set_core" in srv and "CORE (always visible)" in srv, "")
-check("P3 the core text is read at prompt build", "core_read()" in srv, "")
+check("P3 the core text is read at prompt build", "core_read()" in (srv + prompt_src), "")
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))

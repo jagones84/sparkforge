@@ -6,9 +6,9 @@ concatenated broadest -> most specific (project wins), then injected into the
 system prompt of both chat and the agent loop.
 
   * GLOBAL (user, all sessions):  ~/.config/sparkforge/RULES.md
-                                  (fallback: ~/.config/sparkforge/AGENTS.md)
+                                  (also loaded, additive: ~/.config/sparkforge/AGENTS.md)
   * PROJECT (the selected workspace): <ws>/.sparkforge/RULES.md + <ws>/.sparkforge/rules/*.md
-                                  (fallback: <ws>/AGENTS.md)
+                                  (also loaded, additive: <ws>/AGENTS.md)
 
 The workspace is selectable and persisted in ~/.config/sparkforge/config.json.
 No secret ever belongs here.
@@ -181,7 +181,12 @@ def _read(path):
 
 
 def _collect_scope(native, agents, extra_dir=None):
-    """(text, files): prefer the native RULES.md, else the AGENTS.md fallback."""
+    """(text, files): the native RULES.md PLUS the AGENTS.md addendum.
+
+    The scope's AGENTS.md is ADDITIVE, not a mere fallback: when RULES.md exists
+    its text is composed first and the AGENTS.md content is appended after it, so
+    BOTH instruction sources reach the model (JAG-128A).
+    """
     files, parts = [], []
     if os.path.isfile(native):
         files.append(native)
@@ -191,9 +196,11 @@ def _collect_scope(native, agents, extra_dir=None):
                 if fn.endswith(".md"):
                     files.append(os.path.join(extra_dir, fn))
                     parts.append(_read(os.path.join(extra_dir, fn)))
-    elif os.path.isfile(agents):
-        files.append(agents)
-        parts.append(_read(agents))
+    if os.path.isfile(agents) and agents not in files:
+        agents_text = _read(agents)
+        if agents_text.strip():
+            files.append(agents)
+            parts.append(agents_text)
     text = "\n\n".join(p.strip() for p in parts if p and p.strip())
     return text, files
 
@@ -256,15 +263,16 @@ def rules_prompt_block(max_bytes=None, ws=None):
 
     Unlike `rules_block` (empty when no rules), this always renders the header
     with the absolute paths of the global + project rule files and their
-    AGENTS.md fallbacks, so the agent knows WHERE its instructions live and can
-    read or edit them with the fs tools. The rules text, when present, follows.
+    AGENTS.md additions (also loaded, additive), so the agent knows WHERE its
+    instructions live and can read or edit them with the fs tools. The rules
+    text, when present, follows.
     """
     cap = max_bytes or MAX_BYTES
     c = collect(ws)
     pp = prompt_paths(c["workspace"])
 
     def _scope(title, sc, fallback, extra=None):
-        head = ("### %s\n- file: %s\n- AGENTS.md fallback: %s\n"
+        head = ("### %s\n- file: %s\n- AGENTS.md (also loaded, additive): %s\n"
                 % (title, sc["path"], fallback))
         if extra:
             head += "- extra: %s/*.md\n" % extra
@@ -274,10 +282,11 @@ def rules_prompt_block(max_bytes=None, ws=None):
 
     intro = ("## Rules on disk (global + project)\n"
              "Your standing rules are real files; read or edit them with the fs "
-             "tools. Global rules apply to every project; project rules override "
-             "them on conflict.\n"
-             "- GLOBAL file: %s   (AGENTS.md fallback: %s)\n"
-             "- PROJECT file: %s   (AGENTS.md fallback: %s)\n"
+             "tools. Global rules apply to every project; project rules win on "
+             "conflict. Within each scope RULES.md and AGENTS.md are BOTH loaded "
+             "(additive, not a fallback).\n"
+             "- GLOBAL file: %s   (AGENTS.md also loaded, additive: %s)\n"
+             "- PROJECT file: %s   (AGENTS.md also loaded, additive: %s)\n"
              "- PROJECT extra: %s/*.md\n"
              % (pp["global_rules"], pp["global_fallback"],
                 pp["project_rules"], pp["project_fallback"], pp["project_extra_dir"]))
