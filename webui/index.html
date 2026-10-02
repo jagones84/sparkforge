@@ -15,7 +15,13 @@
     /* v0.8 redesign tokens */
     --accent: #8b7bf0; --you: #8fb6ff; --info: #5ac8fa;
     --bg-2: #121722; --bg-3: #161b25; --line-2: #1e2431; --ink: #c3cad6; --muted: #7b8494;
+    /* JAG-127d: native controls (select popups, etc.) follow the dark theme —
+     * without this the <select> dropdown rendered with a WHITE background. */
+    color-scheme: dark;
   }
+  /* the queue/steer picker next to "send" — dark popup, no white flash */
+  #qmode { color-scheme: dark; }
+  #qmode option { background: #121722; color: #dfe4ff; }
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
   /* JAG-127b: scrollbars themed to the blue/purple GUI (the native blue-grey
    * default clashed). Thin, accent-tinted, transparent track. */
