@@ -467,6 +467,8 @@ def _memory(args, run_id):
     action=store  {content, kind?}            → append-only record
     action=recall {query, kind?, limit?}      → semantic + keyword search
     action=recent {kind?, limit?}             → newest first
+    action=core   {}                          → read the always-visible CORE block
+    action=set_core {content}                 → rewrite the CORE block (JAG-127f)
 
     Closes a real gap: the store existed and was auto-injected, but the agent had
     NO tool to deliberately remember or recall anything.
@@ -474,6 +476,20 @@ def _memory(args, run_id):
     import memory as mem
     action = (args.get("action") or "recall").strip().lower()
     limit = int(args.get("limit") or (10 if action == "recent" else 5))
+    if action in ("core", "core_read", "read_core"):
+        txt = mem.core_read().strip()
+        return {"ok": True, "count": 1 if txt else 0,
+                "stdout": txt or "(core memory is empty)", "backend": "host",
+                "sandboxed": False}
+    if action in ("set_core", "core_write", "write_core"):
+        content = (args.get("content") or "").strip()
+        if not content:
+            return {"ok": False, "error": "content required for action=set_core",
+                    "backend": "host", "sandboxed": False}
+        res = mem.core_write(content)
+        return {"ok": True, "count": 1,
+                "stdout": "core memory updated (%d chars)" % res.get("chars", len(content)),
+                "backend": "host", "sandboxed": False}
     if action == "store":
         content = (args.get("content") or "").strip()
         if not content:

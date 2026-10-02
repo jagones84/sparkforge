@@ -52,6 +52,35 @@ def _path(kind):
     return p
 
 
+# ------------------------------------------------------------- core block ----
+# JAG-127f: an always-visible, agent-editable "core memory" block (the Letta /
+# MemGPT pattern): durable facts the model rewrites itself, injected into every
+# system prompt. Unlike the similarity-retrieved notes above, this is stable and
+# the agent owns it (memory{action:'core'|'set_core'}).
+CORE_PATH = os.path.join(DATA_DIR, "core.md")
+CORE_MAX = int(os.environ.get("SPARKFORGE_CORE_MAX", "4000"))
+
+
+def core_read():
+    """The CORE memory block (empty string when never written)."""
+    try:
+        with open(CORE_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def core_write(content):
+    """Replace the CORE memory block (capped at CORE_MAX chars). Returns {ok, chars}."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    text = str(content or "")[:CORE_MAX]
+    tmp = CORE_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, CORE_PATH)
+    return {"ok": True, "chars": len(text)}
+
+
 def store(kind, content, **meta):
     """Write one append-only record.
 

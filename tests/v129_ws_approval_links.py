@@ -53,6 +53,15 @@ check("W6 sessions/new rejects a bad explicit folder",
 check("W7 chat passes the workspace to the gate", "_chat_workspace(sess)" in srv, "")
 
 # ---- A: outside-workspace escalation ---------------------------------------
+# JAG-127f: force the DEFAULT policy for these assertions (a user overlay with
+# mode=full would legitimately change them).
+import json as _json
+_real_load = registry.load_config
+_cfg = _json.loads(_json.dumps(_real_load()))
+_cfg.setdefault("approvals", {})
+_cfg["approvals"]["mode"] = "normal"
+_cfg["approvals"]["outside_workspace"] = "required"
+registry.load_config = lambda reload=False: _cfg
 infile = os.path.join(WS, "a.md")
 outfile = os.path.join(OUT, "b.md")
 check("A1 fs.read INSIDE stays auto",
@@ -77,6 +86,7 @@ api = read(os.path.join(REPO, "api_v02.py"))
 check("A6 gated_call accepts workspace", "def gated_call(tool, args, run_id=None, wait=True, by=\"api\", timeout=None, workspace=None)"
       in api, "")
 check("A7 tool_action accepts workspace", "def tool_action(st, tool, args, on_event, workspace=None)" in api, "")
+registry.load_config = _real_load
 
 # ---- U: WebUI --------------------------------------------------------------
 html = read(os.path.join(REPO, "webui", "index.html"))

@@ -322,6 +322,11 @@
   #imgView[hidden] { display: none; }
   #imgView img { max-width: 88vw; max-height: 74vh; display: block; border-radius: 8px; }
   #imgView .cap { font-size: 11px; color: var(--dim); word-break: break-all; }
+  /* JAG-127f: warning banner when the plan still has open steps at end of turn */
+  .planwarn { border: 1px solid rgba(251,191,36,.45); background: rgba(251,191,36,.10);
+    border-radius: 10px; padding: 8px 10px; }
+  .planwarn ul { margin: 6px 0 6px 18px; padding: 0; }
+  .planwarn li { font-size: 12px; }
   /* JAG-127: a produced readable file renders as a link in the reply */
   a.filelink, a.weblink, a.imglink { color: var(--accent); text-decoration: underline; cursor: pointer; }
   a.filelink:hover, a.weblink:hover, a.imglink:hover { color: var(--txt); }
@@ -881,6 +886,7 @@ function send(text) {
   // open) — otherwise a `required` tool looked like a silent 30s freeze.
   es.addEventListener("approval.request", e => { approvalCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); who("user", "🎯 steer: " + (d.text || "")); });
+  es.addEventListener("plan.incomplete", e => planIncomplete(JSON.parse(e.data)));
   es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
   es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); flushQueue(); });
 }
@@ -1385,6 +1391,23 @@ function approvalCard(d) {
   bub.appendChild(title); bub.appendChild(sum); bub.appendChild(row);
   card.appendChild(whoEl); card.appendChild(bub);
   $("log").appendChild(card); scroll(); return card;
+}
+/* JAG-127f: at end of turn, if the persistent plan still has open steps, warn
+ * (no auto-continue — the user resumes with the button). */
+function planIncomplete(d) {
+  const card = document.createElement("div");
+  card.className = "msg ai";
+  const bub = document.createElement("div"); bub.className = "bubble planwarn";
+  const items = (d.items || []).map(x => "<li>" + esc(x) + "</li>").join("");
+  const head = document.createElement("div");
+  head.innerHTML = `⚠ <b>Plan not finished</b> — ${d.open}/${d.total} step(s) still open:`;
+  bub.appendChild(head);
+  if (items) { const ul = document.createElement("ul"); ul.innerHTML = items; bub.appendChild(ul); }
+  const row = document.createElement("div"); row.style.cssText = "display:flex;gap:6px;margin-top:4px";
+  const go = document.createElement("button"); go.className = "ghost"; go.textContent = "▶ continua";
+  go.onclick = () => { go.disabled = true; go.textContent = "▶ ripreso"; send("Continua: completa i passi aperti del piano."); };
+  row.appendChild(go); bub.appendChild(row);
+  card.appendChild(bub); $("log").appendChild(card); scroll();
 }
 
 /* ---- agent loop (tool-enabled, SSE) ---- */

@@ -1125,6 +1125,11 @@ MEMORY_POLICY = (
     "- to RECALL: call memory{action:'recall', query:'...'} whenever the user "
     "refers to earlier work or you are missing context; memory{action:'recent'} "
     "shows the newest notes.\n"
+    "- CORE (always visible): keep a compact, living CORE block of durable facts "
+    "— user preferences, project conventions, key decisions. Read it with "
+    "memory{action:'core'} and REWRITE it with memory{action:'set_core', "
+    "content:'...'} whenever it changes; it is injected into every prompt, so "
+    "keep it short and current.\n"
     "Never store ephemeral chatter, and never store secrets."
 )
 
@@ -2095,6 +2100,20 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                            meta=meta)
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
             model=model, think_chars=len(think), error=bool(meta.get("error")))
+    # JAG-127f: task-completion WARNING (user's choice: only a notice, no forced
+    # continuation). If the persistent task graph still has OPEN nodes when the
+    # model ends the turn, surface it so the UI can offer a "continua" button.
+    # No extra LLM call and no loop here — the turn ends normally.
+    try:
+        _g = taskgraph.load(sess["id"])
+        _nodes = (_g or {}).get("nodes", [])
+        _open = [n for n in _nodes if n.get("status") not in ("done", "cancelled")]
+        if _open:
+            publish("plan.incomplete", session=sess["id"], open=len(_open),
+                    total=len(_nodes),
+                    items=[str(n.get("label", "")) for n in _open][:12])
+    except Exception:  # noqa: BLE001 — a warning must never break the turn
+        pass
     try:  # JAG-69: deterministic Stop hooks at the end of the turn
         import hooks
         hooks.run("Stop", run_id=sess["id"], observation=content)
@@ -2821,10 +2840,20 @@ def _system_prompt(sess, tool_ctx=None):
     except Exception:  # noqa: BLE001 — lessons must never break the prompt
         lesson_block = ""
     rb = rules_context(sess)  # JAG-115: honour the session's own workspace
+    # JAG-127f: the always-visible CORE memory block (agent-owned, editable).
+    core_block = ""
+    try:
+        import memory as _memory_mod
+        _core = _memory_mod.core_read().strip()
+        if _core:
+            core_block = ("\n\n## Core memory (always visible — edit with "
+                          "memory{action:'set_core'})\n" + _core)
+    except Exception:  # noqa: BLE001 — context must never break
+        core_block = ""
     return (SYSTEM_PROMPT + "\n\n" + self_summary() + tool_ctx
             + "\n\n" + RULES_POLICY + ("\n" + rb if rb else "")
             + "\n\n" + SKILLS_POLICY + ("\n" + sk_block if sk_block else "")
-            + "\n\n" + MEMORY_POLICY + lesson_block
+            + "\n\n" + MEMORY_POLICY + lesson_block + core_block
             + "\n\nHarness state (your persistent task list):\n"
             + context_summary(session_id=(sess or {}).get("id")))
 

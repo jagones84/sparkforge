@@ -128,11 +128,14 @@ TOOL_SCHEMAS = {
         "description": ("Your persistent memory across sessions. action=store saves "
                         "a durable fact/preference/decision; action=recall searches "
                         "past memories by meaning; action=recent lists the newest. "
+                        "action=core reads / action=set_core rewrites the always-"
+                        "visible CORE block (durable facts you keep current). "
                         "Relevant memories are ALSO auto-injected into your prompt "
                         "each turn, so store things worth remembering later."),
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["store", "recall", "recent"],
+            "action": {"type": "string",
+                       "enum": ["store", "recall", "recent", "core", "set_core"],
                        "default": "recall"},
             "content": {"type": "string", "description": "text to save (action=store)"},
             "query": {"type": "string", "description": "what to look for (action=recall)"},

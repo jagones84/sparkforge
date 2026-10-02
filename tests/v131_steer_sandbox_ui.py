@@ -39,6 +39,15 @@ sandbox_root = registry.workspace_dir()
 sbx = os.path.join(sandbox_root, "1234abcd", "proj", "pyproject.toml")
 ws = "/home/jagones/Repositories/TESTS/SparkForge_tests"
 
+# JAG-127f: these checks assert the DEFAULT policy — force it, so a user-chosen
+# overlay (e.g. mode=full) cannot make them red for the wrong reason.
+import json as _json
+_real_load = registry.load_config
+_cfg = _json.loads(_json.dumps(_real_load()))
+_cfg.setdefault("approvals", {})
+_cfg["approvals"]["mode"] = "normal"
+_cfg["approvals"]["outside_workspace"] = "required"
+registry.load_config = lambda reload=False: _cfg
 check("S1 sandbox path is NOT escalated (auto respected)",
       registry.classify("fs.read", {"path": sbx}, workspace=ws)[0] == "auto",
       str(registry.classify("fs.read", {"path": sbx}, workspace=ws)))
@@ -53,6 +62,7 @@ check("S3 a path outside BOTH ws and sandbox is required",
 check("S4 inside the session ws stays auto",
       registry.classify("fs.read", {"path": os.path.join(ws, "README.md")}, workspace=ws)[0] == "auto",
       "")
+registry.load_config = _real_load
 
 # ---- steering (source contract; import guarded) ----------------------------
 srv = read(os.path.join(REPO, "server.py"))
