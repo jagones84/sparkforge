@@ -16,6 +16,7 @@ No secret ever belongs here.
 
 import json
 import os
+import re
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 MAX_BYTES = int(os.environ.get("SPARKFORGE_RULES_MAX", str(32 * 1024)))
@@ -96,9 +97,38 @@ def remember_workspace(path):
     return {"ok": True, "last_workspace": real}
 
 
+def _win_to_posix(path):
+    """Translate a Windows path copied from Explorer into the DGX path.
+
+    The Windows client drive `Z:` maps to the DGX home (project rule), so
+    `Z:\\Repositories\\x` -> `~/Repositories/x`. A bare `\\home\\...` (no drive)
+    is also accepted. Anything unrecognised is returned unchanged, so a normal
+    Linux path is never altered.
+    """
+    s = (path or "").strip().strip('"').strip("'")
+    if not s:
+        return s
+    m = re.match(r"^([A-Za-z]):[\\/](.*)$", s)
+    if m:
+        drive, rest = m.group(1).upper(), m.group(2).replace("\\", "/")
+        if drive == "Z":
+            return os.path.join(os.path.expanduser("~"), rest)
+        return s
+    if s.startswith("\\"):
+        cand = s.replace("\\", "/")
+        if cand.startswith("/"):
+            return cand
+    return s
+
+
 def check_dir(path):
-    """Normalise + validate an existing directory; returns the abs path or None."""
-    raw = (path or "").strip()
+    """Normalise + validate an existing directory; returns the abs path or None.
+
+    Windows paths copied from the client are translated first (`Z:` = DGX home),
+    so a `Z:\\Repositories\\...` folder resolves to its real Linux path instead
+    of being silently rejected.
+    """
+    raw = _win_to_posix(path).strip()
     if not raw:
         return None
     p = os.path.abspath(os.path.expanduser(raw))

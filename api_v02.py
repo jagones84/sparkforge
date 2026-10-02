@@ -147,11 +147,12 @@ def checkpoint(st):
 
 # -------------------------------------------------------------- tool gate ---
 
-def tool_action(st, tool, args, on_event):
+def tool_action(st, tool, args, on_event, workspace=None):
     """Gate then execute one tool action inside a run.
 
     Returns (observation_text, meta) where meta carries the evidence:
     approval id/status/decided_by, sandbox backend, exit code, stdout/stderr.
+    `workspace` (JAG-127) makes a file op outside the session folder require approval.
     """
     run_id = st.id if st else None
     args = args or {}
@@ -161,7 +162,7 @@ def tool_action(st, tool, args, on_event):
         _publish("tool.blocked", run=run_id, tool=tool, reason="unknown tool")
         return obs, {"tool": tool, "blocked": "unknown"}
 
-    decision, reason = registry.classify(tool, args)
+    decision, reason = registry.classify(tool, args, workspace)
     if decision in ("disabled", "denied"):
         _publish("tool.blocked", run=run_id, tool=tool, args=args, reason=reason)
         on_event("tool.blocked", run=run_id, tool=tool, reason=reason)
@@ -213,13 +214,14 @@ def tool_action(st, tool, args, on_event):
     return toolmod.observation(res), meta
 
 
-def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None):
+def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None, workspace=None):
     """One-shot gated tool call used by POST /api/tools/call and the chat loop.
 
     `timeout` (JAG-80) caps how long a `required` tool waits for a human decision.
     The chat loop passes a short cap so a turn can never freeze for the full
     approvals.timeout_secs (300s): the request is recorded, the app shows an
     inline Approve/Deny card, and if nobody decides in time the model continues.
+    `workspace` (JAG-127) escalates file ops outside the session folder to required.
     """
     spec = registry.tool_spec(tool)
     if spec is None:
@@ -227,7 +229,7 @@ def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None):
     if not spec["enabled"]:
         _publish("tool.blocked", run=run_id, tool=tool, reason="not enabled")
         return {"status": "blocked", "reason": "tool %r is disabled (allowlist)" % tool}
-    decision, reason = registry.classify(tool, args or {})
+    decision, reason = registry.classify(tool, args or {}, workspace)
     if decision in ("disabled", "denied"):
         _publish("tool.blocked", run=run_id, tool=tool, args=args, reason=reason)
         return {"status": "blocked", "reason": reason}
@@ -433,7 +435,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                 checkpoint(st)
                 entry = {"i": i + 1, "thought": thought, "action": "tool",
                          "tool": tool, "args": args}
-                obs, meta = tool_action(st, tool, args, on_event)
+                obs, meta = tool_action(st, tool, args, on_event, workspace=workspace)
                 entry["observation"] = obs
                 entry["tool_result"] = meta
             else:
@@ -791,6 +793,10 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, fs_list(qs))
         if path == "/api/fs/read":  # JAG-124: read a text file into the editor
             return _r(handler, 200, fs_read(qs))
+        if path == "/api/edits":  # JAG-127: change summary for the run/session
+            return _r(handler, 200, edits_summary(qs))
+        if path == "/api/edits/diff":  # JAG-127: side-by-side rows for one file
+            return _r(handler, 200, edits_diff(qs))
 
         return False
 
@@ -798,15 +804,24 @@ def handle(handler, method, path, qs, body):
         # v0.2 core POST routes
         if path == "/api/fs/write":  # JAG-124: save the editor buffer to disk
             return _r(handler, 200, fs_write(body))
+        if path == "/api/edits/undo":  # JAG-127: restore files to their pre-image
+            return _r(handler, 200, edits_undo(body))
         if path == "/api/tools":
             return _r(handler, 200, update_policy(body))
         if path == "/api/tools/call":
             tool = body.get("tool")
             if not tool:
                 return _r(handler, 400, {"error": "tool required"})
+            # JAG-127: resolve the session workspace so a file op outside it is gated.
+            _lazy('rules')
+            _sid = body.get("session") or body.get("run_id")
+            _ws = _RULES.resolve_workspace(_srv().load_session(_sid) if _sid else None)
+            # Journal file edits under the session id (chat does the same), so the
+            # UI's diff/undo works for tool calls made from the API too.
             return _r(handler, 200, gated_call(tool, body.get("args") or {},
-                                               body.get("run_id"), body.get("wait", True),
-                                               body.get("by", "api")))
+                                               body.get("run_id") or body.get("session"),
+                                               body.get("wait", True),
+                                               body.get("by", "api"), workspace=_ws))
         if path == "/api/tools/cancel":
             job = body.get("job") or body.get("run_id")
             if not job:
@@ -1259,6 +1274,34 @@ def fs_write(body) -> dict:
         return {"error": str(e)}
     _publish("fs.write", path=p, bytes=len(raw))
     return {"ok": True, "path": p, "bytes": len(raw)}
+
+
+# ---------------------------------------------------------------------------
+# JAG-127: file-edit journal — IDE-style change summary, diff and undo.
+# Keyed by the run/session id (chat passes the session id). Backed by edits.py.
+# ---------------------------------------------------------------------------
+def edits_summary(qs=None) -> dict:
+    """GET /api/edits?session= — per-file +N/-M summary of the changes made."""
+    import edits as edits_mod
+    q = qs or {}
+    return edits_mod.summary(q.get("session") or q.get("key") or "default")
+
+
+def edits_diff(qs=None) -> dict:
+    """GET /api/edits/diff?session=&path= — aligned before/after rows for one file."""
+    import edits as edits_mod
+    q = qs or {}
+    path = q.get("path")
+    if not path:
+        return {"error": "path required"}
+    return edits_mod.diff(q.get("session") or q.get("key") or "default", path)
+
+
+def edits_undo(body) -> dict:
+    """POST /api/edits/undo {session, path?} — restore files to their pre-image."""
+    import edits as edits_mod
+    b = body or {}
+    return edits_mod.undo(b.get("session") or b.get("key") or "default", b.get("path"))
 
 
 def _session_ws(session_id):

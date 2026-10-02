@@ -435,9 +435,22 @@ def _match(patterns, text):
     return None
 
 
-def classify(tool, args):
+def _under(path, root):
+    """True when `path` is inside `root` (both realpath'd)."""
+    try:
+        p = os.path.realpath(path)
+        r = os.path.realpath(root)
+        return p == r or p.startswith(r + os.sep)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def classify(tool, args, workspace=None):
     """Approval decision for a concrete action.
 
+    JAG-127: when a `workspace` is given, a file op (fs.read/write/edit) targeting
+    a path OUTSIDE it is always `required` — reading or writing outside the folder
+    the user opened must be confirmed, even if the tool policy is 'auto'.
     Returns (decision, reason) with decision in:
       disabled | denied | auto | required
     """
@@ -452,6 +465,10 @@ def classify(tool, args):
         return "denied", "matches hard-deny pattern %r" % hit
     if spec["approval"] == "denied":
         return "denied", "tool policy is 'denied'"
+    if workspace and tool in ("fs.read", "fs.write", "fs.edit"):
+        p, _err = resolve_path(str((args or {}).get("path", "")), spec["roots"])
+        if p and not _under(p, workspace):
+            return "required", "path outside the session workspace"
     if spec["approval"] == "auto":
         return "auto", "tool policy is 'auto'"
     hit = _match(spec["auto_approve"], subject)

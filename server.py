@@ -277,6 +277,16 @@ def _remember_workspace(path):
         pass
 
 
+def _chat_workspace(sess):
+    """JAG-127: the folder of the chatting session, for the tool approval gate
+    (a file op outside it must be confirmed). Never raises."""
+    try:
+        import rules as rules_mod
+        return rules_mod.resolve_workspace(sess)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def get_or_create_session(sid, title=None, workspace=None):
     if sid:
         s = load_session(sid)
@@ -1888,7 +1898,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 # the model gets an observation and continues. The old code waited
                 # the full 300s and the mobile SSE died = "si blocca".
                 res = api_v02.gated_call(tool, args, run_id=sess["id"],
-                                         timeout=CHAT_APPROVAL_WAIT)
+                                         timeout=CHAT_APPROVAL_WAIT,
+                                         workspace=_chat_workspace(sess))
                 status = res.get("status")
                 obs = res.get("observation") or res.get("error") or res.get("status") or ""
                 if status in ("pending", "expired"):
@@ -3116,7 +3127,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sessions":
             return self._send(200, {"sessions": list_sessions()})
         if path == "/api/sessions/new":
-            sess = get_or_create_session(None, qs.get("title"), qs.get("workspace"))
+            # JAG-127: an explicitly requested folder must exist — never silently
+            # fall back to the default (that made a Z:/wrong path look like the
+            # session was created in a folder the user never picked).
+            ws = qs.get("workspace")
+            if ws:
+                import rules as _rm
+                if not _rm.check_dir(ws):
+                    return self._send(400, {"error": "cartella inesistente: %s" % ws})
+            sess = get_or_create_session(None, qs.get("title"), ws)
             publish("session.created", session=sess["id"], title=sess["title"])
             return self._send(200, sess)
         if path == "/api/history":

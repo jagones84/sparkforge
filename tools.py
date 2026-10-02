@@ -74,6 +74,15 @@ def _fs_read(args, run_id):
             "backend": "host", "sandboxed": False, "exit_code": 0}
 
 
+def _journal(run_id, path, before, after, action):
+    """JAG-127: record the pre-image so the UI can diff and undo. Never raises."""
+    try:
+        import edits
+        edits.record(run_id, path, before, after, action)
+    except Exception:  # noqa: BLE001 — the journal must never break a write
+        pass
+
+
 def _fs_write(args, run_id):
     spec = registry.tool_spec("fs.write")
     roots = spec["roots"]
@@ -82,10 +91,17 @@ def _fs_write(args, run_id):
         return {"ok": False, "error": err}
     os.makedirs(os.path.dirname(path), exist_ok=True)
     content = str(args.get("content", ""))
-    mode = "a" if args.get("append") else "w"
-    with open(path, mode, encoding="utf-8") as f:
+    append = bool(args.get("append"))
+    existed = os.path.isfile(path)
+    before = ""
+    if existed:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            before = f.read()
+    with open(path, "a" if append else "w", encoding="utf-8") as f:
         f.write(content)
-    return {"ok": True, "path": path, "bytes": len(content), "append": bool(args.get("append")),
+    after = (before + content) if append else content
+    _journal(run_id, path, before, after, "modified" if existed else "created")
+    return {"ok": True, "path": path, "bytes": len(content), "append": append,
             "backend": "host", "sandboxed": False, "exit_code": 0}
 
 
@@ -114,6 +130,7 @@ def _fs_edit(args, run_id):
     new = content.replace(search, replace, n)
     with open(path, "w", encoding="utf-8") as f:
         f.write(new)
+    _journal(run_id, path, content, new, "modified")
     return {"ok": True, "path": path, "replacements": n, "bytes_before": len(content),
             "bytes_after": len(new), "backend": "host", "sandboxed": False,
             "exit_code": 0}

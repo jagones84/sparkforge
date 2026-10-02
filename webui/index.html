@@ -261,6 +261,36 @@
     overflow: auto; margin: 0; }
   .skillrow { cursor: pointer; }
   .skillrow:hover { border-color: var(--accent); }
+  /* JAG-127: IDE-style change summary + side-by-side diff (green add / red del) */
+  .editchip { font-family: monospace; font-size: 11.5px; }
+  .editchip .ehead { display: flex; gap: 8px; align-items: center; }
+  .editchip .efile { display: flex; gap: 8px; cursor: pointer; padding: 2px 4px; border-radius: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .editchip .efile:hover { background: rgba(108,140,255,.14); }
+  .editchip .efile .en { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .add { color: var(--ok); }
+  .del { color: var(--err); }
+  #diffBackdrop { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.55); }
+  #diffBackdrop[hidden] { display: none; }
+  #diffView { position: fixed; z-index: 46; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: min(1120px, 96vw); max-height: 88vh; padding: 14px; background: #0f1320;
+    display: flex; flex-direction: column; }
+  #diffView[hidden] { display: none; }
+  #diffBody { overflow: auto; border: 1px solid var(--line); border-radius: 8px;
+    font-family: monospace; font-size: 11.5px; line-height: 1.45; }
+  .diffhead, .diffrow { display: grid; grid-template-columns: 1fr 1fr; }
+  .diffhead > span { padding: 4px 8px; background: var(--bg2); color: var(--dim);
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; }
+  .diffrow > span { padding: 0 8px; white-space: pre-wrap; word-break: break-word;
+    border-left: 3px solid transparent; min-height: 1.45em; }
+  .diffrow.r-add > .dr { background: rgba(80,200,120,.20); border-left-color: var(--ok); }
+  .diffrow.r-del > .dl { background: rgba(255,110,110,.20); border-left-color: var(--err); }
+  .diffrow.r-chg > .dl { background: rgba(255,110,110,.14); border-left-color: var(--err); }
+  .diffrow.r-chg > .dr { background: rgba(80,200,120,.14); border-left-color: var(--ok); }
+  .diffrow.r-ctx > span { color: var(--dim); }
+  /* JAG-127: a produced readable file renders as a link in the reply */
+  a.filelink { color: var(--accent); text-decoration: underline; cursor: pointer; }
+  a.filelink:hover { color: var(--txt); }
 </style>
 </head>
 <body>
@@ -392,6 +422,13 @@
         <div class="card">
           <div id="approvals" class="remaining">no pending approvals</div>
         </div>
+        <h2>Policy · auto / required / denied</h2>
+        <div class="card">
+          <div class="remaining" style="margin-bottom:8px">click a tool's policy to cycle it:
+            <b>auto</b> = never ask · <b>required</b> = always ask · <b>denied</b> = blocked.
+            A file read/write <b>outside</b> the session folder is always <b>required</b>.</div>
+          <div id="apprPolicy"><div class="remaining">loading…</div></div>
+        </div>
       </section>
       <section data-section="mcp" hidden>
         <h2>MCP · external servers</h2>
@@ -497,6 +534,15 @@
           </div>
           <div class="remaining" style="margin-top:6px">overwrite-only · paths sandboxed to the workspace · 1 MiB cap</div>
         </div>
+        <h2>Changes · <span id="editsStat" class="remaining">…</span></h2>
+        <div class="card">
+          <div id="editsList"><div class="remaining">open a session, then ↻</div></div>
+          <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+            <button class="ghost" onclick="loadEdits()" title="reload change list">↻ refresh</button>
+            <button class="ghost" onclick="undoEdits(null)" title="restore every changed file to its pre-image">↩ undo all</button>
+            <span class="remaining" style="margin-left:auto">click a file to see the diff</span>
+          </div>
+        </div>
       </section>
       <section data-section="rules" hidden>
         <h2>Workspace · folder</h2>
@@ -571,6 +617,17 @@
   </div>
   <div class="remaining" id="skillViewPath" style="word-break:break-all;margin:4px 0 8px"></div>
   <pre id="skillViewBody"></pre>
+</div>
+<div id="diffBackdrop" hidden onclick="closeDiff()"></div>
+<div id="diffView" hidden>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div id="diffTitle" style="font-weight:600;flex:1;word-break:break-all">diff</div>
+    <span id="diffStat" class="remaining"></span>
+    <button class="ghost" id="diffUndo" onclick="undoDiff()" title="restore this file to its pre-image">↩ undo</button>
+    <button class="ghost" onclick="closeDiff()">✕ close</button>
+  </div>
+  <div class="remaining" id="diffSub" style="margin:4px 0 8px"></div>
+  <div id="diffBody"></div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
@@ -657,6 +714,23 @@ function updateToolCard(data) {
   card.classList.remove("pending");
   card.classList.add(data.ok ? "ok" : "err");
   card.querySelector(".tc-ic").textContent = data.ok ? "✅" : "⛔";
+  // JAG-127: a file write/edit card exposes a one-click diff of what it changed.
+  const _fp = _toolFilePath(data);
+  if (_fp && !card.querySelector(".tcdiff")) {
+    const _b = document.createElement("button");
+    _b.className = "ghost tcdiff"; _b.textContent = "± diff"; _b.style.fontSize = "10px";
+    _b.title = "show the diff for " + _fp;
+    _b.onclick = e => { e.stopPropagation(); showDiff(_fp); };
+    card.querySelector(".toolcard-head").appendChild(_b);
+  }
+  // JAG-127: a readable (non-code) file gets a one-click "open in editor".
+  if (_fp && _readable(_fp) && !card.querySelector(".tcopen")) {
+    const _o = document.createElement("button");
+    _o.className = "ghost tcopen"; _o.textContent = "📂 open"; _o.style.fontSize = "10px";
+    _o.title = "open " + _fp + " in the editor";
+    _o.onclick = e => { e.stopPropagation(); openInEditor(_fp); };
+    card.querySelector(".toolcard-head").appendChild(_o);
+  }
   const meta = [(data.exit_code != null ? "exit " + data.exit_code : ""), (data.backend || ""),
                 (data.summary || "")].filter(Boolean).join(" · ");
   card.querySelector(".tc-meta").textContent = meta;
@@ -720,7 +794,7 @@ function send(text) {
   // v1.6.3 (JAG-55): tool calls happen inline in the chat when the turn runs a tool
   es.addEventListener("tool.call", e => toolCard(JSON.parse(e.data).tool));
   es.addEventListener("tool.result", e => updateToolCard(JSON.parse(e.data)));
-  es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); });
+  es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); });
   es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); });
 }
 
@@ -746,7 +820,11 @@ async function loadSessions() {
       if (e.target.classList.contains("del")) return;
       sessionId = s.id; localStorage.setItem("sf_session", sessionId);
       $("log").innerHTML = ""; curThink = curAns = null;
-      loadSessions(); loadHistory(); loadCtx(); closeAside();
+      loadSessions(); loadHistory(); loadCtx(); loadRules(); closeAside();
+      // JAG-127: the open panel must follow the session switch — its folder
+      // changed, so a stale workspace/tree would be shown otherwise.
+      const act = document.querySelector("#panel-body > section:not([hidden])");
+      if (act && act.dataset.section === "files") { loadFiles(); loadEdits(); }
     };
     d.querySelector(".del").onclick = async () => {
       if (!(await confirmDelete("delete session " + (s.title || s.id) + "?"))) return;
@@ -844,6 +922,9 @@ async function loadHistory() {
     }
   });
   drawCards((s.messages || []).length);
+  linkifyAll();
+  // JAG-127: baseline the edit journal so the next turn reports only its own diff.
+  try { _editsBase = await api("GET", "/api/edits?session=" + encodeURIComponent(sessionId)); } catch (e) { _editsBase = null; }
 }
 
 /* v1.6.3 (JAG-55): splits a trailing "think: …" block out of a reply. */
@@ -1131,6 +1212,9 @@ async function loadApprovals() {
   const box = $("approvals"); box.innerHTML = "";
   const pend = out.approvals || [];
   $("apprCount").textContent = pend.length ? `(${pend.length} pending)` : "";
+  // JAG-127: always render the auto/required/denied policy controls here too.
+  try { renderTools($("apprPolicy"), await api("GET", "/api/tools")); }
+  catch (e) { $("apprPolicy").innerHTML = '<div class="remaining">' + esc(e) + '</div>'; }
   if (!pend.length) { box.textContent = "no pending approvals"; return; }
   pend.forEach(a => {
     const d = document.createElement("div"); d.className = "card";
@@ -1726,7 +1810,7 @@ function openPanel(name) {
   else if (name === "providers") { loadProviders(); }
   else if (name === "keys") { loadKeys(); }
   else if (name === "rules") { loadRules(); }
-  else if (name === "files") { loadFiles(); }
+  else if (name === "files") { loadFiles(); loadEdits(); }
   else if (name === "self") { api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)})); }
   else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") { $("token-input").value = TOKEN || ""; api("GET", "/api/providers").then(d => renderProviders($("settingsPanel"), d)).catch(e => json_pre($("settingsPanel"), {error: String(e)})); }
@@ -1837,6 +1921,196 @@ function revertFile() {
   $("fileText").value = _openFile.saved;
   fileChanged();
   $("fileMsg").textContent = "reverted";
+}
+
+/* ---- JAG-127: file-diff journal — change summary, side-by-side diff, undo ----
+   The harness journals every fs.write/fs.edit under the session id (chat) or run
+   id (agent). We surface it as: a per-turn change chip in the transcript, a
+   "Changes" list in the Files panel, and a left→right (before/after) diff modal
+   with per-file undo. Green = added, red = removed. */
+let _editsBase = null;   // summary snapshot taken before the current turn → per-turn delta
+let _diffPath = null;    // file shown in the diff modal
+
+function _short(p) { const i = String(p).lastIndexOf("/"); return i >= 0 ? p.slice(i + 1) : String(p); }
+function _attr(s) { return esc(s).replace(/"/g, "&quot;"); }
+/* The workspace path a file write/edit tool acted on (for the card "diff" button). */
+function _toolFilePath(data) {
+  const t = data && data.tool;
+  if (t !== "fs.write" && t !== "fs.edit") return null;
+  try {
+    const a = typeof data.args === "string" ? JSON.parse(data.args) : (data.args || {});
+    return (a && a.path) ? a.path : null;
+  } catch (e) { return null; }
+}
+
+function _editLine(files) {
+  const cr = files.filter(f => f.action === "created");
+  const md = files.filter(f => f.action === "modified");
+  const S = a => a.reduce((n, f) => n + (f.add || 0), 0);
+  const D = a => a.reduce((n, f) => n + (f.del || 0), 0);
+  const parts = [];
+  if (cr.length) parts.push(cr.length + " created <span class=\"add\">+" + S(cr) + "</span>");
+  if (md.length) parts.push(md.length + " edited <span class=\"add\">+" + S(md) + "</span> <span class=\"del\">−" + D(md) + "</span>");
+  return parts.join(" · ");
+}
+
+/* Per-turn chip: the files touched since the baseline, with their NET +N/−M
+   (the same numbers the diff modal and the Changes list show). */
+function _editsDelta(base, cur) {
+  const b = {};
+  ((base && base.files) || []).forEach(f => { b[f.path] = f; });
+  const files = [];
+  (cur.files || []).forEach(f => {
+    const o = b[f.path];
+    const de = (f.edits || 0) - ((o && o.edits) || 0);
+    if (de <= 0) return;  // not touched this turn
+    const action = (!o && f.action === "created") ? "created" : "modified";
+    files.push({ path: f.path, action, add: f.add, del: f.del, edits: de });
+  });
+  return files;
+}
+
+function editsChip(files) {
+  if (!files || !files.length) return;
+  const wrap = document.createElement("div");
+  wrap.className = "msg ai";
+  const d = document.createElement("div");
+  d.className = "card editchip";
+  d.innerHTML =
+    '<div class="ehead"><span>✎ <b>' + files.length + "</b> file" + (files.length > 1 ? "s" : "") + " changed</span>" +
+    '<span class="remaining" style="flex:1">' + _editLine(files) + "</span>" +
+    '<button class="ghost" style="font-size:10px" title="restore every changed file to its pre-image">↩ undo all</button></div>' +
+    files.map(f => '<div class="efile" data-p="' + _attr(f.path) + '" title="' + _attr(f.path) + '">' +
+        "<span>" + (f.action === "created" ? "🆕" : "📝") + "</span>" +
+        '<span class="en">' + esc(_short(f.path)) + "</span>" +
+        '<span class="add">+' + f.add + '</span><span class="del">−' + f.del + "</span></div>").join("");
+  wrap.appendChild(d); $("log").appendChild(wrap); scroll();
+  d.querySelectorAll(".efile").forEach(r => r.onclick = () => showDiff(r.dataset.p));
+  d.querySelector(".ehead button").onclick = () => undoEdits(null);
+}
+
+/* After each chat turn: diff against the baseline and emit a change chip. */
+async function refreshEdits() {
+  if (!sessionId) return;
+  let cur;
+  try { cur = await api("GET", "/api/edits?session=" + encodeURIComponent(sessionId)); } catch (e) { return; }
+  if (!cur || cur.error) return;
+  const delta = _editsDelta(_editsBase, cur);
+  _editsBase = cur;
+  if (delta.length) editsChip(delta);
+  if ($("editsList")) _renderEditsList(cur);
+}
+
+/* Files panel: full change list for the current session. */
+async function loadEdits() {
+  const box = $("editsList");
+  if (!box) return;
+  if (!sessionId) { box.innerHTML = '<div class="remaining">open a session</div>'; $("editsStat").textContent = "—"; return; }
+  let cur;
+  try { cur = await api("GET", "/api/edits?session=" + encodeURIComponent(sessionId)); }
+  catch (e) { box.innerHTML = '<div class="remaining">' + esc(e) + "</div>"; return; }
+  _editsBase = cur;
+  _renderEditsList(cur);
+}
+
+function _renderEditsList(cur) {
+  const box = $("editsList"); if (!box) return;
+  const files = (cur && cur.files) || [];
+  $("editsStat").innerHTML = files.length ? (files.length + " file" + (files.length > 1 ? "s" : "") + " · " + _editLine(files)) : "no changes";
+  if (!files.length) { box.innerHTML = '<div class="remaining">no changes recorded in this session</div>'; return; }
+  box.innerHTML = "";
+  files.forEach(f => {
+    const row = document.createElement("div");
+    row.className = "ftrow";
+    row.style.cssText = "display:flex;gap:8px;align-items:center";
+    row.innerHTML = "<span>" + (f.action === "created" ? "🆕" : "📝") + "</span>" +
+      '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(f.path) + "</span>" +
+      '<span class="add">+' + f.add + '</span><span class="del">−' + f.del + "</span>";
+    row.title = f.path;
+    row.onclick = () => showDiff(f.path);
+    box.appendChild(row);
+  });
+}
+
+async function showDiff(path) {
+  _diffPath = path;
+  let d;
+  try { d = await api("GET", "/api/edits/diff?session=" + encodeURIComponent(sessionId || "") + "&path=" + encodeURIComponent(path)); }
+  catch (e) { d = { error: String(e) }; }
+  $("diffTitle").textContent = _short(path);
+  $("diffBackdrop").hidden = false; $("diffView").hidden = false;
+  if (!d || d.error) {
+    $("diffSub").textContent = (d && d.error) || "error";
+    $("diffStat").textContent = ""; $("diffBody").innerHTML = "";
+    $("diffUndo").disabled = true; return;
+  }
+  $("diffSub").textContent = path + "  ·  " + (d.edits || 1) + " edit(s)  ·  " +
+    (d.action === "created" ? "created" : "modified") + (d.truncated ? "  ·  truncated" : "");
+  $("diffStat").innerHTML = '<span class="add">+' + (d.add || 0) + '</span> <span class="del">−' + (d.del || 0) + "</span>";
+  const rows = (d.rows || []).map(r =>
+    '<div class="diffrow r-' + r.t + '"><span class="dl">' + esc(r.l) + '</span><span class="dr">' + esc(r.r) + "</span></div>").join("");
+  $("diffBody").innerHTML = '<div class="diffhead"><span>before</span><span>after</span></div>' + rows;
+  $("diffUndo").disabled = !(d.add || d.del || (d.rows || []).length);
+}
+function closeDiff() { $("diffBackdrop").hidden = true; $("diffView").hidden = true; }
+
+async function undoDiff() {
+  const p = _diffPath; if (!p) return;
+  $("diffBackdrop").hidden = true; $("diffView").hidden = true;
+  if (!(await confirmDelete("Undo all changes to " + _short(p) + "? (restore its pre-image)"))) {
+    $("diffBackdrop").hidden = false; $("diffView").hidden = false; return;
+  }
+  const r = await api("POST", "/api/edits/undo", { session: sessionId || "", path: p });
+  if (r && r.error) return;
+  _diffPath = null; _editsBase = null;
+  await loadEdits();
+  const rem = (r.restored || []).find(x => x.path === p);
+  if (_openFile && _openFile.path === p) {
+    if (rem && rem.action === "removed") { _openFile = null; $("fileText").value = ""; $("filePath").textContent = "no file open"; fileChanged(); }
+    else await openFile(p);
+  }
+}
+
+async function undoEdits(path) {
+  if (!sessionId) return;
+  const msg = path ? ("Undo all changes to " + _short(path) + "? (restore its pre-image)")
+                   : "Undo ALL changes recorded in this session?";
+  if (!(await confirmDelete(msg))) return;
+  const body = { session: sessionId };
+  if (path) body.path = path;
+  const r = await api("POST", "/api/edits/undo", body);
+  if (r && r.error) { if ($("editsStat")) $("editsStat").textContent = r.error; return; }
+  _editsBase = null;
+  await loadEdits();
+  if (_openFile && (!path || _openFile.path === path)) await openFile(_openFile.path);
+}
+
+/* ---- JAG-127: readable (non-code) files as clickable links → open in editor ----
+   A document the agent produced/references (.md, .txt, .pdf, .json, .csv, an
+   image, …) is turned into a link in the reply; clicking it opens the file in
+   the Files editor (left panel), where it can be read (and edited if text). */
+const READABLE_RE = /((?:\/|~\/)[\w.\-\/ ]*\.(?:md|markdown|txt|rst|json|ya?ml|csv|tsv|log|pdf|html?|xml|ini|toml|cfg|conf|env|png|jpe?g|gif|svg|webp|mp4|mp3|wav))/gi;
+function _readable(p) {
+  return /\.(md|markdown|txt|rst|json|ya?ml|csv|tsv|log|pdf|html?|xml|ini|toml|cfg|conf|env|png|jpe?g|gif|svg|webp|mp4|mp3|wav)$/i.test(p || "");
+}
+async function openInEditor(path) {
+  openPanel("files");
+  try { await loadFiles(); } catch (e) {}
+  await openFile(path);
+}
+function linkifyFiles(bubble) {
+  if (!bubble || bubble.dataset.linked || !bubble.textContent) return;
+  const raw = bubble.textContent;
+  if (!READABLE_RE.test(raw)) return;
+  READABLE_RE.lastIndex = 0;
+  bubble.dataset.linked = "1";
+  bubble.innerHTML = esc(raw).replace(READABLE_RE, m =>
+    '<a href="#" class="filelink" data-p="' + _attr(m) + '">' + esc(m) + "</a>");
+  bubble.querySelectorAll("a.filelink").forEach(a =>
+    a.onclick = e => { e.preventDefault(); openInEditor(a.dataset.p); });
+}
+function linkifyAll() {
+  document.querySelectorAll("#log .msg.ai .bubble").forEach(linkifyFiles);
 }
 
 /* ---- v0.8 command palette (Cmd/Ctrl+K) ---- */
