@@ -27,6 +27,15 @@ sandbox:
 approvals:
   timeout_secs: 300             # how long a run waits for a human decision
 
+# ---- runtime / long-horizon (JAG-129) ---------------------------------------
+# Controlla il loop di completamento: l'harness non lascia chiudere il turno
+# finche' la TASK LIST ha passi aperti. Editabile anche dalla WebUI (Config).
+runtime:
+  keepgoing_max: 8          # giri di continuazione prima dello stop 'budget'
+  no_progress_rounds: 2     # giri senza progresso prima dello stop 'no_progress'
+  max_wall_secs: 3600       # tetto di tempo per run
+  subagent_max_depth: 2     # profondita' massima della matrioska
+
 # ---- tool registry -----------------------------------------------------------
 tools:
 

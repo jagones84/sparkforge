@@ -66,6 +66,19 @@ check("S6 has abort helpers", "def push_abort" in srv and "def _is_aborted" in s
 check("S7 has /api/chat/abort route", '"/api/chat/abort"' in srv, "")
 check("S8 abort flag cleared at turn start", "clear_abort" in srv, "")
 
+import registry  # noqa: E402
+check("R1 config/tools.yaml has runtime block",
+      "runtime:" in open(os.path.join(REPO, "config", "tools.yaml"),
+                         encoding="utf-8").read(), "")
+api = open(os.path.join(REPO, "api_v02.py"), encoding="utf-8", errors="replace").read()
+check("R2 /api/tools returns runtime", '"runtime"' in api, "")
+check("R3 POST accepts runtime", "runtime" in api and "def update_policy" in api, "")
+web = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8", errors="replace").read()
+check("R4 WebUI has runtime fields",
+      "keepgoing_max" in web and "no_progress_rounds" in web, "")
+check("R5 keepgoing reads the runtime config", "load_config().get(\"runtime\")" in
+      open(os.path.join(REPO, "keepgoing.py"), encoding="utf-8").read(), "")
+
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))
 sys.exit(0 if all(results) else 1)

@@ -444,6 +444,13 @@
       </section>
       <section data-section="config" hidden>
         <h2>Config · tools &amp; approval policy</h2>
+        <div class="card"><b>Runtime / long-horizon</b>
+          <label>giri di continuazione <input id="rtKgMax" type="number" min="0" value="8"></label>
+          <label>no-progress rounds <input id="rtNoProg" type="number" min="0" value="2"></label>
+          <label>tetto tempo (s) <input id="rtWall" type="number" min="0" value="3600"></label>
+          <label>profondità subagent <input id="rtDepth" type="number" min="0" value="2"></label>
+          <button class="ghost" onclick="saveRuntime()">salva runtime</button>
+        </div>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
       </section>
       <section data-section="settings" hidden>
@@ -1912,6 +1919,23 @@ function editProvider(p) {
   $("provModels").value = (p.models || []).map(m => m.id).join(", ");
   $("provResult").textContent = "editing '" + p.id + "' — press save provider";
 }
+async function loadRuntime() {
+  const d = await api("GET", "/api/tools");
+  const r = (d && d.runtime) || {};
+  if ($("rtKgMax")) $("rtKgMax").value = r.keepgoing_max ?? 8;
+  if ($("rtNoProg")) $("rtNoProg").value = r.no_progress_rounds ?? 2;
+  if ($("rtWall")) $("rtWall").value = r.max_wall_secs ?? 3600;
+  if ($("rtDepth")) $("rtDepth").value = r.subagent_max_depth ?? 2;
+}
+async function saveRuntime() {
+  await api("POST", "/api/tools", { runtime: {
+    keepgoing_max: +$("rtKgMax").value,
+    no_progress_rounds: +$("rtNoProg").value,
+    max_wall_secs: +$("rtWall").value,
+    subagent_max_depth: +$("rtDepth").value,
+  }});
+  who("ai", "✅ runtime aggiornato");
+}
 async function saveProvider() {
   const id = $("provId").value.trim();
   if (!id) { $("provResult").textContent = "id required"; return; }
@@ -2042,7 +2066,7 @@ function openPanel(name) {
   else if (name === "skills") { loadSkills(); }
   else if (name === "rules") { loadRules(); }
   else if (name === "files") { loadFiles(); loadEdits(); }
-  else if (name === "config") { api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
+  else if (name === "config") { loadRuntime(); api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") {
     // JAG-127: one Settings panel = Self + Providers + Keys + token (no more tabs).
     $("token-input").value = TOKEN || "";
