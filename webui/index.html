@@ -100,6 +100,11 @@
     border: 1px solid transparent; margin-bottom: 4px; cursor: pointer; }
   .sess:hover { background: rgba(108,140,255,.08); }
   .sess.active { border-color: rgba(108,140,255,.45); background: rgba(108,140,255,.1); }
+  /* JAG-168: a session busy with a chat turn keeps running in the background. */
+  .sess.running { border-color: rgba(52,211,153,.5); }
+  .sess.running::before { content: "●"; color: #34d399; font-size: 9px; flex-shrink: 0;
+    animation: sfpulse 1s ease-in-out infinite; }
+  @keyframes sfpulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
   .sess .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .sess .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
   .sess .n { color: var(--dim); font-size: 10px; letter-spacing: .02em; }
@@ -1167,7 +1172,7 @@ function steerQueued(i) {
   api("POST", "/api/chat/steer", { session: sessionId, message: m }).catch(() => {});
 }
 function flushQueue() {
-  if (activeSSE || !msgQueue.length) return;
+  if (turnSSE[sessionId] || !msgQueue.length) return;
   const m = msgQueue.shift(); renderQueue(); send(m);
 }
 
@@ -1178,7 +1183,7 @@ function send(text) {
   // JAG-127b: a turn is already streaming → never open a second SSE (that is
   // what silently fought the running one). Queue it (flushed on `done`), or the
   // user can press ⇢ on the chip to steer the live turn.
-  if (activeSSE) {
+  if (turnSSE[sessionId]) {
     // JAG-127b/c: the #qmode picker next to "send" decides queue vs steer.
     if ((localStorage.getItem("sf_qmode") || "queue") === "steer") {
       who("user", "🎯 steer: " + raw);
@@ -1194,38 +1199,58 @@ function send(text) {
   let mode = "";
   if (/^\/goal\b/i.test(msg)) { mode = "&mode=goal"; msg = msg.replace(/^\/goal[\s:]*/i, "").trim(); }
   inp.value = ""; if (inp.style) inp.style.height = ""; who("user", (mode ? "🎯 /goal " : "") + msg); curThink = curAns = null; cotText = "";
-  const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + mode + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : "");
+  // JAG-168: bind this turn to ITS session. It keeps streaming in the background
+  // if the user switches away; output is painted ONLY while that session is on
+  // screen (`live()`), so nothing is mixed into another log and nothing is lost.
+  let turnSession = sessionId;
+  const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (turnSession ? "&session=" + turnSession : "") + mode + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : "");
   const es = new EventSource(url);
-  activeSSE = es; activeRunId = null;
+  if (turnSession) { turnSSE[turnSession] = es; setRunning(turnSession, true); }
+  const live = () => !!turnSession && turnSession === sessionId;
+  const adopt = (s) => {  // very first message with no session: the server names it
+    if (turnSession || !s) return;
+    turnSession = s; turnSSE[s] = es; setRunning(s, true);
+    sessionId = s; localStorage.setItem("sf_session", sessionId);
+  };
+  const end = (reload) => {
+    try { es.close(); } catch (e) {}
+    if (turnSession && turnSSE[turnSession] === es) delete turnSSE[turnSession];
+    setRunning(turnSession, false);
+    if (live()) {
+      endStream();
+      if (reload) { loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); }
+      flushQueue();
+    }
+  };
   // JAG-166: a new turn starts at top level; the previous turn's tree/system block stay in history.
-  es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); setRun(d.run_id); _activeScope = null; _sysInjectEl = null; });
-  es.addEventListener("graph.node.added", e => applyGraphEvent(JSON.parse(e.data)));
-  es.addEventListener("graph.node.updated", e => applyGraphEvent(JSON.parse(e.data)));
-  es.addEventListener("harness.inject", e => harnessInject(JSON.parse(e.data)));
+  es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); adopt(d.session); if (!live()) return; setRun(d.run_id); _activeScope = null; _sysInjectEl = null; });
+  es.addEventListener("graph.node.added", e => { if (live()) applyGraphEvent(JSON.parse(e.data)); });
+  es.addEventListener("graph.node.updated", e => { if (live()) applyGraphEvent(JSON.parse(e.data)); });
+  es.addEventListener("harness.inject", e => { if (live()) harnessInject(JSON.parse(e.data)); });
   es.addEventListener("chat.delta", e => {
-    const d = JSON.parse(e.data);
-    if (!sessionId) { sessionId = d.session; localStorage.setItem("sf_session", sessionId); }
+    const d = JSON.parse(e.data); adopt(d.session);
+    if (!live()) return;
     if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); }
     else { appendAnswer(d.text); }
     scroll();
   });
   // v1.6.3 (JAG-55): tool calls happen inline in the chat when the turn runs a tool
-  es.addEventListener("tool.call", e => toolCard(JSON.parse(e.data).tool));
-  es.addEventListener("tool.result", e => updateToolCard(JSON.parse(e.data)));
+  es.addEventListener("tool.call", e => { if (live()) toolCard(JSON.parse(e.data).tool); });
+  es.addEventListener("tool.result", e => { if (live()) updateToolCard(JSON.parse(e.data)); });
   // JAG-127b: surface the approval gate inline in the CHAT stream too (before it
   // relied only on the global /api/feed SSE, which the phone UI may not keep
   // open) — otherwise a `required` tool looked like a silent 30s freeze.
-  es.addEventListener("approval.request", e => { approvalCard(JSON.parse(e.data)); loadApprovals(); });
-  es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); who("user", "🎯 steer: " + (d.text || "")); });
-  es.addEventListener("plan.incomplete", e => planIncomplete(JSON.parse(e.data)));
-  es.addEventListener("plan.continuing", e => { planContinuing(JSON.parse(e.data)); });
-  es.addEventListener("plan.stopped", e => planStopped(JSON.parse(e.data)));
-  es.addEventListener("verify.run", e => { const d = JSON.parse(e.data); if (d && d.ran) who("ai", (d.green ? "✅ verifier green" : "⛔ verifier ROSSO — modifica annullata") + " · " + (d.path || "").split("/").pop() + (d.duration_ms ? " · " + d.duration_ms + "ms" : "")); });
-  es.addEventListener("run.metrics", e => { runFooter(JSON.parse(e.data).metrics); });
-  es.addEventListener("bestofn.chosen", e => { const d = JSON.parse(e.data); who("ai", `🎲 best-of-N: scelto il migliore tra ${d.n} campioni`); });
-  es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); loadApprovals(); });
-  es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
-  es.addEventListener("error", () => { es.close(); activeSSE = null; endStream(); flushQueue(); });
+  es.addEventListener("approval.request", e => { if (live()) { approvalCard(JSON.parse(e.data)); loadApprovals(); } });
+  es.addEventListener("chat.steer", e => { if (!live()) return; const d = JSON.parse(e.data); who("user", "🎯 steer: " + (d.text || "")); });
+  es.addEventListener("plan.incomplete", e => { if (live()) planIncomplete(JSON.parse(e.data)); });
+  es.addEventListener("plan.continuing", e => { if (live()) planContinuing(JSON.parse(e.data)); });
+  es.addEventListener("plan.stopped", e => { if (live()) planStopped(JSON.parse(e.data)); });
+  es.addEventListener("verify.run", e => { if (!live()) return; const d = JSON.parse(e.data); if (d && d.ran) who("ai", (d.green ? "✅ verifier green" : "⛔ verifier ROSSO — modifica annullata") + " · " + (d.path || "").split("/").pop() + (d.duration_ms ? " · " + d.duration_ms + "ms" : "")); });
+  es.addEventListener("run.metrics", e => { if (live()) runFooter(JSON.parse(e.data).metrics); });
+  es.addEventListener("bestofn.chosen", e => { if (!live()) return; const d = JSON.parse(e.data); who("ai", `🎲 best-of-N: scelto il migliore tra ${d.n} campioni`); });
+  es.addEventListener("improve.proposal", e => { if (live()) { improveCard(JSON.parse(e.data)); loadApprovals(); } });
+  es.addEventListener("done", () => end(true));
+  es.addEventListener("error", () => end(false));
 }
 
 async function api(method, path, body) {
@@ -1260,7 +1285,8 @@ async function loadSessions() {
   (out.sessions || []).filter(s => (!hideEmpty || (s.messages || 0) > 0) && ((s.title || s.id || "").toLowerCase().includes(q))).forEach(s => {
     _sessModel[s.id] = s.model || "";   // JAG-157: cache each session's model
     const d = document.createElement("div");
-    d.className = "sess" + (s.id === sessionId ? " active" : "");
+    d.className = "sess" + (s.id === sessionId ? " active" : "") + (runningSessions[s.id] ? " running" : "");
+    d.dataset.sid = s.id;   // JAG-168: lets setRunning() toggle the busy marker
     const age = s.age ? (" · " + s.age) : "";
     const fol = s.workspace ? `<span class="ws" title="workspace: ${s.workspace}">📁</span>` : "";
     d.innerHTML = `${fol}<span class="col"><span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span></span><span class="del" title="delete">✕</span>`;
@@ -1399,6 +1425,10 @@ async function loadHistory() {
   });
   drawAt(nMsgs);
   _activeScope = null;
+  // JAG-168: if this session still has a 'doing' node the turn may be streaming
+  // in the background — resume nesting live output under it.
+  const _doing = ((graph && graph.nodes) || []).find(n => n.status === "doing");
+  if (_doing && _chatNodes[_doing.id]) _activeScope = _chatNodes[_doing.id].querySelector(".tc-kids");
   linkifyAll();
   // JAG-127: baseline the edit journal so the next turn reports only its own diff.
   try { _editsBase = await api("GET", "/api/edits?session=" + encodeURIComponent(sessionId)); } catch (e) { _editsBase = null; }
@@ -1525,6 +1555,9 @@ async function loadGraph() {
 }
 function applyGraphEvent(d) {
   if (!d || !d.run || !d.node) return;
+  // JAG-168: the global /api/feed delivers events for EVERY session — never paint
+  // another session's node into the log currently on screen.
+  if (d.session && d.session !== sessionId) return;
   // JAG-166: keep the in-chat tree in sync FIRST, independent of the panel state.
   const _known = ((graph && graph.nodes) || []).some(n => n.id === d.node.id);
   if (_known) chatNodeUpdate(d.node); else chatNodeAdd(d.node);
@@ -1869,12 +1902,29 @@ function improveCard(d) {
 
 /* ---- agent loop (tool-enabled, SSE) ---- */
 let activeRunId = null;
-let activeSSE = null;
+let activeSSE = null;            // agent-run stream only
+/* JAG-168: a chat turn belongs to ONE session. `turnSSE` maps each session to
+   its live EventSource and `runningSessions` marks the busy ones, so switching
+   to another session never aborts a turn nor paints its output into the wrong
+   log — every session runs independently in parallel. */
+let turnSSE = {};                // sessionId -> EventSource of a running chat turn
+let runningSessions = {};        // sessionId -> true while its chat turn streams
+function setRunning(sid, on) {
+  if (!sid) return;
+  if (on) runningSessions[sid] = true; else delete runningSessions[sid];
+  const row = document.querySelector('.sess[data-sid="' + sid + '"]');
+  if (row) row.classList.toggle("running", !!on);
+}
 function stopRun() {
+  // JAG-168: a chat turn is stopped SERVER-side for the session on screen; the
+  // live EventSource stays open so the interruption is rendered, never lost.
+  if (turnSSE[sessionId]) {
+    api("POST", "/api/chat/abort", { session: sessionId }).catch(() => {});
+    who("ai", "⏹ stop richiesto…");
+  }
   if (activeRunId) api("POST", "/api/agent/control", { runId: activeRunId, action: "abort" }).catch(() => {});
   if (activeSSE) { try { activeSSE.close(); } catch (e) {} activeSSE = null; }
   activeRunId = null;
-  who("ai", "⏹ stop requested");
 }
 function runAgent(goal) {
   if (!goal) return;
@@ -1954,7 +2004,7 @@ function connectFeed() {
   es.addEventListener("agent.start", e => { const d = JSON.parse(e.data || "{}"); push("⚡ agent: " + (d.goal || "").slice(0, 60)); });
   es.addEventListener("agent.finish", () => push("🏁 agent finished"));
   es.addEventListener("prm.feedback", e => { const d = JSON.parse(e.data || "{}"); push("📉 verify: score " + d.score + " — " + (d.feedback || "").slice(0, 90)); });
-  es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); approvalCard(d); loadApprovals(); });
+  es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); loadApprovals(); if (!d.session || d.session === sessionId) approvalCard(d); });
   es.addEventListener("approval.auto", e => { const d = JSON.parse(e.data); push("✅ auto-approved: " + (d.summary || "").slice(0, 50)); });
   es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); push("🎯 steer: " + (d.text || "").slice(0, 60)); });
   es.addEventListener("tool.result", e => { const d = JSON.parse(e.data);
