@@ -1098,10 +1098,12 @@ function endStream() {
  * it collapses and the next node takes over. */
 function _resetChatTree() { _chatNodes = {}; _activeScope = null; _sysInjectEl = null; }
 function _nodeDepth(id, d) {
+  // JAG-170: depth from the GRAPH hierarchy, independent of draw order, so the
+  // indentation stays aligned even when the parent has not been rendered yet.
   d = d || 0;
-  if (d > 8) return d;
+  if (d > 12) return d;
   const n = ((graph && graph.nodes) || []).find(x => x.id === id);
-  if (n && n.parent && _chatNodes[n.parent]) return _nodeDepth(n.parent, d + 1);
+  if (n && n.parent && n.parent !== id) return _nodeDepth(n.parent, d + 1);
   return d;
 }
 function _paintNode(node) {
@@ -1154,6 +1156,15 @@ function harnessInject(d) {
     _logAppend(det);
   }
   scroll();
+}
+/* JAG-170: a persisted chain-of-thought block (the reasoning that preceded a
+   tool call) so the COTs BETWEEN tools survive a reload, exactly like live. */
+function renderThink(text) {
+  if (!text) return;
+  const d = document.createElement("div"); d.className = "msg ai";
+  d.innerHTML = `<div class="who">SPARKFORGE</div><details class="think"><summary>🧠 chain-of-thought</summary><div class="t"></div></details>`;
+  d.querySelector(".t").textContent = text;
+  _logAppend(d); scroll();
 }
 function cotFeed(text) {
   cotText += text;
@@ -1385,20 +1396,21 @@ async function loadHistory() {
   _stick = true;  // JAG-116: opening a session always lands at the latest message
   const s = await api("GET", "/api/history?session=" + encodeURIComponent(sessionId));
   curJob = (s && s.job) || null;   // JAG-169: JX used by the todo ids on screen
-  // JAG-167: rebuild the PERSISTENT in-chat tree from THIS session's graph.
-  // Every todo node becomes a collapsible <details>; tool cards, harness
-  // injections and assistant replies are re-nested under the node they were
-  // written under (the server records `node` on each). A reload/refresh must
-  // NEVER erase what was already written in chat.
+  // JAG-170: rebuild the transcript in CHRONOLOGICAL order. Todo nodes are NOT
+  // dumped up front: each is created the FIRST time something references it and
+  // the item is nested inside it, so a reload looks like the live turn and
+  // nothing written in chat can ever be lost.
   let g = null;
   try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
-  if (g && g.nodes && g.nodes.length) {
-    graph = g;
-    (g.nodes || []).forEach(n => chatNodeAdd(n));
-    _activeScope = null;
-  }
-  const scopeFor = (nodeId) => (nodeId && _chatNodes[nodeId])
-    ? _chatNodes[nodeId].querySelector(".tc-kids") : $("log");
+  const nodes = (g && g.nodes) || [];
+  if (nodes.length) graph = g;
+  const byId = {}; nodes.forEach(n => { byId[n.id] = n; });
+  const drawn = {};
+  const ensureNode = (nid) => {
+    if (!nid || drawn[nid] || !byId[nid]) return;
+    chatNodeAdd(byId[nid]); drawn[nid] = 1;
+  };
+  const scopeFor = (nid) => (nid && _chatNodes[nid]) ? _chatNodes[nid].querySelector(".tc-kids") : $("log");
   // JAG-96/167: interleave persisted cards + injections at the message boundary
   // (`after` = messages already sent) where each one happened.
   const nMsgs = (s.messages || []).length;
@@ -1410,17 +1422,17 @@ async function loadHistory() {
     (byAfter[String(i)] || [])
       .sort((a, b) => ((a.v.ts || 0) - (b.v.ts || 0)))
       .forEach(item => {
+        const v = item.v;
+        ensureNode(v.node);
+        _activeScope = scopeFor(v.node);
         if (item.t === "c") {
-          const c = item.v;
-          _activeScope = scopeFor(c.node);
-          toolCard(c.tool);
-          updateToolCard({ tool: c.tool, ok: c.ok, exit_code: c.exit_code,
-                           backend: c.backend, result: c.result, error: c.error,
-                           args: c.args, summary: c.error ? "error" : "" });
+          if (v.think) renderThink(v.think);   // JAG-170: the CoT that led here
+          toolCard(v.tool);
+          updateToolCard({ tool: v.tool, ok: v.ok, exit_code: v.exit_code,
+                           backend: v.backend, result: v.result, error: v.error,
+                           args: v.args, summary: v.error ? "error" : "" });
         } else {
-          const r = item.v;
-          _activeScope = scopeFor(r.node);
-          harnessInject({ inject_kind: r.kind || "inject", text: r.text });
+          harnessInject({ inject_kind: v.kind || "inject", text: v.text });
         }
       });
     _activeScope = null;
@@ -1430,6 +1442,7 @@ async function loadHistory() {
     if (m.role === "user") { who("user", m.content); return; }
     // v1.6.3 (JAG-55): some models inline their chain-of-thought in `content`
     // as a trailing "think: …" tail. The reply must stay the primary text.
+    ensureNode(m.node);
     _activeScope = scopeFor(m.node);
     const [reply, tail] = splitThinkTail(m.content);
     const d = who("ai", reply);
@@ -1445,9 +1458,10 @@ async function loadHistory() {
   });
   drawAt(nMsgs);
   _activeScope = null;
-  // JAG-168: if this session still has a 'doing' node the turn may be streaming
-  // in the background — resume nesting live output under it.
-  const _doing = ((graph && graph.nodes) || []).find(n => n.status === "doing");
+  // any todo node never referenced by content still appears (nothing is lost)
+  nodes.forEach(n => { if (!drawn[n.id]) { chatNodeAdd(n); drawn[n.id] = 1; } });
+  // JAG-168: if a 'doing' node exists the turn may still be streaming — nest there
+  const _doing = nodes.find(n => n.status === "doing");
   if (_doing && _chatNodes[_doing.id]) _activeScope = _chatNodes[_doing.id].querySelector(".tc-kids");
   linkifyAll();
   // JAG-127: baseline the edit journal so the next turn reports only its own diff.

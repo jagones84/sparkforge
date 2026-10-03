@@ -390,7 +390,7 @@ def append_message(sess, role, content, reasoning=None, meta=None):
 
 
 def persist_tool_card(sess, tool, ok, args=None, result="", error="",
-                      exit_code=None, backend=None, node=None):
+                      exit_code=None, backend=None, node=None, think=None):
     """JAG-96: persist an inline tool card so cold-start UIs can rebuild it.
 
     Stored in `sess["tool_cards"]` — NOT in `messages` — so it never reaches the
@@ -412,6 +412,7 @@ def persist_tool_card(sess, tool, ok, args=None, result="", error="",
             "exit_code": exit_code,
             "backend": backend,
             "node": node,
+            "think": (str(think)[:6000] if think else None),
             "after": len(sess.get("messages", [])),
             "ts": round(time.time(), 3),
         }
@@ -2275,6 +2276,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                      text=msgs[0].get("content") or "")
     except Exception:  # noqa: BLE001 — must never break the turn
         pass
+    # JAG-170: buffer the live reasoning so each persisted tool card carries the
+    # chain-of-thought that led to it — otherwise the COTs between tool calls
+    # vanish on reload (they were only ever streamed, never stored).
+    _think_buf = {"t": ""}
     while iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
         # JAG-164: the tool budget is PER keepgoing round, not per turn. Before
@@ -2333,6 +2338,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             # shows progress instead of dead air; buffer only answer text so raw
             # tool-call JSON is never streamed to the user.
             if ch == "think":
+                _think_buf["t"] += t   # JAG-170: remembered for the next card
                 on_delta("think", t)
             else:
                 _c.append((ch, t))
@@ -2409,6 +2415,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             # with no visible reasoning in between ("non vedo thinking").
             _th = str((act or {}).get("thought") or "").strip()
             if _th:
+                _think_buf["t"] += _th + "\n"   # JAG-170: kept with the card
                 on_delta("think", _th + "\n")
             tool, args = tc
             work_steps += 1
@@ -2442,7 +2449,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                                   error=sub.get("stderr") or "",
                                   exit_code=sub.get("exit_code"),
                                   backend=sub.get("backend") or "harness",
-                                  node=_cur_node())
+                                  node=_cur_node(), think=_think_buf["t"].strip())
+                _think_buf["t"] = ""   # JAG-170: fresh CoT for the next action
                 on_event("tool.result", session=sess["id"], **_tool_event(
                     tool, ok, args=args, output=(sub.get("stdout") or obs or ""),
                     exit_code=sub.get("exit_code"),
@@ -2451,7 +2459,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             except Exception as e:  # noqa: BLE001 — a tool failure must not kill chat
                 obs, ok = "tool error: %s" % e, False
                 persist_tool_card(sess, tool, False, args=args, error=str(e)[:200],
-                                  backend="harness", node=_cur_node())
+                                  backend="harness", node=_cur_node(),
+                                  think=_think_buf["t"].strip())
+                _think_buf["t"] = ""
                 on_event("tool.result", session=sess["id"], **_tool_event(
                     tool, False, args=args, output=str(e)[:200],
                     backend="harness", inline=True, summary="errore"))

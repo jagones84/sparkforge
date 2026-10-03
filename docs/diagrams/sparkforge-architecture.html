@@ -5540,11 +5540,12 @@
         </div>
         <ul>
           <li>&bull; Il prompt inviato al router e&#39; ASSEMBLATO dal harness (self-summary, tool registry, rules, skills, memoria, todo di stato): non e&#39; solo il messaggio utente.</li>
+          <li>&bull; Il harness INIETTA messaggi sintetici nell&#39;LLM (nudge, osservazioni, &#39;continue&#39;, steer) via _inject: il modello li vede davvero, e gli stessi compaiono in chat come evento harness.inject.</li>
           <li>&bull; think -&gt; act -&gt; observe: il modello emette write_todos/update_todos e chiama tool reali.</li>
           <li>&bull; L&#39;osservazione RIENTRA nel loop: il risultato del tool torna all&#39;Agent Loop come nuovo contesto.</li>
           <li>&bull; keepgoing decide se continuare: se restano passi aperti RIMBORSA il budget dei tool, re-inietta la lista e prosegue — non abbandona mai un piano aperto.</li>
           <li>&bull; difficulty stima la difficolta&#39; e scala N (best-of-N) e i giri di continuazione (compute-optimal).</li>
-          <li>&bull; best-of-N campiona piu&#39; candidati e sceglie il migliore col ranker deterministico (prm.rank_text).</li>
+          <li>&bull; best-of-N: Harness Control chiama il router N volte (control -&gt; router, N campioni) e sceglie il migliore col ranker deterministico (prm.rank_text).</li>
           <li>&bull; verifier applica &#39;apply-only-if-green&#39;: se il check in sandbox e&#39; rosso la modifica e&#39; annullata.</li>
           <li>&bull; subagent: matrioska di run figli con depth cap, per delegare sotto-obiettivi.</li>
         </ul>
@@ -5559,7 +5560,7 @@
           <li>&bull; registry.py carica config/tools.yaml + overlay e costruisce l&#39;allowlist dichiarativa dei tool.</li>
           <li>&bull; Approval gate: auto per i comandi read-only, required per le azioni che toccano il mondo, deny per le distruttive.</li>
           <li>&bull; Sandbox: docker / bubblewrap / nsjail con --network none e rootfs read-only; fallback host &#39;none&#39; esplicito.</li>
-          <li>&bull; hooks.py: PreToolUse (exit 2 blocca la chiamata), PostToolUse e Stop, senza modello nel loop.</li>
+          <li>&bull; hooks.py: PreToolUse (exit 2 blocca la chiamata del tool), PostToolUse e Stop, senza modello nel loop.</li>
           <li>&bull; Il Tool Executor gira con la CARTELLA della SESSIONE come cwd (workspace), non con la scratch dir della sandbox: le azioni toccano il progetto giusto.</li>
         </ul>
       </div>
@@ -5575,7 +5576,7 @@
           <li>&bull; Self-evolution: selfevolve mina sequenze ripetute -&gt; bozza skill -&gt; synth/verify in sandbox -&gt; archive (solo se verde).</li>
           <li>&bull; improve instrada le proposte: memory=auto, skill/project/global=propose, code=forbidden.</li>
           <li>&bull; MCP: i tool dei server esterni entrano nel registro come &lt;client&gt;__&lt;tool&gt;; il harness e&#39; anche MCP server (stdio/HTTP).</li>
-          <li>&bull; Osservabilita&#39;: il harness emette eventi (hooks/runmetrics/OTel); il feed e le tracce TORNANO al Client, e un hook PreToolUse puo&#39; bloccare la chiamata del tool.</li>
+          <li>&bull; Osservabilita&#39;: il harness emette eventi (hooks/runmetrics/OTel); il feed e le tracce TORNANO al Client, e un hook PreToolUse puo&#39; bloccare la chiamata del tool. La telemetria NON entra nell&#39;LLM.</li>
         </ul>
       </div>
     </div>
