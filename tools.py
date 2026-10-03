@@ -595,8 +595,28 @@ def _improve(args, run_id=None):
     import improve
     scope = str((args or {}).get("scope", "")).strip()
     content = str((args or {}).get("content", "")).strip()
+    if scope == "mine":
+        # JAG-133: self-evolving — mina le sequenze di tool ripetute nella history
+        # dei run e deposita una BOZZA di skill per ciascun pattern ricorrente.
+        try:
+            import selfevolve
+            out = os.path.join(registry.REPO, "data", "proposals", "skills")
+            paths = selfevolve.mine_history(out, note=str((args or {}).get("reason", "")))
+        except Exception as e:  # noqa: BLE001
+            return {"error": "mine failed: %s" % e}
+        recs = []
+        for p in paths:
+            rec = {"scope": "skill", "path": p, "status": "proposed",
+                   "reason": "pattern di tool ripetuto rilevato (selfevolve)"}
+            recs.append(rec)
+            try:
+                import server as _srv
+                _srv.publish("improve.proposal", **rec)
+            except Exception:  # noqa: BLE001
+                pass
+        return {"ok": True, "mined": len(recs), "proposals": recs}
     if scope not in ("skill", "project", "global") or not content:
-        return {"error": "scope in {skill,project,global} and content required"}
+        return {"error": "scope in {skill,project,global,mine} and content required"}
     if improve.AGENT_WRITE.get(scope) == "forbidden":
         return {"error": "scope not writable"}
     rec = improve.propose(scope, content, reason=str((args or {}).get("reason", "")))

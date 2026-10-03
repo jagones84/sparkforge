@@ -2206,6 +2206,12 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         pass
     publish("chat.done", session=sess["id"], message_id=len(sess["messages"]),
             model=model, think_chars=len(think), error=bool(meta.get("error")))
+    try:  # JAG-133: registra la sequenza di tool del turno per il mining skill
+        import selfevolve as _se
+        if used_tools:
+            _se.record(sess["id"], used_tools)
+    except Exception:  # noqa: BLE001 — la history non deve mai rompere un turno
+        pass
     # JAG-128B: nudge di fine turno — quando il turno ha usato parecchi tool (o e'
     # andato in errore), invita a valutare cosa persistere (memoria libera oppure
     # una proposta di regola via il tool `improve`). Mai bloccante: qualunque

@@ -35,14 +35,16 @@ finché non passa e poi la **archivia** come nativa riusabile (self-verification
 
 ## Roadmap prioritaria (per ROI)
 
-1. **Verifier loop "apply-only-if-green"** — il primo passo, il più alto ROI (quote SWE-bench:
-   +20-30pt dal harness, non dal modello). Per ogni `fs.write`/`fs.edit`/patch: eseguire nel
-   sandbox i test/analisi statica PRIMA di accettare; se fallisce, rigettare e re-indirizzare.
-2. **Best-of-N + rank PRM** — per step non banale campionare N candidati e rankarli col
-   verifier già esistente (prima della MCTS completa).
-3. **Budget per difficoltà** — task banale = zero-shot; complesso = N rami paralleli.
-4. **Skill synthesis autonoma** — `improve` da "propose" a "synthesize→verify→archive":
-   sequenze ripetitive di N tool → script ottimizzato → sandbox-verify → registra skill nativa.
+1. **Verifier loop "apply-only-if-green"** — ✅ FATTO (JAG-131, commit `8a901aa`):
+   `verify.py` + `tools._verify_edit` su `fs.write`/`fs.edit`; edit → check in sandbox →
+   rollback se rosso; config `verifier` (default off) + card WebUI. Test `v144` 10/10.
+2. **Best-of-N + rank PRM** — ✅ FATTO (JAG-132, commit `97f0bc3`): `bestofn.py` +
+   `prm.rank_text/rank`; campiona N solo quando il primo campione è inutilizzabile
+   (early-exit); config `bestofn` + card WebUI. Test `v145` 12/12.
+3. **Budget per difficoltà** — ⏳ da fare: oggi l'unico trigger è "campione rotto";
+   manca una stima di difficoltà per allocare N in anticipo.
+4. **Skill synthesis autonoma** — ⏳ da fare (mine sequenze ripetute → bozza skill →
+   verify sandbox → archive): parte miner implementata in JAG-133, manca il codegen.
 
-Primo SPEC raccomandato (da scrivere in `docs/plans/`): il **point 1** — usa già
-sandbox+approvals+hooks, è a rischio contenuto e dà il guadagno più misurabile.
+Aggiornamento 2026-10-03: 1 e 2 implementati, testati e pushati. Prossimo: (3) difficoltà
+adattiva, poi (4) sintesi+verify autonoma. Vedi `docs/plans/` per gli ultimi spec.

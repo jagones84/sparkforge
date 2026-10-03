@@ -152,11 +152,11 @@ TOOL_SCHEMAS = {
         "type": "object",
         "properties": {
             "action": {"type": "string", "enum": ["propose"]},
-            "scope": {"type": "string", "enum": ["skill", "project", "global"]},
+            "scope": {"type": "string", "enum": ["skill", "project", "global", "mine"]},
             "content": {"type": "string"},
             "reason": {"type": "string"},
         },
-        "required": ["action", "scope", "content"],
+        "required": ["action", "scope"],
     },
     "web": {
         "description": ("Public-internet access (JAG-83). action=search runs a web "
