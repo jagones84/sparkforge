@@ -79,3 +79,28 @@ proposta di self-improve NON può modificare il verifier; test.
 
 ## 5. Ordine di esecuzione consigliato
 P5 (igiene, basso rischio) → P4 (contesto) → P1 (auditor, alto impatto) → P3 → P2 → P6.
+
+## 6. Input utente (in sospeso, 2026-10-04)
+
+**Tesi — il limite delle harness / architetture agentiche (runtime / test-time):**
+- Il progresso percepito sui benchmark non viene (solo) dal peso del modello base ma
+  dall'**architettura di controllo** attorno ad esso: harness, test-time compute,
+  ricerca ad albero/MCTS, agenti ricorsivi con verificatori esterni.
+- **Verificabilità:** un harness può generare N traiettorie alternative, ma la sua
+  efficacia dipende *interamente* dalla disponibilità di un **verificatore
+  deterministico** (compiler, test unitari, interprete di codice, validatore formale).
+- **Errore ricorsivo e decadimento del contesto:** senza verificatori esterni
+  stringenti, gli harness agentici tendono a propagare/amplificare gli errori nei loop
+  di feedback, oppure soffrono la saturazione della finestra di contesto
+  (lost-in-the-middle, rumore da token irrilevanti).
+
+**Mapping bozza sull'harness attuale:**
+- Verificabilità → parziale già presente: verifier gate (apply-only-if-green),
+  PRM/best-of-N deterministico, `done` gated sull'evidenza. Manca l'**auditor
+  read-only a contesto fresco** (P1) = il pezzo che rende il verifier "il tetto" del
+  self-improvement.
+- Errore ricorsivo / context decay → mitigazioni esistenti: stato fuori dal contesto
+  su filesystem (task graph persistente, memoria file-based), context budget reale
+  `n_ctx`, anti-loop (ri-run verbatim bloccato), compaction. Da misurare: metrica
+  goal-drift + tasso di amplificazione errori nei feedback loop.
+- **2) — [MANCANTE: l'utente completerà]**
