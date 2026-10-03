@@ -476,8 +476,6 @@
   <button class="pill model-btn" id="model-btn" title="LLM model">model: … <span class="mc">▾</span></button>
   <div id="modelMenu" hidden></div>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
-  <span class="pill" id="server-badge">server</span>
-  <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
   <button class="ghost" id="toggle-left" title="show/hide sessions">▤</button>
   <button class="ghost" id="toggle-right" title="show/hide inspector">▥</button>
   <button class="ghost" id="settingsBtn" title="impostazioni" onclick="openSettings()">⚙</button>
@@ -1885,8 +1883,6 @@ document.addEventListener("click", e => {
 async function loadStatus() {
   try {
     const s = await api("GET", "/api/status");
-    $("server-badge").textContent = "server ok";
-    $("server-badge").className = "pill ok";
     if (s.sandbox) {
       const sb = s.sandbox;
       const byConfig = (sb.requested === "none");
@@ -1896,7 +1892,7 @@ async function loadStatus() {
       $("sbxPill").title = "sandbox backend: " + sb.backend + " (requested: " +
         (sb.requested || "?") + ")" + (sb.isolated ? "" : " — host execution, not isolated");
     }
-  } catch { $("server-badge").textContent = "server down"; $("server-badge").className = "pill"; }
+  } catch { /* /api/status is best-effort: the meter keeps its last value */ }
 }
 
 /* ---- approvals (v0.2: HITL gate) ---- */
@@ -2134,8 +2130,6 @@ function runAgent(goal) {
 /* ---- feed ---- */
 function connectFeed() {
   const es = new EventSource("/api/feed" + (authQS() ? "?" + authQS() : ""));
-  es.onopen = () => { $("feedDot").classList.remove("off"); };
-  es.onerror = () => { $("feedDot").classList.add("off"); };
   const push = line => {
     const f = $("feed"); const d = document.createElement("div");
     d.textContent = line; f.appendChild(d); f.scrollTop = f.scrollHeight;
