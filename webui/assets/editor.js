@@ -95,10 +95,10 @@ class EditorHost {
 const state = { tabs: [], active: -1, host: null, preview: null, tabsEl: null, statusEl: null, toggleBtn: null, resizeEl: null, dock: null };
 
 const STYLE = `
-#editorDock{position:fixed;top:44px;right:0;bottom:0;width:480px;max-width:96vw;background:var(--bg2,#0f1320);
-  border-left:1px solid var(--line,#26304a);display:flex;flex-direction:column;z-index:40;box-shadow:-16px 0 40px rgba(0,0,0,.45);font-size:12px}
+#editorDock{position:relative;flex:0 0 auto;min-height:0;background:var(--bg2,#0f1320);
+  border-left:1px solid var(--line,#26304a);display:flex;flex-direction:column;z-index:5;font-size:12px}
 #editorDock[hidden]{display:none}
-#editorDock .ed-resize{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize}
+#editorDock .ed-resize{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:6}
 #editorDock .ed-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line,#26304a)}
 #editorDock .ed-title{font-weight:600}
 #editorDock .ed-status{flex:1;opacity:.7;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -127,7 +127,7 @@ const STYLE = `
 #editorDock .ed-preview .md pre{background:rgba(255,255,255,.05);padding:8px;border-radius:6px;overflow:auto}
 #editorDock .ed-preview .md a{color:#7fb0ff}
 #editorDock .ed-foot{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line,#26304a)}
-#editorDock.ed-overlay{left:0;width:100%;max-width:none}
+#editorDock.ed-overlay{position:fixed;top:44px;right:0;bottom:0;height:auto;width:min(520px,92vw);z-index:40;box-shadow:-16px 0 40px rgba(0,0,0,.45)}
 .ed-tab-note{color:var(--warn,#e0b341)}
 `;
 
@@ -159,7 +159,9 @@ function buildDock() {
       <button class="ghost ed-revert">revert</button>
       <button class="ghost ed-toggle" hidden>render</button>
     </div>`;
-  document.body.appendChild(dock);
+  const anchor = $id("resize-right") || $id("rail");
+  if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(dock, anchor);
+  else document.body.appendChild(dock);
   state.dock = dock;
   state.tabsEl = dock.querySelector(".ed-tabs");
   state.statusEl = dock.querySelector(".ed-status");
@@ -187,7 +189,8 @@ function buildDock() {
   state.resizeEl.addEventListener("mousedown", (e) => { dragging = true; e.preventDefault(); });
   window.addEventListener("mousemove", (e) => {
     if (!dragging) return;
-    const w = Math.min(window.innerWidth - 120, Math.max(320, window.innerWidth - e.clientX));
+    const right = dock.getBoundingClientRect().right;
+    const w = Math.min(window.innerWidth - 120, Math.max(320, right - e.clientX));
     dock.style.width = w + "px";
     localStorage.setItem(LS_W, String(w));
   });
@@ -204,7 +207,7 @@ function applyResponsive() {
   if (!state.dock) return;
   const overlay = window.innerWidth < 1024;
   state.dock.classList.toggle("ed-overlay", overlay);
-  state.dock.style.width = overlay ? "" : (parseInt(localStorage.getItem(LS_W) || "480", 10) + "px");
+  state.dock.style.width = overlay ? "" : (parseInt(localStorage.getItem(LS_W) || "420", 10) + "px");
 }
 
 function activeTab() { return state.tabs[state.active] || null; }
