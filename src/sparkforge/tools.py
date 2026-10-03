@@ -450,6 +450,23 @@ def _skills(args, run_id):
         return {"ok": True, "exit_code": 0, "stdout": stdout, "stderr": "",
                 "count": len(hits), "matches": [h["name"] for h in hits],
                 "backend": "host", "sandboxed": False}
+    if action in ("audit", "health", "dupes"):
+        # JAG-203: read-only health report of the skill library (duplicates,
+        # missing descriptions, oversized SKILL.md). Never deletes anything.
+        rep = skills_mod.audit_skills()
+        lines = ["%d skills | %d duplicate-description group(s) | %d near-duplicate "
+                 "name pair(s) | %d missing description | %d oversized (SKILL.md>20KB)"
+                 % (rep["count"], len(rep["duplicate_descriptions"]),
+                    len(rep["near_duplicate_names"]), len(rep["missing_description"]),
+                    len(rep["oversized"]))]
+        for _d, _ns in list(rep["duplicate_descriptions"].items())[:6]:
+            lines.append("  same description: %s" % ", ".join(_ns))
+        for _pair in rep["near_duplicate_names"][:6]:
+            lines.append("  near names: %s" % " ~ ".join(_pair))
+        if rep["missing_description"]:
+            lines.append("  no description: %s" % ", ".join(rep["missing_description"][:8]))
+        return {"ok": True, "exit_code": 0, "stdout": "\n".join(lines), "stderr": "",
+                "count": rep["count"], "report": rep, "backend": "host", "sandboxed": False}
     skills = skills_mod.list_skills()
     lines = []
     cats = {}

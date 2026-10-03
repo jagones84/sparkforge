@@ -79,7 +79,11 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
 - **JAG-202** Prompt budget: skills index (179) troncato 8000→2600 char + hint a
   `search`; muro tool DISABLED ~900→183 char. Prompt composto 22035→16142 char
   (~5.5k→4.0k token). Doc `docs/research/2026-10-04-system-prompt-review.md` +
-  `...-harness-rdd-agenda.md`. v198 23/23. (commit pendente)
+  `...-harness-rdd-agenda.md`. v198 23/23.
+- **JAG-203** Skill-library health audit (RDD P5): `skills.audit_skills()` +
+  `skills{action:"audit"}` — READ-ONLY, find duplicates (identical descriptions),
+  near-duplicate names, missing description, oversized SKILL.md. Found: 1 dup group
+  (mcp-builder/mcp-server-builder-guide), 20 near pairs, 20 oversized. v198 26/26.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -91,7 +95,7 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
 - `v199_endpoint_sweep.py` (51/51), `v200_concurrent_chat.py` (7/7),
   `v202_concurrent_stream.py` (4/4). NON nel gate `battery.sh`.
 
-Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 23/23 → **5/5 GREEN**.
+Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26 → **5/5 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).

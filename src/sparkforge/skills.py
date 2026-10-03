@@ -316,3 +316,47 @@ def search_skills(query, limit=10):
                     "title": s.get("title"), "description": s.get("description"),
                     "score": score})
     return out
+
+
+def _name_tokens(name):
+    return {t for t in re.split(r"[^a-z0-9]+", str(name or "").lower()) if t}
+
+
+def audit_skills():
+    """Non-destructive health report of the skill library (JAG-203).
+
+    A large library develops duplicates (two skills with the SAME description, or
+    near-identical names) which confuse selection and bloat the prompt. This only
+    REPORTS — it never deletes. Read-only.
+    """
+    sk = list_skills()
+    dup_desc = {}
+    for s in sk:
+        d = re.sub(r"\s+", " ", (s.get("description") or "").strip().lower())
+        if len(d) >= 40:
+            dup_desc.setdefault(d, []).append(s["name"])
+    dup_desc = {k: v for k, v in dup_desc.items() if len(v) > 1}
+    toks = {s["name"]: _name_tokens(s["name"]) for s in sk}
+    names = list(toks)
+    near = []
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            a, b = toks[names[i]], toks[names[j]]
+            if len(a) < 2 or len(b) < 2:
+                continue
+            inter = len(a & b)
+            union = len(a | b)
+            if union and inter >= 2 and (inter / union) >= 0.5:
+                near.append(sorted([names[i], names[j]]))
+    no_desc = [s["name"] for s in sk if not (s.get("description") or "").strip()]
+    oversized = []
+    for s in sk:
+        try:
+            n = os.path.getsize(os.path.join(REPO, s["path"]))
+        except OSError:
+            continue
+        if n > 20000:
+            oversized.append({"name": s["name"], "bytes": n})
+    return {"count": len(sk), "duplicate_descriptions": dup_desc,
+            "near_duplicate_names": near[:20], "missing_description": no_desc,
+            "oversized": oversized[:20]}

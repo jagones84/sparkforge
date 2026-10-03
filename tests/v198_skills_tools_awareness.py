@@ -97,5 +97,16 @@ check("G3 the disabled-tools wall is compact",
       "footer_len=%s" % (len([l for l in sp.splitlines() if "present but DISABLED" in l][0])
                          if [l for l in sp.splitlines() if "present but DISABLED" in l] else -1))
 
+# ---- H: skill-library health audit (JAG-203, read-only) ----
+_aud = skills.audit_skills()
+check("H1 audit counts the library", _aud.get("count") == len(sk), "count=%s" % _aud.get("count"))
+_dupnames = {n for ns in _aud["duplicate_descriptions"].values() for n in ns}
+check("H2 audit finds the duplicated MCP-builder description",
+      {"mcp-builder", "mcp-server-builder-guide"} <= _dupnames, str(sorted(_dupnames))[:80])
+_res_aud = tools.execute("skills", {"action": "audit"})
+check("H3 the `skills` tool exposes action=audit",
+      isinstance(_res_aud, dict) and _res_aud.get("ok") and "report" in _res_aud,
+      str(_res_aud)[:80])
+
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)

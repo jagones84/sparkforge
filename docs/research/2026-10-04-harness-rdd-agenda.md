@@ -68,7 +68,9 @@ Oltre alla difficoltà, stimare **token/step residui** e ridurre N / compattare 
 Sopra ~50 tool abilitati, deferire gli schemi MCP dietro un `tools{action:"search"}`.
 *Accettazione:* test che l'indice dei tool resta bounded; ricerca tool funzionante.
 
-**P5 — Curare la libreria skill** (179 con doppioni). Dedup / tagging / "core set".
+**P5 — Curare la libreria skill** (179 con doppioni). Rilevamento FATTO (JAG-203:
+`skills{action:"audit"}` read-only: 1 gruppo con descrizione identica, 20 coppie di
+nomi near-dup, 20 SKILL.md oversized). Resta la cura vera (dedup / "core set").
 *Accettazione:* conteggio duplicati = 0; v198 verde.
 
 **P6 — Self-evoluzione con verifier held-out onesto.**
