@@ -9,7 +9,7 @@ import time
 import os
 import json
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 PROPOSAL_DIR = os.path.join(REPO, "data", "proposals")
 
 # scope -> modalita' di scrittura consentita all'agente
@@ -47,7 +47,7 @@ def propose(scope, content, reason="", target_path="", ws=None):
     """
     if ws is None:
         try:
-            import rules
+            from . import rules
             ws = rules.get_workspace()
         except Exception:  # noqa: BLE001 — il ws non deve mai rompere la proposta
             ws = ""
@@ -103,7 +103,7 @@ def decide(pid, decision):
         # marca 'approved' in silenzio: lo status resta 'pending' e si dice il vero.
         return {"ok": False, "error": "skill apply not implemented (JAG-128B deferred)"}
     if rec["scope"] in ("project", "global"):
-        import rules
+        from . import rules
         rules.append(rec["scope"], rec["content"], ws=rec.get("ws"))
     rec["status"] = "approved"
     return {"ok": True, **_save(rec)}

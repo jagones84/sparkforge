@@ -21,7 +21,7 @@ import threading
 import time
 import uuid
 
-import registry
+from . import registry
 
 REPO = registry.REPO
 CKPT_DIR = os.path.join(REPO, "data", "checkpoints")
@@ -31,7 +31,7 @@ _lock = threading.RLock()
 
 
 def _srv():
-    import server
+    from . import server
     return server
 
 

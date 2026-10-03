@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -20,12 +20,12 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 api = open(os.path.join(REPO, "api_v02.py"), encoding="utf-8", errors="replace").read()
 ui = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8", errors="replace").read()
-rm = open(os.path.join(REPO, "runmetrics.py"), encoding="utf-8", errors="replace").read()
-bs = open(os.path.join(REPO, "bestofn.py"), encoding="utf-8", errors="replace").read()
-vf = open(os.path.join(REPO, "verify.py"), encoding="utf-8", errors="replace").read()
+rm = open(os.path.join(REPO, "src", "sparkforge", "runmetrics.py"), encoding="utf-8", errors="replace").read()
+bs = open(os.path.join(REPO, "src", "sparkforge", "bestofn.py"), encoding="utf-8", errors="replace").read()
+vf = open(os.path.join(REPO, "src", "sparkforge", "verify.py"), encoding="utf-8", errors="replace").read()
 
 # H1: UN solo stimatore di difficolta' alimenta best-of-N e keepgoing.
 check("H1 un solo stimatore (_diff_signals) usato da best-of-N e keepgoing",
@@ -40,7 +40,7 @@ check("H2 runmetrics.finish accetta e salva difficulty",
       "difficulty=None" in rm and 'rec["difficulty"] = difficulty' in rm
       and "model=model, difficulty=_diff_level" in srv, "")
 
-import runmetrics  # noqa: E402
+from sparkforge import runmetrics  # noqa: E402
 tmp_runs = tempfile.mkdtemp()
 runmetrics.RUNS_DIR = tmp_runs
 runmetrics.start("h", model="m")
@@ -51,7 +51,7 @@ check("H2b difficulty persistita nel record",
       str(rec.get("difficulty")))
 
 # H3: selfevolve registra una sequenza per TURNO (chiavi distinte), non per sessione.
-import selfevolve  # noqa: E402
+from sparkforge import selfevolve  # noqa: E402
 tmpd = tempfile.mkdtemp()
 os.environ["SPARKFORGE_DATA_DIR"] = tmpd
 hp = os.path.join(tmpd, "seq.json")

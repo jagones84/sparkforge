@@ -4,7 +4,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -20,7 +20,7 @@ def read(p):
         return ""
 
 
-import improve  # noqa: E402
+from sparkforge import improve  # noqa: E402
 
 check("R1 routing table exposes scopes",
       set(improve.AGENT_WRITE) >= {"memory", "skill", "project", "global", "code"},
@@ -44,7 +44,7 @@ check("R8 proposal has id + pending status",
 check("R9 proposal is persisted",
       any(p["id"] == rec["id"] for p in improve.list_proposals()), "")
 
-import rules  # noqa: E402
+from sparkforge import rules  # noqa: E402
 
 _rp = rules.prompt_paths()
 _rule_files = [_rp["global_rules"], _rp["global_fallback"],
@@ -71,12 +71,12 @@ check("R10 deny writes no rule file (and status denied)",
 
 check("R11 rules.append exists", hasattr(rules, "append"), "")
 
-import registry  # noqa: E402
+from sparkforge import registry  # noqa: E402
 sch = registry.TOOL_SCHEMAS.get("improve", {})
 check("R12 improve tool declared with propose action",
       "propose" in (sch.get("properties", {}).get("action", {}).get("enum") or []), "")
 
-srv = read(os.path.join(REPO, "server.py"))
+srv = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
 
 
 def _method_body(src, name):
@@ -99,8 +99,8 @@ check("R14 webui listens to improve.proposal",
 
 import tempfile  # noqa: E402
 import shutil  # noqa: E402
-import tools  # noqa: E402
-import server as server_mod  # noqa: E402
+from sparkforge import tools  # noqa: E402
+from sparkforge import server as server_mod  # noqa: E402
 
 _tmp = tempfile.mkdtemp(prefix="v137-prop-")
 _old_dir = improve.PROPOSAL_DIR

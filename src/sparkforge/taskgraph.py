@@ -29,7 +29,7 @@ import threading
 import time
 import uuid
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 GRAPH_DIR = os.path.join(os.environ.get("SPARKFORGE_GRAPH_DIR", os.path.join(REPO, "data")),
                          "graphs")
 
@@ -63,7 +63,7 @@ WRITE_TODOS_PROMPT = (
 def _publish(kind, **data):
     """Fan out to the harness feed; never let the feed break a run."""
     try:
-        import server
+        from . import server
         return server.publish(kind, **data)
     except Exception:  # noqa: BLE001
         return None
@@ -571,7 +571,7 @@ def generate_from_model(run_id, goal, session_id=None, model=None, on_event=None
     complete, publishing `graph.node.added` live. Returns (graph, added_nodes).
     If the graph already has nodes the first action already ran → no-op.
     """
-    import server as srv
+    from . import server as srv
     graph = ensure(run_id, session_id=session_id, goal=goal)
     if graph.get("nodes"):
         return graph, []
@@ -581,7 +581,7 @@ def generate_from_model(run_id, goal, session_id=None, model=None, on_event=None
     m = model
     if not m:
         try:
-            import routing
+            from . import routing
             m = routing.pick("planner")
         except Exception:  # noqa: BLE001
             m = None
@@ -615,7 +615,7 @@ def replan_from_model(graph, note=None, model=None, on_event=None):
     Used by `POST /api/runs/<id>/graph/nodes {action:"replan"}` when the request
     changes or a step turns out to be blocked. Existing nodes are preserved.
     """
-    import server as srv
+    from . import server as srv
     existing = [n["label"] for n in graph.get("nodes", []) if n.get("status") != "cancelled"]
     prompt = (WRITE_TODOS_PROMPT + "\n\nThe task graph already contains: " +
               json.dumps(existing, ensure_ascii=False) +
@@ -625,7 +625,7 @@ def replan_from_model(graph, note=None, model=None, on_event=None):
     m = model
     if not m:
         try:
-            import routing
+            from . import routing
             m = routing.pick("planner")
         except Exception:  # noqa: BLE001
             m = None

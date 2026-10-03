@@ -22,10 +22,10 @@ os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
 os.environ["SPARKFORGE_CONTEXT_BUDGET"] = "2000000"  # huge: never compact here
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import context_engine  # noqa: E402
-import server  # noqa: E402
+from sparkforge import context_engine  # noqa: E402
+from sparkforge import server  # noqa: E402
 
 results = []
 

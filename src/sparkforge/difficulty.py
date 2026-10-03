@@ -24,7 +24,7 @@ def cfg(override=None):
     """Config effettiva: DEFAULTS <- config/tools.yaml (difficulty) -> override."""
     out = dict(DEFAULTS)
     try:
-        import registry
+        from . import registry
         got = registry.load_config().get("difficulty") or {}
         if isinstance(got, dict):
             out.update({k: v for k, v in got.items() if v is not None})

@@ -29,9 +29,9 @@ import threading
 import time
 import uuid
 
-import registry
-import sandbox
-import approvals as appmod
+from . import registry
+from . import sandbox
+from . import approvals as appmod
 
 REPO = registry.REPO
 DATA_DIR = os.path.join(REPO, "data", "meta")
@@ -104,7 +104,7 @@ def sample_candidates(n=8, fixed_seed=None):
 
     # Resolve available models
     try:
-        from server import router_models, default_model
+        from .server import router_models, default_model
         models = [m["alias"] for m in router_models() if m.get("loaded")]
         if models:
             CANDIDATE_SPACE["model"] = models
@@ -177,7 +177,7 @@ def evaluate_candidate(cand, label, eval_task_id=None):
         registry.load_config(reload=True)
 
         # Run eval
-        from server import eval_run
+        from .server import eval_run
         eval_result = eval_run(
             model=cand.get("model"),
             max_steps=cand.get("max_steps", 6),
@@ -193,7 +193,7 @@ def evaluate_candidate(cand, label, eval_task_id=None):
         for task in eval_result.get("per_task", []):
             run_id = task.get("run_id")
             if run_id:
-                from server import get_run_trace
+                from .server import get_run_trace
                 trace = get_run_trace(run_id)
                 if trace:
                     total_tokens += trace.get("tokens_in", 0) + trace.get("tokens_out", 0)
@@ -209,7 +209,7 @@ def evaluate_candidate(cand, label, eval_task_id=None):
         # Memory
         if cand.get("memory_enabled"):
             try:
-                import memory
+                from . import memory
                 memory.store("meta.eval", json.dumps(result, indent=2),
                              label=label, kind="meta.eval")
             except Exception:
@@ -303,7 +303,7 @@ def meta_run(candidates=None, eval_task_id=None):
 
         # Store in memory
         try:
-            import memory
+            from . import memory
             memory.store("meta.report",
                          "Meta-harness report: %d candidates, %d on frontier\n%s"
                          % (len(results), len(frontier),

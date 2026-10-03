@@ -13,15 +13,15 @@ tmp = tempfile.mkdtemp(prefix="sf-mem-")
 os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
 os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
 os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import memory  # noqa: E402
+from sparkforge import memory  # noqa: E402
 memory.DATA_DIR = os.path.join(tmp, "memory")   # isolate from real data/
 memory._vector_db = None
 
-import registry  # noqa: E402
-import server  # noqa: E402
-import tools  # noqa: E402
+from sparkforge import registry  # noqa: E402
+from sparkforge import server  # noqa: E402
+from sparkforge import tools  # noqa: E402
 
 results = []
 

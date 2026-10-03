@@ -172,7 +172,7 @@ def t3_agent_fs_read():
 def t4_agent_mcp():
     # JAG-159: pmcp is optional — skip when no pmcp client is configured.
     try:
-        import mcp_client as _mc
+        from sparkforge import mcp_client as _mc
         configured = "pmcp" in (_mc.load_doc().get("clients") or {})
     except Exception:  # noqa: BLE001
         configured = False

@@ -175,9 +175,9 @@ def check_routing_status():
 def check_fallback_logic_offline():
     """Drive server.stream_with_fallback with a stubbed router: the primary
     model must fail over to the next chain entry (evidence of the live path)."""
-    sys.path.insert(0, REPO)
+    sys.path.insert(0, os.path.join(REPO, "src"))
     os.environ.setdefault("SPARKFORGE_DB", os.path.join(REPO, "data", "events.db"))
-    import server
+    from sparkforge import server
 
     calls = []
 

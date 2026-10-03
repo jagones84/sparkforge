@@ -4,7 +4,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -13,9 +13,9 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import bestofn  # noqa: E402
-import prm  # noqa: E402
-import registry  # noqa: E402
+from sparkforge import bestofn  # noqa: E402
+from sparkforge import prm  # noqa: E402
+from sparkforge import registry  # noqa: E402
 
 check("N1 disabled by default (n=1)", bestofn.n_of({}) == 1, "")
 check("N2 enabled n=3", bestofn.n_of({"enabled": True, "n": 3}) == 3, "")
@@ -48,7 +48,7 @@ check("N9 choose picks the valid action", best == action and len(scores) == 3, "
 none_best, _ = bestofn.choose(["", "   "], c={"min_score": 0.3})
 check("N10 min_score floor yields None", none_best is None, "")
 
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 check("N11 chat loop wires best-of-N (guarded, n>1)",
       "import bestofn as _bn" in srv and "bestofn.chosen" in srv and "_bN > 1" in srv, "")
 

@@ -28,7 +28,7 @@ def cfg(override=None):
     """Runtime config: DEFAULTS <- config/tools.yaml -> override esplicito."""
     out = dict(DEFAULTS)
     try:
-        import registry
+        from . import registry
         got = (registry.load_config().get("runtime") or {})
         if isinstance(got, dict):
             out.update({k: v for k, v in got.items() if v is not None})

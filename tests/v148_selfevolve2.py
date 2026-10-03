@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -20,7 +20,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import selfevolve  # noqa: E402
+from sparkforge import selfevolve  # noqa: E402
 
 check("T1 stage2 defaults sane",
       selfevolve.STAGE2_DEFAULTS["category"] == "auto"
@@ -113,8 +113,8 @@ realb = selfevolve.verify(d_b)
 check("T13 verify in sandbox reale: tool sconosciuto -> rosso",
       realb.get("green") is False, str(realb.get("output"))[:120])
 
-tools_src = open(os.path.join(REPO, "tools.py"), encoding="utf-8", errors="replace").read()
-reg = open(os.path.join(REPO, "registry.py"), encoding="utf-8", errors="replace").read()
+tools_src = open(os.path.join(REPO, "src", "sparkforge", "tools.py"), encoding="utf-8", errors="replace").read()
+reg = open(os.path.join(REPO, "src", "sparkforge", "registry.py"), encoding="utf-8", errors="replace").read()
 api = open(os.path.join(REPO, "api_v02.py"), encoding="utf-8", errors="replace").read()
 yaml_src = open(os.path.join(REPO, "config", "tools.yaml"), encoding="utf-8", errors="replace").read()
 check("T14 wiring: improve evolve/verify/promote + schema + config + API",

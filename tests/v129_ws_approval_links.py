@@ -18,10 +18,10 @@ WS = os.path.join(TMP, "ws")
 OUT = os.path.join(TMP, "outside")
 os.makedirs(WS, exist_ok=True)
 os.makedirs(OUT, exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import rules  # noqa: E402
-import registry  # noqa: E402
+from sparkforge import rules  # noqa: E402
+from sparkforge import registry  # noqa: E402
 
 results = []
 
@@ -47,7 +47,7 @@ check("W2 forward-slash Z: path maps too", rules._win_to_posix("Z:/a/b") == os.p
 check("W3 a plain linux path is untouched", rules._win_to_posix("/tmp/x") == "/tmp/x", "")
 check("W4 a real dir validates", rules.check_dir(WS) == os.path.realpath(WS), "")
 check("W5 a missing dir is rejected", rules.check_dir("/nope-129-xyz") is None, "")
-srv = read(os.path.join(REPO, "server.py"))
+srv = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
 check("W6 sessions/new rejects a bad explicit folder",
       "cartella inesistente" in srv and 'ws = qs.get("workspace")' in srv, "")
 check("W7 chat passes the workspace to the gate", "_chat_workspace(sess)" in srv, "")

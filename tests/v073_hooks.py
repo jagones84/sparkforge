@@ -31,9 +31,9 @@ with open(cfg, "w", encoding="utf-8") as f:
             '    timeout_secs: 10\n' % log)
 
 os.environ["SPARKFORGE_HOOKS"] = cfg
-sys.path.insert(0, REPO)
-import hooks  # noqa: E402
-import tools  # noqa: E402
+sys.path.insert(0, os.path.join(REPO, "src"))
+from sparkforge import hooks  # noqa: E402
+from sparkforge import tools  # noqa: E402
 
 results = []
 

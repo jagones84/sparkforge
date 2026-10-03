@@ -4,7 +4,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -13,7 +13,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 check("D1 has has_steer helper", "def has_steer" in srv, "")
 check("D2 steer drained before the model call", "drain_steer" in srv and
       srv.count("drain_steer") >= 2, "")

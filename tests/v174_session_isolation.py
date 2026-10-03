@@ -14,21 +14,21 @@ import sys
 
 REPO = "/home/jagones/Repositories/sparkforge"
 os.chdir(REPO)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile
-py_compile.compile(os.path.join(REPO, "server.py"), doraise=True)
-py_compile.compile(os.path.join(REPO, "taskgraph.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "sparkforge", "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "sparkforge", "taskgraph.py"), doraise=True)
 print("[compile] server.py + taskgraph.py OK")
 
-from taskgraph import render_todos
+from sparkforge.taskgraph import render_todos
 
 txt = render_todos({"nodes": [{"id": "n1", "label": "x", "status": "todo"}]})
 assert "This list is YOURS" in txt, "render_todos lost the model-owns-it contract"
 assert "NEVER redo a step already marked [x]" in txt, "no anti-redo rule in the task list"
 print("render_todos: contract + anti-redo OK")
 
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
 assert "it is YOURS to keep current" in srv, "the write_todos nudge is not clear about ownership"
 assert "Never redo a step already" in srv, "no anti-redo rule in the nudge"
 assert "an abort can cut the model mid tool-call" in srv, "abort path does not guard raw tool-call JSON"

@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 
-import registry
+from . import registry
 
 DATA_DIR = os.path.join(registry.REPO, "data")
 # Distinct file name: another harness build may own data/approvals.json.

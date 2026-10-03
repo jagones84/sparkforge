@@ -7,11 +7,11 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 os.environ.setdefault("SPARKFORGE_DB", os.path.join(REPO, "data", "events.db"))
 
-import server      # noqa: E402
-import taskgraph   # noqa: E402
+from sparkforge import server      # noqa: E402
+from sparkforge import taskgraph   # noqa: E402
 
 results = []
 

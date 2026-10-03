@@ -4,7 +4,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -13,7 +13,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import keepgoing  # noqa: E402
+from sparkforge import keepgoing  # noqa: E402
 
 check("K1 defaults present",
       all(k in keepgoing.DEFAULTS for k in
@@ -56,7 +56,7 @@ check("K12 tool_hash deterministic",
 check("K13 cfg() exposes overrides",
       keepgoing.cfg({"keepgoing_max": 20})["keepgoing_max"] == 20, "")
 
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 check("S1 chat loop imports keepgoing", "import keepgoing" in srv, "")
 check("S2 emits plan.continuing", "plan.continuing" in srv, "")
 check("S3 emits plan.stopped with reason", "plan.stopped" in srv and '"reason"' in srv, "")
@@ -66,7 +66,7 @@ check("S6 has abort helpers", "def push_abort" in srv and "def _is_aborted" in s
 check("S7 has /api/chat/abort route", '"/api/chat/abort"' in srv, "")
 check("S8 abort flag cleared at turn start", "clear_abort" in srv, "")
 
-import registry  # noqa: E402
+from sparkforge import registry  # noqa: E402
 check("R1 config/tools.yaml has runtime block",
       "runtime:" in open(os.path.join(REPO, "config", "tools.yaml"),
                          encoding="utf-8").read(), "")
@@ -77,7 +77,7 @@ web = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8", errors="
 check("R4 WebUI has runtime fields",
       "keepgoing_max" in web and "no_progress_rounds" in web, "")
 check("R5 keepgoing reads the runtime config", "load_config().get(\"runtime\")" in
-      open(os.path.join(REPO, "keepgoing.py"), encoding="utf-8").read(), "")
+      open(os.path.join(REPO, "src", "sparkforge", "keepgoing.py"), encoding="utf-8").read(), "")
 
 total = len(results)
 print("\n==== %d/%d checks passed ====" % (sum(results), total))

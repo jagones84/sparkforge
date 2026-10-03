@@ -17,10 +17,10 @@ os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
 WS = os.path.join(tmp, "proj")
 os.makedirs(os.path.join(WS, ".sparkforge", "rules"), exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import api_v02  # noqa: E402
-import rules as R  # noqa: E402
+from sparkforge import api_v02  # noqa: E402
+from sparkforge import rules as R  # noqa: E402
 
 results = []
 

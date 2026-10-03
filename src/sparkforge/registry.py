@@ -14,7 +14,7 @@ import os
 import re
 import threading
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 CONFIG_YAML = os.path.join(REPO, "config", "tools.yaml")
 CONFIG_JSON = os.path.join(REPO, "config", "tools.json")
 # JAG-82: programmatic policy changes (POST /api/tools, the SETTINGS panel) are
@@ -360,7 +360,7 @@ def workspace_dir():
 def _external_tools():
     """External MCP tools (mcp_client), lazily; empty on any failure."""
     try:
-        import mcp_client
+        from . import mcp_client
         if not mcp_client.get_manager().sessions:
             mcp_client.get_manager().start_all()
         return {t["name"]: t for t in mcp_client.list_tools()}

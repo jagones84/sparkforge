@@ -24,9 +24,9 @@ import re
 import subprocess
 import time
 
-import osutil
+from . import osutil
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 CONFIG = os.environ.get("SPARKFORGE_HOOKS") or os.path.join(REPO, "config", "hooks.yaml")
 DEFAULT_TIMEOUT = 60
 EVENTS = ("PreToolUse", "PostToolUse", "Stop")
@@ -65,7 +65,7 @@ def load(reload=False):
 
 def _fire(kind, **d):
     try:
-        import server
+        from . import server
         server.publish(kind, **d)
     except Exception:  # noqa: BLE001
         pass

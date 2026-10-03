@@ -17,10 +17,10 @@ A = os.path.join(tmp, "projA")
 B = os.path.join(tmp, "projB")
 os.makedirs(A, exist_ok=True)
 os.makedirs(B, exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import rules as R  # noqa: E402
-import server  # noqa: E402
+from sparkforge import rules as R  # noqa: E402
+from sparkforge import server  # noqa: E402
 
 results = []
 

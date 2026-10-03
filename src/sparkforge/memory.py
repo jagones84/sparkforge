@@ -24,7 +24,7 @@ import re
 import threading
 import time
 
-import registry
+from . import registry
 
 REPO = registry.REPO
 DATA_DIR = os.path.join(REPO, "data", "memory")

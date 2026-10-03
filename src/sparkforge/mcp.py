@@ -229,7 +229,7 @@ def call_tool(name, args, api):
 def _checkpoint_call(a):
     action = a.get("action", "list")
     try:
-        import checkpoints as ck
+        from . import checkpoints as ck
         if action == "create":
             return _text(ck.create(label=a.get("label"), session_id=a.get("session"),
                                    idempotency_key=a.get("idempotency_key"),
@@ -248,7 +248,7 @@ def _checkpoint_call(a):
 
 def _context_call(a):
     try:
-        import context_engine as ce
+        from . import context_engine as ce
         return _text(ce.preview(a.get("session", ""), a.get("message"),
                                 int(a.get("budget_tokens", ce.DEFAULT_BUDGET))))
     except Exception as e:
@@ -257,7 +257,7 @@ def _context_call(a):
 
 def _routing_call(a):
     try:
-        import routing as rt
+        from . import routing as rt
         if a.get("roles") or "default_fallbacks" in a:
             return _text(rt.update(a))
         return _text(rt.status())
@@ -268,7 +268,7 @@ def _routing_call(a):
 def _memory_call(a):
     action = a.get("action", "stats")
     try:
-        import memory as mem
+        from . import memory as mem
         if action == "store":
             return _text(mem.store(a.get("kind", "memory.store"), a.get("content", "")))
         if action == "search":
@@ -283,7 +283,7 @@ def _memory_call(a):
 def _subagent_call(a):
     action = a.get("action")
     try:
-        import subagent as sub
+        from . import subagent as sub
         if action == "spawn":
             goal = a.get("goal", "")
             if not goal:
@@ -302,7 +302,7 @@ def _subagent_call(a):
 def _meta_call(a):
     action = a.get("action", "status")
     try:
-        import meta as mt
+        from . import meta as mt
         if action == "run":
             candidates = mt.sample_candidates(n=int(a.get("n_candidates", 8)))
             return _text(mt.meta_run(candidates, a.get("eval_task_id")))
@@ -316,7 +316,7 @@ def _meta_call(a):
 def _blackboard_call(a):
     action = a.get("action")
     try:
-        import swarm as sw
+        from . import swarm as sw
         if action == "post":
             return _text(sw.post(a.get("topic", "general"), a.get("content", ""),
                                   tags=a.get("tags"), author=a.get("author", "mcp")))
@@ -334,7 +334,7 @@ def _blackboard_call(a):
 def _acp_call(a):
     action = a.get("action")
     try:
-        import acp as acpmod
+        from . import acp as acpmod
         if action == "server_call":
             method = a.get("method", "ping")
             params = a.get("params") or {}
@@ -352,7 +352,7 @@ def _acp_call(a):
 
 def _swarm_call(a):
     try:
-        import swarm as sw
+        from . import swarm as sw
         goal = a.get("goal", "")
         if not goal:
             return _error_text("goal required")

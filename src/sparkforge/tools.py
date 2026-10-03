@@ -17,9 +17,9 @@ import time
 import urllib.parse
 import urllib.request
 
-import osutil
-import registry
-import sandbox
+from . import osutil
+from . import registry
+from . import sandbox
 
 REPO = registry.REPO
 
@@ -78,7 +78,7 @@ def _fs_read(args, run_id):
 def _journal(run_id, path, before, after, action):
     """JAG-127: record the pre-image so the UI can diff and undo. Never raises."""
     try:
-        import edits
+        from . import edits
         edits.record(run_id, path, before, after, action)
     except Exception:  # noqa: BLE001 — the journal must never break a write
         pass
@@ -92,7 +92,7 @@ def _verify_edit(tool, path, snap, res, args, run_id):
     un fallimento con l'errore del check. Mai bloccante su eccezioni interne.
     """
     try:
-        import verify as _v
+        from . import verify as _v
     except Exception:  # noqa: BLE001
         return res
     try:
@@ -107,7 +107,7 @@ def _verify_edit(tool, path, snap, res, args, run_id):
     except Exception as e:  # noqa: BLE001 — the verifier must never break a write
         return res
     try:
-        import server
+        from . import server
         server.publish("verify.run", run=run_id, tool=tool, path=path, **report)
     except Exception:  # noqa: BLE001
         pass
@@ -416,7 +416,7 @@ def _web(args, run_id):
 
 def _skills(args, run_id):
     """Skills registry: list available skills or read one SKILL.md."""
-    import skills as skills_mod
+    from . import skills as skills_mod
     action = str(args.get("action", "list"))
     if action == "read":
         name = str(args.get("name", ""))
@@ -481,7 +481,7 @@ def _self(args, run_id):
         ) % osutil.service_hint(),
     }
     try:
-        import skills as skills_mod
+        from . import skills as skills_mod
         sk = skills_mod.list_skills()
         info["skills"] = {"dir": info["skills_dir"], "count": len(sk),
                           "categories": sorted({s["category"] for s in sk})}
@@ -511,7 +511,7 @@ def _memory(args, run_id):
     Closes a real gap: the store existed and was auto-injected, but the agent had
     NO tool to deliberately remember or recall anything.
     """
-    import memory as mem
+    from . import memory as mem
     action = (args.get("action") or "recall").strip().lower()
     limit = int(args.get("limit") or (10 if action == "recent" else 5))
     if action in ("core", "core_read", "read_core"):
@@ -605,19 +605,19 @@ def _improve(args, run_id=None):
       - verify           -> esegue il check di una proposta (`path`);
       - promote          -> archivia una proposta verificata (`path`).
     """
-    import improve
+    from . import improve
     args = args or {}
     scope = str(args.get("scope", "")).strip()
     action = str(args.get("action", "propose") or "propose").strip()
     content = str(args.get("content", "")).strip()
     if scope == "mine":
-        import selfevolve
+        from . import selfevolve
         out = os.path.join(registry.REPO, "data", "proposals", "skills")
         path = str(args.get("path", "") or "").strip()
 
         def _pub(ev, **kw):
             try:
-                import server as _srv
+                from . import server as _srv
                 _srv.publish(ev, **kw)
             except Exception:  # noqa: BLE001 — l'evento non deve rompere il tool
                 pass
@@ -662,7 +662,7 @@ def _improve(args, run_id=None):
         return {"error": "scope not writable"}
     rec = improve.propose(scope, content, reason=str(args.get("reason", "")))
     try:
-        import server as _srv
+        from . import server as _srv
         _srv.publish("improve.proposal", **rec)
     except Exception:  # noqa: BLE001 — l'evento non deve rompere il tool
         pass
@@ -681,7 +681,7 @@ def _dispatch_execute(tool, args, run_id=None):
         # external MCP tools (<client>__<tool>) route through the MCP client
         if "__" in tool:
             try:
-                import mcp_client
+                from . import mcp_client
                 res = mcp_client.call_tool(tool, args, run_id=run_id)
                 res["duration_ms"] = res.get("duration_ms", 0)
                 res["tool"] = tool
@@ -708,7 +708,7 @@ def execute(tool, args, run_id=None):
     observation. Both are deterministic shell scripts — the model is not asked.
     """
     try:
-        import hooks
+        from . import hooks
         pre = hooks.run("PreToolUse", tool=tool, args=args or {}, run_id=run_id)
     except Exception:  # noqa: BLE001 — a hook must never break tool execution
         pre = {"blocked": False}
@@ -718,7 +718,7 @@ def execute(tool, args, run_id=None):
                 "error": "blocked by PreToolUse hook: %s" % pre.get("reason")}
     res = _dispatch_execute(tool, args, run_id=run_id)
     try:
-        import hooks
+        from . import hooks
         obs = (res.get("observation") or res.get("error") or res.get("content")
                or res.get("stdout"))
         hooks.run("PostToolUse", tool=tool, args=args or {}, observation=obs,

@@ -32,10 +32,10 @@ import threading
 import time
 import uuid
 
-import api_v02
-import approvals
-import registry
-import mcp  # reuse MCP transport helpers
+from . import api_v02
+from . import approvals
+from . import registry
+from . import mcp  # reuse MCP transport helpers
 
 REPO = registry.REPO
 
@@ -109,7 +109,7 @@ ACP_TOOLS = {
 
 
 def _srv():
-    import server
+    from . import server
     return server
 
 
@@ -168,16 +168,16 @@ def handle_acp_message(msg):
 
     if method == "agent/list":
         limit = int(params.get("limit", 20))
-        from server import runs_summary
+        from .server import runs_summary
         return _acp_ok(msg_id, {"runs": runs_summary(limit)})
 
     # --- plan operations ---
     if method == "plan/get":
-        from server import load_plan
+        from .server import load_plan
         return _acp_ok(msg_id, load_plan())
 
     if method == "plan/set":
-        from server import save_plan
+        from .server import save_plan
         goal = params.get("goal", "")
         steps = params.get("steps", [])
         plan = {"goal": goal, "steps": steps, "updated": time.time()}
@@ -186,7 +186,7 @@ def handle_acp_message(msg):
 
     # --- tasks ---
     if method == "tasks/list":
-        from server import load_tasks
+        from .server import load_tasks
         tasks = load_tasks()
         todo = [t for t in tasks.get("tasks", []) if t.get("status") != "done"]
         return _acp_ok(msg_id, {**tasks, "remaining": len(todo)})
@@ -211,7 +211,7 @@ def handle_acp_message(msg):
         if not query_text:
             return _acp_error(msg_id, -32602, "query required")
         try:
-            import memory
+            from . import memory
             results = memory.search(query_text, params.get("kind"),
                                     int(params.get("limit", 10)),
                                     params.get("semantic", False))

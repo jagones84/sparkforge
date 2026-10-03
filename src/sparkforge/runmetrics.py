@@ -8,7 +8,7 @@ import json
 import os
 import time
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 RUNS_DIR = os.environ.get("SPARKFORGE_RUNS_DIR", os.path.join(REPO, "data", "runs"))
 _START = {}
 

@@ -11,8 +11,8 @@ import sys
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
-import providers  # noqa: E402
+sys.path.insert(0, os.path.join(REPO, "src"))
+from sparkforge import providers  # noqa: E402
 
 results = []
 

@@ -19,7 +19,7 @@ import re
 import threading
 import time
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 CONFIG = os.environ.get("SPARKFORGE_PROVIDERS") or os.path.join(REPO, "config", "providers.yaml")
 # JAG-112: user additions/overrides live in a gitignored overlay (never the repo).
 LOCAL_CONFIG = os.environ.get("SPARKFORGE_PROVIDERS_LOCAL") or \

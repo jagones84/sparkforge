@@ -16,7 +16,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 RESULTS = {"task": "JAG-122 skill dir injection", "checks": [], "passed": False}
 
@@ -29,7 +29,7 @@ def check(name, ok, detail=""):
 
 def main():
     ok = True
-    import server
+    from sparkforge import server
 
     out = server._apply_skill_slash("/pdf-monster leggi il pdf")
     ok &= check("S1 SKILL ACTIVATION header", "SKILL ACTIVATION" in out)

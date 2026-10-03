@@ -32,7 +32,7 @@ import urllib.request
 import uuid
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 BASE = os.environ.get("SPARKFORGE_URL", "http://127.0.0.1:8790")
 MOCK_PORT = int(os.environ.get("SPARKFORGE_MOCK_PORT", 8097))
 TEST_PORT = int(os.environ.get("SPARKFORGE_TEST_PORT", 8797))
@@ -111,7 +111,7 @@ def sse_stream(base, token, message, session, model=None, timeout=90):
 # ------------------------------------------------------------------ A ----
 def part_a_module():
     os.environ["SPARKFORGE_GRAPH_DIR"] = "/tmp/sparkforge-v06-unit"
-    import taskgraph as tg
+    from sparkforge import taskgraph as tg
     tg.GRAPH_DIR = os.path.join("/tmp/sparkforge-v06-unit", "graphs")
     # fresh run id per invocation so the check is idempotent across runs
     g = tg.ensure("run_unit_%s" % uuid.uuid4().hex[:8], session_id="sess-unit", goal="unit")

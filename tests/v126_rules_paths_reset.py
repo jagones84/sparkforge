@@ -22,9 +22,9 @@ WS = os.path.join(tmp, "proj")
 for d in (CFG, os.environ["SPARKFORGE_SESSIONS_DIR"], os.environ["SPARKFORGE_GRAPH_DIR"],
           os.path.join(WS, ".sparkforge")):
     os.makedirs(d, exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import rules as R  # noqa: E402
+from sparkforge import rules as R  # noqa: E402
 
 results = []
 
@@ -63,7 +63,7 @@ check("R3 block carries the global rules text", "GLOBAL-RULE-ABC" in blk2, "")
 check("R3b legacy rules_block unchanged (still empty when none)", R.rules_block() != "", "")
 
 # ---- S: reset routes + UI --------------------------------------------------
-srv = read(os.path.join(REPO, "server.py"))
+srv = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
 check("S1 run-graph reset route present",
       'and path.endswith("/graph/reset")' in srv and "/api/runs/" in srv, "")
 check("S2 session plan reset route present", "/graph/reset" in srv, "")

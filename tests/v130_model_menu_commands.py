@@ -11,7 +11,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 results = []
 
@@ -54,7 +54,7 @@ check("G3 panel explains the difference", "does the same thing: plan + execute a
 
 # ---- backend: provider refs exist -----------------------------------------
 try:
-    import providers  # noqa: E402
+    from sparkforge import providers  # noqa: E402
     cat = providers.catalog()
     refs = [m["ref"] for p in cat.get("providers", []) for m in p.get("models", [])]
     check("B1 catalogue exposes <provider>:<model> refs", len(refs) > 1 and all(":" in r for r in refs),

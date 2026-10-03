@@ -10,15 +10,15 @@ import sys
 
 REPO = "/home/jagones/Repositories/sparkforge"
 os.chdir(REPO)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile
-py_compile.compile(os.path.join(REPO, "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "sparkforge", "server.py"), doraise=True)
 
-import server
-import tools
-import bestofn
-import keepgoing
+from sparkforge import server
+from sparkforge import tools
+from sparkforge import bestofn
+from sparkforge import keepgoing
 
 bestofn.n_of = lambda **k: 1
 server.maybe_reflect = lambda *a, **k: None

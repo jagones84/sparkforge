@@ -21,10 +21,10 @@ os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
 os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(tmp, "edits")
 for d in ("cfg", "sessions", "graphs", "edits"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import edits  # noqa: E402
-import tools  # noqa: E402
+from sparkforge import edits  # noqa: E402
+from sparkforge import tools  # noqa: E402
 
 results = []
 
@@ -85,7 +85,7 @@ edits.undo(KEY)
 check("S8 full-session undo removes created file", not os.path.exists(new), "")
 
 # ---- W: harness wiring -----------------------------------------------------
-tl = read(os.path.join(REPO, "tools.py"))
+tl = read(os.path.join(REPO, "src", "sparkforge", "tools.py"))
 check("W1 tools has the journal hook", "def _journal(" in tl and "edits.record(" in tl, "")
 check("W2 fs.write journals", "_journal(run_id, path, before, after" in tl, "")
 check("W3 fs.edit journals", "_journal(run_id, path, content, new" in tl, "")

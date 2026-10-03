@@ -12,10 +12,10 @@ os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
 os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
 for k in ("cfg", "sessions", "graphs"):
     os.makedirs(os.path.join(tmp, k), exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import registry  # noqa: E402
-import tools  # noqa: E402
+from sparkforge import registry  # noqa: E402
+from sparkforge import tools  # noqa: E402
 
 results = []
 

@@ -35,15 +35,15 @@ import threading
 import time
 import uuid
 
-import approvals
-import mcp
-import registry
-import sandbox
-import tools as toolmod
+from . import approvals
+from . import mcp
+from . import registry
+from . import sandbox
+from . import tools as toolmod
 
 
 def _srv():
-    import server
+    from . import server
     return server
 
 
@@ -327,7 +327,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
     # request intact and otherwise picks the agent-role alias from the roster.
     if not model:
         try:
-            import routing
+            from . import routing
             model = routing.pick("agent") or srv.default_model()
         except Exception:
             model = srv.default_model()
@@ -335,7 +335,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
     # v0.3 checkpoint at run start (idempotent per run) so plan/tasks/transcript
     # survive a restart and can be rolled back after a bad run.
     try:
-        import checkpoints
+        from . import checkpoints
         _CHECKPOINTS_START = checkpoints.create(
             label="agent run %s" % st.id, idempotency_key="agent-run:" + st.id,
             by="agent-loop")
@@ -360,7 +360,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
     # app"). We carry assistant actions + observations across the whole run.
     hist = []
     rb = srv.rules_context(ws=workspace)  # JAG-114/115: standing rules for this run
-    import prompt as prompt_mod  # JAG-128A: prompt-map + capability in the agent loop too
+    from . import prompt as prompt_mod  # JAG-128A: prompt-map + capability in the agent loop too
     try:
         for i in range(max_steps):
             checkpoint(st)
@@ -377,7 +377,7 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                 # the chat loop (name + one-line description). Before this it saw
                 # NO skills at all and could not pick the right one proactively.
                 try:
-                    import skills as _skills_mod
+                    from . import skills as _skills_mod
                     _sk = _skills_mod.skills_context(max_chars=8000)
                 except Exception:  # noqa: BLE001
                     _sk = ""
@@ -503,7 +503,7 @@ def _result(st, goal, model):
     except Exception:  # noqa: BLE001
         pass
     try:  # JAG-69: deterministic Stop hooks at the end of the run
-        import hooks
+        from . import hooks
         hooks.run("Stop", run_id=st.id, observation=st.summary)
     except Exception:  # noqa: BLE001
         pass
@@ -511,8 +511,8 @@ def _result(st, goal, model):
     # Pure function (no model) — never breaks a run on failure.
     prm_report = None
     try:
-        import prm
-        import taskgraph as _tg
+        from . import prm
+        from . import taskgraph as _tg
         _g = _tg.load(st.id)
         open_n = sum(1 for n in (_g or {}).get("nodes", [])
                      if n.get("status") in ("todo", "doing", "blocked"))
@@ -663,11 +663,11 @@ def _lazy(name):
     if attr is None:
         raise ValueError("unknown lazy module %r" % name)
     if getattr(sys.modules[__name__], attr, None) is None:
-        setattr(sys.modules[__name__], attr, importlib.import_module(name))
+        setattr(sys.modules[__name__], attr, importlib.import_module("%s.%s" % (__package__ or "sparkforge", name)))
 
 
-import checkpoints  # noqa: E402  (v0.3)
-import context_engine  # noqa: E402  (v0.3)
+from . import checkpoints  # noqa: E402  (v0.3)
+from . import context_engine  # noqa: E402  (v0.3)
 
 
 # --------------------------------------------------------------- HTTP glue --
@@ -698,7 +698,7 @@ def handle(handler, method, path, qs, body):
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
         if path == "/api/hooks":
-            import hooks
+            from . import hooks
             return _r(handler, 200, {"hooks": hooks.load(reload=qs.get("reload") == "1"),
                                      "events": list(hooks.EVENTS),
                                      "config": hooks.CONFIG})
@@ -749,12 +749,12 @@ def handle(handler, method, path, qs, body):
 
         # --- JAG-109: skills (engine in skills.py) ---
         if path == "/api/skills":
-            import skills as skills_mod
+            from . import skills as skills_mod
             items = skills_mod.list_skills()
             return _r(handler, 200, {"skills": items, "count": len(items),
                                      "local_dir": skills_mod._local_dir()})
         if path.startswith("/api/skills/"):
-            import skills as skills_mod
+            from . import skills as skills_mod
             nm = path[len("/api/skills/"):]
             sk = skills_mod.get_skill(nm)
             return _r(handler, 200, sk) if sk else \
@@ -1047,7 +1047,7 @@ def handle(handler, method, path, qs, body):
 
         # JAG-109: remove a user-installed (local) skill.
         if path.startswith("/api/skills/"):
-            import skills as skills_mod
+            from . import skills as skills_mod
             nm = path[len("/api/skills/"):]
             res = skills_mod.remove(nm)
             _publish("skills.remove", name=nm, ok=bool(res.get("ok")))
@@ -1429,14 +1429,14 @@ def fs_write(body) -> dict:
 # ---------------------------------------------------------------------------
 def edits_summary(qs=None) -> dict:
     """GET /api/edits?session= — per-file +N/-M summary of the changes made."""
-    import edits as edits_mod
+    from . import edits as edits_mod
     q = qs or {}
     return edits_mod.summary(q.get("session") or q.get("key") or "default")
 
 
 def edits_diff(qs=None) -> dict:
     """GET /api/edits/diff?session=&path= — aligned before/after rows for one file."""
-    import edits as edits_mod
+    from . import edits as edits_mod
     q = qs or {}
     path = q.get("path")
     if not path:
@@ -1446,7 +1446,7 @@ def edits_diff(qs=None) -> dict:
 
 def edits_undo(body) -> dict:
     """POST /api/edits/undo {session, path?} — restore files to their pre-image."""
-    import edits as edits_mod
+    from . import edits as edits_mod
     b = body or {}
     return edits_mod.undo(b.get("session") or b.get("key") or "default", b.get("path"))
 
@@ -1515,7 +1515,7 @@ def workspace_set(body):
 
 def install_skill_raw(data, name=None, overwrite=False):
     """POST /api/skills/install — body zip grezzo. Engine: skills.install_zip."""
-    import skills as skills_mod
+    from . import skills as skills_mod
     res = skills_mod.install_zip(data, name=name, overwrite=overwrite)
     _publish("skills.install", name=res.get("name"), ok=bool(res.get("ok")))
     return res

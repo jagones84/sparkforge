@@ -5,7 +5,7 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -14,8 +14,8 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import verify  # noqa: E402
-import registry  # noqa: E402
+from sparkforge import verify  # noqa: E402
+from sparkforge import registry  # noqa: E402
 
 check("V1 defaults off with empty command",
       verify.DEFAULTS["enabled"] is False and verify.DEFAULTS["command"] == "", "")
@@ -74,7 +74,7 @@ try:
 finally:
     verify.run_check = _orig
 
-tools_src = open(os.path.join(REPO, "tools.py"), encoding="utf-8", errors="replace").read()
+tools_src = open(os.path.join(REPO, "src", "sparkforge", "tools.py"), encoding="utf-8", errors="replace").read()
 check("V9 tools wires the verifier for fs.write/fs.edit",
       "_verify_edit(\"fs.write\"" in tools_src and "_verify_edit(\"fs.edit\"" in tools_src, "")
 

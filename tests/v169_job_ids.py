@@ -8,12 +8,12 @@ import sys
 
 REPO = "/home/jagones/Repositories/sparkforge"
 os.chdir(REPO)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile
-py_compile.compile(os.path.join(REPO, "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "sparkforge", "server.py"), doraise=True)
 
-import server
+from sparkforge import server
 
 s1 = server.get_or_create_session(None, title="v169-a")
 s2 = server.get_or_create_session(None, title="v169-b")

@@ -18,7 +18,7 @@ import json
 import os
 import re
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 MAX_BYTES = int(os.environ.get("SPARKFORGE_RULES_MAX", str(32 * 1024)))
 
 

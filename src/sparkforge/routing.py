@@ -25,7 +25,7 @@ import os
 import re
 import threading
 
-import registry
+from . import registry
 
 REPO = registry.REPO
 CONFIG_PATH = os.path.join(REPO, "config", "routing.yaml")
@@ -46,7 +46,7 @@ _cache = None
 
 
 def _srv():
-    import server
+    from . import server
     return server
 
 

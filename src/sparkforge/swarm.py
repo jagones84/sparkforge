@@ -31,7 +31,7 @@ import threading
 import time
 import uuid
 
-import registry
+from . import registry
 
 REPO = registry.REPO
 DATA_DIR = os.path.join(REPO, "data", "blackboard")
@@ -297,7 +297,7 @@ class Coordinator:
         subgoal_entries = decomposition["subgoal_entries"]
 
         # 2. Spawn workers (each as a subagent)
-        import subagent
+        from . import subagent
         worker_results = []
         for sg in subgoal_entries:
             worker_goal = "Blackboard worker: %s\n\nBlackboard goal id: %s\nSub-goal id: %s" % (

@@ -34,7 +34,7 @@ def cfg(override=None):
     """Config effettiva: DEFAULTS <- config/tools.yaml (verifier) -> override."""
     out = dict(DEFAULTS)
     try:
-        import registry
+        from . import registry
         got = registry.load_config().get("verifier") or {}
         if isinstance(got, dict):
             out.update({k: v for k, v in got.items() if v is not None})
@@ -100,7 +100,7 @@ def run_check(workspace=None, c=None, run_id=None):
     if not cmd:
         return True, ""
     try:
-        import sandbox
+        from . import sandbox
         res = sandbox.run(cmd, run_id=run_id, timeout=c.get("timeout_secs"),
                           workspace=workspace)
     except Exception as e:  # noqa: BLE001

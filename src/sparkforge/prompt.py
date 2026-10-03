@@ -113,7 +113,7 @@ def _static_text(sid):
         return CAPABILITY_RULE
     if sid == "prompt-map":
         return _manifest_text()
-    import server
+    from . import server
     return getattr(server, _STATIC_ATTRS.get(sid, ""), "") or ""
 
 
@@ -137,7 +137,7 @@ def render_sections(sess=None, ws=None, tool_ctx=None):
 
 def _provider_self_summary(sess, ws, ctx):
     try:
-        import server
+        from . import server
         return server.self_summary()
     except Exception:  # noqa: BLE001
         return ""
@@ -147,7 +147,7 @@ def _provider_tools(sess, ws, ctx):
     if ctx:
         return ctx
     try:
-        import server
+        from . import server
         return server._tool_context()
     except Exception:  # noqa: BLE001
         return ""
@@ -155,7 +155,7 @@ def _provider_tools(sess, ws, ctx):
 
 def _provider_rules(sess, ws, ctx):
     try:
-        import rules
+        from . import rules
         return rules.rules_prompt_block(ws=ws or rules.resolve_workspace(sess))
     except Exception:  # noqa: BLE001
         return ""
@@ -163,7 +163,7 @@ def _provider_rules(sess, ws, ctx):
 
 def _provider_skills(sess, ws, ctx):
     try:
-        import skills
+        from . import skills
         # JAG-163: name + one-line description, budgeted so a large library is
         # still capped instead of flooding the prompt.
         return skills.skills_context(max_chars=8000)
@@ -174,7 +174,7 @@ def _provider_skills(sess, ws, ctx):
 def _provider_memory(sess, ws, ctx):
     block = ""
     try:
-        import memory
+        from . import memory
         lessons = memory.governed_query(kind="agent.note", limit=6)
         instr = ["- " + str(r.get("content", "")).strip()
                  for r in lessons if str(r.get("content", "")).strip()]
@@ -191,7 +191,7 @@ def _provider_memory(sess, ws, ctx):
 
 def _provider_state(sess, ws, ctx):
     try:
-        import server
+        from . import server
         return ("Harness state (your persistent task list):\n"
                 + server.context_summary(session_id=(sess or {}).get("id")))
     except Exception:  # noqa: BLE001

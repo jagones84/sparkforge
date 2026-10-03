@@ -15,9 +15,9 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import osutil  # noqa: E402
+from sparkforge import osutil  # noqa: E402
 
 ok = True
 
@@ -29,7 +29,13 @@ def check(name, cond, detail=""):
 
 
 def read(rel):
-    return open(os.path.join(REPO, rel), encoding="utf-8").read()
+    p = os.path.join(REPO, rel)
+    q = os.path.join(REPO, "src", "sparkforge", rel)
+    if not os.path.dirname(rel) and os.path.isfile(q):
+        p = q
+    elif not os.path.isfile(p) and os.path.isfile(q):
+        p = q
+    return open(p, encoding="utf-8").read()
 
 
 # ---- unit: the two branches are deterministic on any host -----------------

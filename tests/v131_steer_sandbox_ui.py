@@ -16,7 +16,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 results = []
 
@@ -33,7 +33,7 @@ def read(path):
         return ""
 
 
-import registry  # noqa: E402
+from sparkforge import registry  # noqa: E402
 
 sandbox_root = registry.workspace_dir()
 sbx = os.path.join(sandbox_root, "1234abcd", "proj", "pyproject.toml")
@@ -65,14 +65,14 @@ check("S4 inside the session ws stays auto",
 registry.load_config = _real_load
 
 # ---- steering (source contract; import guarded) ----------------------------
-srv = read(os.path.join(REPO, "server.py"))
+srv = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
 check("Q1 /api/chat/steer endpoint exists", 'path == "/api/chat/steer"' in srv, "")
 check("Q2 push_steer/drain_steer defined", "def push_steer(" in srv and "def drain_steer(" in srv, "")
 check("Q3 steering drained per loop iteration", "for _s in drain_steer(sess[\"id\"]):" in srv, "")
 check("Q4 steering published as chat.steer", 'publish("chat.steer"' in srv and 'on_event("chat.steer"' in srv, "")
 try:
-    sys.path.insert(0, REPO)
-    import server  # noqa: E402
+    sys.path.insert(0, os.path.join(REPO, "src"))
+    from sparkforge import server  # noqa: E402
     server.push_steer("v131", "a")
     server.push_steer("v131", "b")
     _got = server.drain_steer("v131")

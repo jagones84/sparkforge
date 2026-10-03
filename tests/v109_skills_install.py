@@ -14,9 +14,9 @@ os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
 os.environ.pop("SPARKFORGE_SKILLS_LOCAL_DIR", None)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import skills  # noqa: E402
+from sparkforge import skills  # noqa: E402
 
 # isolate the skills tree in the temp dir
 skills.SKILLS_DIR = os.path.join(tmp, "skills")
@@ -120,7 +120,7 @@ lst = skills.list_skills(reload=True)
 check("S10 list has local flag", all("local" in s for s in lst), str(lst[:1]))
 
 # S11 l'upload raw è gestito in server.py (branch zip) e delega a skills.install_zip
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
 check("S11 raw zip branch present",
       '"/api/skills/install"' in srv and "application/zip" in srv)
 check("S11 api helper present",
@@ -130,7 +130,7 @@ check("S11 api helper present",
 # S9 /nome inietta la SKILL.md nel prompt assemblato (una sola volta)
 z = make_zip({"demo-skill/SKILL.md": SKILL_MD})
 skills.install_zip(z, name="demo", overwrite=True)
-import server  # noqa: E402
+from sparkforge import server  # noqa: E402
 sess = server.get_or_create_session("skill-inject")
 server.append_message(sess, "user", "/demo spiegami")
 msgs, _ = server.assemble_turn(sess, "/demo spiegami")

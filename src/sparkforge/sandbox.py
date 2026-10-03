@@ -23,8 +23,8 @@ import subprocess
 import threading
 import time
 
-import osutil
-import registry
+from . import osutil
+from . import registry
 
 REPO = registry.REPO
 

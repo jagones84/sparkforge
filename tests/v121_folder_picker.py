@@ -18,9 +18,9 @@ for d in ("alpha/sub", "beta", ".hidden"):
 with open(os.path.join(TREE, "file.txt"), "w") as f:
     f.write("x")
 os.environ["SPARKFORGE_BROWSE_ROOTS"] = TREE
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import api_v02  # noqa: E402
+from sparkforge import api_v02  # noqa: E402
 
 results = []
 

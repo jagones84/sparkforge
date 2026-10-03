@@ -5,7 +5,7 @@ import re as _re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -14,7 +14,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 check("B1 /api/plan is an alias of the task list",
       "/api/plan" in srv and "taskgraph.public" in srv, "")
 check("B2 no second source of truth for /api/plan",

@@ -23,7 +23,7 @@ import time
 import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 RESULTS = {"task": "JAG-56 v0.7.1 skills + pmcp end-to-end", "checks": [], "passed": False}
 
@@ -43,9 +43,9 @@ def skip(name, detail="not configured"):
 
 def main():
     ok = True
-    import skills as skills_mod
-    import tools as toolmod
-    import registry
+    from sparkforge import skills as skills_mod
+    from sparkforge import tools as toolmod
+    from sparkforge import registry
 
     # ---- A: loader sees the symlinked skill distribution --------------------
     sk = skills_mod.list_skills(reload=True)
@@ -79,7 +79,7 @@ def main():
                 "install_skill present")
 
     # ---- C: end-to-end agent run with a real pmcp tools/call ----------------
-    import mcp_client as _mc
+    from sparkforge import mcp_client as _mc
     # JAG-159: pmcp is optional — run the end-to-end only when the gateway is
     # configured AND the live client actually reports at least one tool.
     try:

@@ -9,7 +9,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -18,8 +18,8 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import difficulty  # noqa: E402
-import bestofn  # noqa: E402
+from sparkforge import difficulty  # noqa: E402
+from sparkforge import bestofn  # noqa: E402
 
 check("D1 defaults sane",
       difficulty.DEFAULTS["enabled"] is True
@@ -62,10 +62,10 @@ check("D12 bestofn disattivato -> N=1",
       bestofn.n_of({"enabled": False, "n": 8}, HARD) == 1, "")
 
 yaml_src = open(os.path.join(REPO, "config", "tools.yaml"), encoding="utf-8", errors="replace").read()
-reg = open(os.path.join(REPO, "registry.py"), encoding="utf-8", errors="replace").read()
+reg = open(os.path.join(REPO, "src", "sparkforge", "registry.py"), encoding="utf-8", errors="replace").read()
 api = open(os.path.join(REPO, "api_v02.py"), encoding="utf-8", errors="replace").read()
 ui = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8", errors="replace").read()
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 
 check("D13 config/tools.yaml ha il blocco difficulty",
       "\ndifficulty:" in yaml_src and "medium_at:" in yaml_src, "")

@@ -101,7 +101,7 @@ def compact(messages, budget_tokens, keep_recent=DEFAULT_KEEP_RECENT, summarizer
 def retrieve(query_text, top_k=RETRIEVAL_TOP_K, semantic=True):
     """Pull relevant memories for context injection (score >= 0.15)."""
     try:
-        import memory
+        from . import memory
         if not query_text:
             return []
         hits = memory.search(query_text, None, top_k, semantic)
@@ -156,7 +156,7 @@ def build(system_prompt, messages, message=None, budget_tokens=DEFAULT_BUDGET,
 
 def preview(session, message=None, budget_tokens=DEFAULT_BUDGET, keep_recent=DEFAULT_KEEP_RECENT):
     """Dry-run against a harness session dict (no LLM call). Evidence-shaped."""
-    import server  # lazy: server imports this module's consumers, not us
+    from . import server  # lazy: server imports this module's consumers, not us
     sess = server.load_session(session) if session else None
     if not sess:
         return {"error": "session not found: %s" % session}

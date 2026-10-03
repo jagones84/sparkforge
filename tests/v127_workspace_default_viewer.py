@@ -23,9 +23,9 @@ A = os.path.join(tmp, "proj-a")
 B = os.path.join(tmp, "proj-b")
 for d in (CFG, A, B, os.environ["SPARKFORGE_SESSIONS_DIR"], os.environ["SPARKFORGE_GRAPH_DIR"]):
     os.makedirs(d, exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import rules as R  # noqa: E402
+from sparkforge import rules as R  # noqa: E402
 
 results = []
 
@@ -58,7 +58,7 @@ check("R4 remember refuses a non-existent dir",
       R.remember_workspace("/nope-xyz-126").get("ok") is False, "")
 
 # ---- S: server remembers on session create/load ---------------------------
-srv = read(os.path.join(REPO, "server.py"))
+srv = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
 check("S1 server has _remember_workspace", "def _remember_workspace" in srv, "")
 check("S1b get_or_create_session remembers", "_remember_workspace(s.get(\"workspace\"))" in srv, "")
 api = read(os.path.join(REPO, "api_v02.py"))

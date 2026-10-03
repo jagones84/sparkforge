@@ -5,7 +5,7 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 os.environ["SPARKFORGE_RUNS_DIR"] = tempfile.mkdtemp()
 results = []
 
@@ -15,7 +15,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import runmetrics  # noqa: E402
+from sparkforge import runmetrics  # noqa: E402
 
 runmetrics.start("k1", model="m1")
 rec = runmetrics.finish("k1", outcome="done", stop_reason="goal_reached",
@@ -27,7 +27,7 @@ check("E2 fields recorded",
 check("E3 persisted to disk", runmetrics.get("k1")["outcome"] == "done", "")
 check("E4 human readable line", "goal_reached" in runmetrics.human("k1"), "")
 
-import registry  # noqa: E402
+from sparkforge import registry  # noqa: E402
 _cfg = registry.load_config()
 check("E5 runtime default present for metrics",
       isinstance(_cfg.get("runtime"), dict)
@@ -39,7 +39,7 @@ check("E6 prompt/completion tokens split",
       rec2["prompt_tokens"] == 100 and rec2["completion_tokens"] == 200, str(rec2))
 check("E7 model recorded on finish", rec2.get("model") == "m2", str(rec2.get("model")))
 check("E8 error outcome recorded", rec2.get("outcome") == "error", "")
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 check("E9 error run recorded in stream catch",
       'outcome="error"' in srv and "chat.error" in srv, "")
 

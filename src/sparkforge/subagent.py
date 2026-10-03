@@ -23,12 +23,12 @@ import threading
 import time
 import uuid
 
-import api_v02  # for the RunState / agent_run_v2 machinery
-import approvals
-import registry
-import sandbox
-import taskgraph  # per-run task graph (child gets its own todo list)
-import tools as toolmod
+from . import api_v02  # for the RunState / agent_run_v2 machinery
+from . import approvals
+from . import registry
+from . import sandbox
+from . import taskgraph  # per-run task graph (child gets its own todo list)
+from . import tools as toolmod
 
 _lock = threading.RLock()
 _running = {}     # subagent_id -> {state, parent_run_id, goal, result}
@@ -42,7 +42,7 @@ def depth_of(run_id):
 
 def depth_allowed(depth, max_depth=None):
     """True se si puo' ancora annidare (matrioska) sotto `depth` livelli."""
-    import keepgoing
+    from . import keepgoing
     md = int(keepgoing.cfg()["subagent_max_depth"])
     if max_depth is not None:
         md = int(max_depth)
@@ -83,7 +83,7 @@ def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None, dept
 
     def _run():
         try:
-            from server import publish as _publish
+            from .server import publish as _publish
             _publish("subagent.start", subagent_id=sid, parent=parent_run_id,
                      goal=goal, max_steps=max_steps, model=model)
         except Exception:
@@ -93,7 +93,7 @@ def spawn(goal, parent_run_id=None, max_steps=4, model=None, on_event=None, dept
         entry["result"] = result
         entry["done"].set()
         try:
-            from server import publish as _publish
+            from .server import publish as _publish
             _publish("subagent.done", subagent_id=sid, parent=parent_run_id,
                      goal=goal, status=result.get("status"), steps=len(result.get("trace", [])))
         except Exception:
@@ -171,7 +171,7 @@ def status(subagent_id=None):
 
 def _publish_event(run_id, kind, **data):
     try:
-        from server import publish
+        from .server import publish
         publish(kind, run_id=run_id, **data)
     except Exception:
         pass

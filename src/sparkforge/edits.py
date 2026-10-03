@@ -21,7 +21,7 @@ import re
 import threading
 import time
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 MAX_ENTRIES = 500
 MAX_TEXT = 200_000     # cap the pre/post image kept per edit
 MAX_ROWS = 6000        # cap diff rows returned
@@ -85,7 +85,7 @@ def record(key, path, before, after, action="modified"):
         entries.append(entry)
         _save(key, entries[-MAX_ENTRIES:])
     try:
-        import server
+        from . import server
         server.publish("edits.recorded", key=key, path=path, action=entry["action"],
                        add=add, deleted=dele)
     except Exception:  # noqa: BLE001 — the feed must never break a write
@@ -199,7 +199,7 @@ def undo(key, path=None):
         keep = [e for e in entries if e["path"] not in set(targets)]
         _save(key, keep)
     try:
-        import server
+        from . import server
         server.publish("edits.undone", key=key, restored=len(restored))
     except Exception:  # noqa: BLE001
         pass

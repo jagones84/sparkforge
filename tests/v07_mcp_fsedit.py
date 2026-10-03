@@ -27,7 +27,7 @@ import time
 import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 RESULTS = {"task": "JAG-54 v0.7 mcp pmcp + fs.edit", "checks": [], "passed": False}
 
@@ -49,9 +49,9 @@ def main():
     ok = True
 
     # ---- A: client manager connects to the real pmcp server -----------------
-    import mcp_client
-    import registry
-    import tools
+    from sparkforge import mcp_client
+    from sparkforge import registry
+    from sparkforge import tools
     mgr = mcp_client.get_manager()
     mgr.start_all()
     st = mgr.status()

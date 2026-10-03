@@ -6,7 +6,7 @@ import tempfile
 from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -22,7 +22,7 @@ def read(p):
         return ""
 
 
-import prompt  # noqa: E402
+from sparkforge import prompt  # noqa: E402
 
 check("A1 module has render_sections + SECTIONS",
       hasattr(prompt, "render_sections") and hasattr(prompt, "SECTIONS"), "")
@@ -72,8 +72,8 @@ check("D10 overlay file is appended", "PROJECT_OVERLAY_SENTINEL" in out2, "")
 check("D11 default is NOT removed (additive)",
       "Capability questions" in out2, "")
 
-import server  # noqa: E402
-import rules  # noqa: E402
+from sparkforge import server  # noqa: E402
+from sparkforge import rules  # noqa: E402
 _sess = {"id": "eqX"}
 with mock.patch.object(server, "context_summary", lambda **k: "STATE_FIXED"):
     _a = server._system_prompt(_sess, tool_ctx="TC_FIXED")
@@ -91,7 +91,7 @@ blk = rules.rules_prompt_block(ws=wsdir)
 check("E1 RULES.md read", "RULES_SENTINEL" in blk, "")
 check("E2 AGENTS.md is ALSO read (additive, not excluded)", "AGENTS_SENTINEL" in blk, "")
 
-srv_src = read(os.path.join(REPO, "server.py"))
+srv_src = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
 api_src = read(os.path.join(REPO, "api_v02.py"))
 check("D13 agent loop injects prompt map + capability",
       "prompt_map_text()" in srv_src and "capability_text()" in srv_src

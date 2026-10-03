@@ -28,7 +28,7 @@ Configuration: `config/mcp_clients.yaml` (or JSON). Examples:
         enabled: false
 
 Usage:
-    from mcp_client import MCPClientManager
+    from .mcp_client import MCPClientManager
     manager = MCPClientManager()
     manager.start_all()         # spawn configured clients
     tools = manager.list_tools()  # merge all client tools
@@ -44,8 +44,8 @@ import sys
 import threading
 import time
 
-import osutil
-import registry
+from . import osutil
+from . import registry
 
 REPO = registry.REPO
 CONFIG_PATH = os.path.join(REPO, "config", "mcp_clients.yaml")

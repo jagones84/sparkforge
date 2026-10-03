@@ -19,7 +19,7 @@ import tempfile
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 RESULTS = {"task": "JAG-121b skills cache + UI labels", "checks": [], "passed": False}
 
@@ -39,7 +39,7 @@ def _mk(base, cat, name):
 
 def main():
     ok = True
-    import skills as S
+    from sparkforge import skills as S
 
     real_dir = S.SKILLS_DIR
     tmp = tempfile.mkdtemp(prefix="sf_skills_")

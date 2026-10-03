@@ -24,9 +24,9 @@ os.makedirs(TREE, exist_ok=True)
 with open(os.path.join(TREE, "note.md"), "w") as f:
     f.write("# Title\n\nhello\n")
 os.environ["SPARKFORGE_BROWSE_ROOTS"] = TREE
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import api_v02  # noqa: E402
+from sparkforge import api_v02  # noqa: E402
 
 results = []
 

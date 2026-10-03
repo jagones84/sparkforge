@@ -28,9 +28,9 @@ with open(os.path.join(TREE, "file.txt"), "w") as f:
 with open(os.path.join(TREE, "blob.bin"), "wb") as f:
     f.write(b"\xff\xfe\x00\x01binary")
 os.environ["SPARKFORGE_BROWSE_ROOTS"] = TREE
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import api_v02  # noqa: E402
+from sparkforge import api_v02  # noqa: E402
 
 results = []
 

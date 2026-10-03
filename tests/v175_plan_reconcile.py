@@ -12,14 +12,14 @@ import sys
 
 REPO = "/home/jagones/Repositories/sparkforge"
 os.chdir(REPO)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile
-py_compile.compile(os.path.join(REPO, "taskgraph.py"), doraise=True)
-py_compile.compile(os.path.join(REPO, "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "sparkforge", "taskgraph.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "sparkforge", "server.py"), doraise=True)
 print("[compile] taskgraph.py + server.py OK")
 
-import taskgraph as tg
+from sparkforge import taskgraph as tg
 import time
 
 _K = "v175-%d" % int(time.time() * 1000)
@@ -53,7 +53,7 @@ assert len(dem) == 2, "expected 2 demoted, got %d" % len(dem)
 print("B: single 'doing' enforced OK")
 
 # C) the server wires both into the model's plan actions
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
 assert "taskgraph.supersede_open(graph, _labels)" in srv, \
     "write_todos does not supersede the previous plan"
 assert "taskgraph.enforce_single_doing(graph)" in srv, \

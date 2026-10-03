@@ -16,10 +16,10 @@ os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
 os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import server  # noqa: E402
-import taskgraph  # noqa: E402
+from sparkforge import server  # noqa: E402
+from sparkforge import taskgraph  # noqa: E402
 
 server.CHAT_TOOL_MAX_STEPS = 10
 results = []

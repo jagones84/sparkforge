@@ -15,7 +15,7 @@ import os
 import re
 import time
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 
 DEFAULTS = {
     "min_len": 2,      # lunghezza minima della sequenza (numero di tool)
@@ -28,7 +28,7 @@ def cfg(override=None):
     out = dict(DEFAULTS)
     out.update(STAGE2_DEFAULTS)
     try:
-        import registry
+        from . import registry
         got = registry.load_config().get("selfevolve") or {}
         if isinstance(got, dict):
             out.update({k: v for k, v in got.items() if v is not None})
@@ -217,7 +217,7 @@ def _read_json(path):
 def _known_tools():
     """Nomi dei tool noti/abilitati ORA (per il check self-contained)."""
     try:
-        import registry
+        from . import registry
         return sorted(t["name"] for t in registry.catalog() if t.get("name"))
     except Exception:  # noqa: BLE001
         return []
@@ -324,7 +324,7 @@ def synth(pattern, out_dir, c=None):
 def _run_check(proposal_dir, command, c):
     """Esegue il check nella sandbox (cwd = cartella proposta). (green, output)."""
     try:
-        import sandbox
+        from . import sandbox
         res = sandbox.run(command, timeout=int(c.get("verify_timeout") or 60),
                           workspace=proposal_dir)
     except Exception as e:  # noqa: BLE001

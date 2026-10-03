@@ -6,7 +6,7 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -15,7 +15,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import selfevolve  # noqa: E402
+from sparkforge import selfevolve  # noqa: E402
 
 check("S1 defaults sane",
       selfevolve.DEFAULTS["min_len"] == 2 and selfevolve.DEFAULTS["min_count"] == 3, "")
@@ -69,9 +69,9 @@ mined = selfevolve.mine_history(tempfile.mkdtemp(), {"min_len": 2, "min_count": 
 check("S11 mine_history proposes the repeated pattern",
       len(mined) == 1 and os.path.isfile(os.path.join(mined[0], "proposal.json")), str(mined))
 
-tools_src = open(os.path.join(REPO, "tools.py"), encoding="utf-8", errors="replace").read()
-reg = open(os.path.join(REPO, "registry.py"), encoding="utf-8", errors="replace").read()
-srv2 = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+tools_src = open(os.path.join(REPO, "src", "sparkforge", "tools.py"), encoding="utf-8", errors="replace").read()
+reg = open(os.path.join(REPO, "src", "sparkforge", "registry.py"), encoding="utf-8", errors="replace").read()
+srv2 = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 check("S12 improve tool exposes scope=mine + harness records sequences",
       'scope == "mine"' in tools_src and "selfevolve.mine_history" in tools_src
       and '"mine"' in reg and "_se.record(" in srv2, "")

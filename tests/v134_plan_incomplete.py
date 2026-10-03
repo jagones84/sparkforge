@@ -24,7 +24,7 @@ def read(p):
         return ""
 
 
-srv = read(os.path.join(REPO, "server.py"))
+srv = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
 html = read(os.path.join(REPO, "webui", "index.html"))
 
 check("A1 server publishes plan.incomplete", 'publish("plan.incomplete"' in srv, "")

@@ -12,7 +12,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 results = []
 
@@ -29,7 +29,7 @@ def read(path):
         return ""
 
 
-import registry  # noqa: E402
+from sparkforge import registry  # noqa: E402
 
 _orig_load = registry.load_config
 _orig_spec = registry.tool_spec

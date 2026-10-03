@@ -12,15 +12,15 @@ import sys
 
 REPO = "/home/jagones/Repositories/sparkforge"
 os.chdir(REPO)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile
-py_compile.compile(os.path.join(REPO, "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "sparkforge", "server.py"), doraise=True)
 print("[compile] server.py OK")
 
-import server
-import tools
-import bestofn
+from sparkforge import server
+from sparkforge import tools
+from sparkforge import bestofn
 
 server.maybe_reflect = lambda *a, **k: None
 bestofn.n_of = lambda **k: 1
@@ -84,7 +84,7 @@ assert nodes2[0].get("evidence"), "step closed without evidence"
 print("B: model-driven close with evidence OK")
 
 # C) the persistent list states the contract + the anti-redo rule
-from taskgraph import render_todos
+from sparkforge.taskgraph import render_todos
 txt = render_todos({"nodes": [{"id": "n1", "label": "x", "status": "todo"}]})
 assert "NEVER redo a step already marked [x]" in txt, "no anti-redo rule in the task list"
 assert "YOURS" in txt, "the task list does not state that the model owns it"

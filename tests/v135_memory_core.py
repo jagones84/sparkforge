@@ -9,7 +9,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -25,7 +25,7 @@ def read(p):
         return ""
 
 
-import memory  # noqa: E402
+from sparkforge import memory  # noqa: E402
 
 check("C0 core API present", hasattr(memory, "core_read") and hasattr(memory, "core_write")
       and hasattr(memory, "CORE_PATH"), "")
@@ -48,17 +48,17 @@ finally:
         except OSError:
             pass
 
-import registry  # noqa: E402
+from sparkforge import registry  # noqa: E402
 enum = (registry.TOOL_SCHEMAS.get("memory", {}).get("properties", {})
         .get("action", {}).get("enum") or [])
 check("T1 tool schema lists core + set_core", "core" in enum and "set_core" in enum, str(enum))
 
-tools = read(os.path.join(REPO, "tools.py"))
+tools = read(os.path.join(REPO, "src", "sparkforge", "tools.py"))
 check("T2 tools.py handles core/set_core",
       'action in ("core"' in tools and 'action in ("set_core"' in tools, "")
 
-srv = read(os.path.join(REPO, "server.py"))
-prompt_src = read(os.path.join(REPO, "prompt.py"))
+srv = read(os.path.join(REPO, "src", "sparkforge", "server.py"))
+prompt_src = read(os.path.join(REPO, "src", "sparkforge", "prompt.py"))
 check("P1 the prompt injects a Core memory block",
       "Core memory (always visible" in (srv + prompt_src), "")
 check("P2 MEMORY_POLICY mentions the core block",

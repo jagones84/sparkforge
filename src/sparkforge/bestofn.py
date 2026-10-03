@@ -31,7 +31,7 @@ def cfg(override=None):
     """Config effettiva: DEFAULTS <- config/tools.yaml (bestofn) -> override."""
     out = dict(DEFAULTS)
     try:
-        import registry
+        from . import registry
         got = registry.load_config().get("bestofn") or {}
         if isinstance(got, dict):
             out.update({k: v for k, v in got.items() if v is not None})
@@ -57,7 +57,7 @@ def n_of(c=None, signals=None):
         n = 1
     if c.get("adaptive", True) and signals is not None:
         try:
-            import difficulty
+            from . import difficulty
             n = max(n, difficulty.n_for(signals))
         except Exception:  # noqa: BLE001
             pass
@@ -73,7 +73,7 @@ def choose(candidates, scorer=None, c=None):
     c = c or cfg()
     if scorer is None:
         try:
-            import prm
+            from . import prm
             scorer = prm.rank_text
         except Exception:  # noqa: BLE001
             scorer = lambda _t: 0.0  # noqa: E731

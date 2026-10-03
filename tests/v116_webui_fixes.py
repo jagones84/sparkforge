@@ -12,9 +12,9 @@ os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
 os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
 for k in ("config_dir", "sessions", "graphs"):
     os.makedirs(os.path.join(tmp, k), exist_ok=True)
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 
-import server  # noqa: E402
+from sparkforge import server  # noqa: E402
 
 results = []
 

@@ -4,7 +4,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "src"))
 results = []
 
 
@@ -13,9 +13,9 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-import server  # noqa: E402
+from sparkforge import server  # noqa: E402
 
-srv = open(os.path.join(REPO, "server.py"), encoding="utf-8", errors="replace").read()
+srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8", errors="replace").read()
 check("V1 _router_stream accepts cancel", "cancel=None" in srv, "")
 check("V3 chat wires cancel callback", "cancel=_abort_now" in srv and "_abort_now" in srv, "")
 check("V4 abort short-circuit + user_abort",

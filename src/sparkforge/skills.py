@@ -19,7 +19,7 @@ import stat
 import tempfile
 import zipfile
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+from .paths import REPO_ROOT as REPO
 SKILLS_DIR = os.path.join(REPO, "skills")
 
 LOCAL_CATEGORY = "local"
