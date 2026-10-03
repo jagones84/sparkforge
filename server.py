@@ -215,6 +215,45 @@ def save_session(sess):
     _write_json(os.path.join(SESSIONS_DIR, sess["id"] + ".json"), sess)
 
 
+def _purge_session_artifacts(sid):
+    """JAG-179: delete EVERY per-session artifact, not just the transcript.
+
+    A session owns four files, all keyed by the session id: the transcript
+    (`data/sessions/<sid>.json`), its task graph (`data/graphs/<sid>.json`), its
+    run metrics (`data/runs/<sid>.json`) and its edit journal
+    (`data/edits/<sid>.json`). The delete button only removed the transcript, so
+    graphs/runs/edits piled up as orphans (586 graph files for 76 sessions was
+    exactly this leak). This also sweeps the `.bak-*` / `.reset-*` backups.
+    """
+    import glob
+    bases = [os.path.join(SESSIONS_DIR, sid + ".json")]
+    try:
+        bases.append(taskgraph._path(sid))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import runmetrics
+        bases.append(runmetrics._path(sid))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import edits
+        bases.append(edits._key_file(sid))
+    except Exception:  # noqa: BLE001
+        pass
+    removed = []
+    for base in bases:
+        for f in glob.glob(glob.escape(base) + "*"):
+            if f.endswith(".tmp"):
+                continue
+            try:
+                os.unlink(f)
+                removed.append(os.path.basename(f))
+            except OSError:
+                pass
+    return removed
+
+
 def _rel_time(ts):
     """JAG-113: short relative label ('ora', '3 min', '15 h', '2 g') for a timestamp."""
     try:
@@ -4268,12 +4307,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith("/api/sessions/"):
             sid = path[len("/api/sessions/"):]
-            fpath = os.path.join(SESSIONS_DIR, sid + ".json")
-            if "/" in sid or ".." in sid or not os.path.isfile(fpath):
+            if (not re.match(r"^[A-Za-z0-9_.-]{1,120}$", sid)) or ".." in sid:
                 return self._send(404, {"error": "session not found"})
-            os.unlink(fpath)
-            publish("session.deleted", session=sid)
-            return self._send(200, {"ok": True, "deleted": sid})
+            fpath = os.path.join(SESSIONS_DIR, sid + ".json")
+            if not os.path.isfile(fpath):
+                return self._send(404, {"error": "session not found"})
+            # JAG-179: cascade — the red X must also remove the session's graph,
+            # run metrics and edit journal (+ backups), else they leak as orphans.
+            removed = _purge_session_artifacts(sid)
+            publish("session.deleted", session=sid, removed=removed)
+            return self._send(200, {"ok": True, "deleted": sid, "removed": removed})
         return self._send(404, {"error": "not found"})
 
     def log_message(self, fmt, *args):
