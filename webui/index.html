@@ -155,8 +155,8 @@
   .msg { margin-bottom: 14px; max-width: 860px; }
   .msg .who { font-size: 10px; letter-spacing: .14em; color: var(--dim); margin-bottom: 4px; }
   .msg.user .who { color: var(--acc2); }
-  .msg .bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px;
-    white-space: pre-wrap; word-break: break-word; }
+  .msg .bubble { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 9px 13px;
+    white-space: pre-wrap; word-break: break-word; font-size: 12.5px; line-height: 1.5; }
   .msg.user .bubble { border-color: rgba(181,108,255,.25); }
   details.think { margin-bottom: 8px; }
   details.think summary { cursor: pointer; font-size: 11px; color: var(--acc); letter-spacing: .08em; }
@@ -447,15 +447,16 @@
     font-family: monospace; font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: 10px;
     border: 1px solid var(--line); background: #0b0f18; color: var(--txt); }
   /* JAG-153: assistant replies are rendered markdown (sanitized) + HTML artifact preview */
-  .bubble.md-content p { margin: 0 0 8px; }
+  .bubble.md-content p { margin: 0 0 4px; }
   .bubble.md-content > :last-child { margin-bottom: 0; }
-  .bubble.md-content h1, .bubble.md-content h2, .bubble.md-content h3 { margin: 10px 0 6px; line-height: 1.25; }
-  .bubble.md-content h1 { font-size: 18px; } .bubble.md-content h2 { font-size: 15px; } .bubble.md-content h3 { font-size: 13px; }
-  .bubble.md-content ul, .bubble.md-content ol { margin: 4px 0 8px; padding-left: 20px; }
-  .bubble.md-content li { margin: 2px 0; }
-  .bubble.md-content code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .bubble.md-content h1, .bubble.md-content h2, .bubble.md-content h3 { margin: 7px 0 3px; line-height: 1.25; }
+  .bubble.md-content h1 { font-size: 15px; } .bubble.md-content h2 { font-size: 14px; } .bubble.md-content h3 { font-size: 13px; }
+  .bubble.md-content ul, .bubble.md-content ol { margin: 2px 0 4px; padding-left: 18px; }
+  .bubble.md-content li { margin: 0; }
+  .bubble.md-content li > p { margin: 0; }
+  .bubble.md-content code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; font-size: 11.5px; }
   .bubble.md-content pre { background: rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 8px;
-    padding: 10px 12px; overflow: auto; margin: 6px 0; }
+    padding: 8px 10px; overflow: auto; margin: 4px 0; }
   .bubble.md-content pre code { background: none; padding: 0; }
   .bubble.md-content table { border-collapse: collapse; margin: 6px 0; font-size: 12px; }
   .bubble.md-content th, .bubble.md-content td { border: 1px solid var(--line-2); padding: 4px 8px; }
@@ -1346,6 +1347,9 @@ function selectSession(s) {
   curJob = s.job || _sessJob[s.id] || null;   // JAG-169: the active job id (JX)
   _sessModel[s.id] = s.model || _sessModel[s.id] || "";
   $("log").innerHTML = ""; curThink = curAns = null; _resetChatTree();
+  // JAG-173: the live CoT drawer belongs to the CURRENT turn — never carry
+  // another session's chain-of-thought into this one.
+  cotText = ""; try { const _ct = $("cotDrawer").querySelector(".t"); if (_ct) _ct.textContent = ""; } catch (e) {}
   // JAG-167: never carry another session's run graph into this one.
   curRunId = null; localStorage.removeItem("sf_run"); graph = null;
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();

@@ -168,8 +168,10 @@ def render_todos(graph, limit=12):
         indent = "    " if n.get("parent") else "  "
         lines.append("%s%s %s (%s)" % (indent, mark, n.get("label", ""), n.get("id")))
     if open_n:
-        lines.append("Keep every open step in mind; mark one done ONLY with "
-                     "evidence, and add new steps if the goal grows.")
+        lines.append("The HARNESS (system) marks steps done FOR YOU — never call "
+                     "update_todos for bookkeeping. Just DO each open step with a "
+                     "tool call and report the result; add a step only if the goal "
+                     "really grows.")
     return "\n".join(lines)
 
 

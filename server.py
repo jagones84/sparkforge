@@ -2212,6 +2212,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     _kg_stop_reason = None
     _kg_prev = None
     _kg_stale = 0
+    _kg_doing_mark = 0   # JAG-173: real tool count when the current step started
     _kg_started = time.time()
     _kg_last_tool = None
     _last_tool_ok = None
@@ -2325,11 +2326,11 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
                      open=len(_open), total=len(_nodes), difficulty=_diff_level)
             _inject(
-                "Ti restano %d passo/i APERTI nella task list: NON fermarti. Per OGNI passo "
-                "aperto esegui l'azione con una tool call e poi marcalo 'done' con "
-                "update_todos + l'evidenza concreta (comando eseguito ed esito). Non "
-                "consegnare una risposta finale finche' l'ultimo passo non e' 'done' "
-                "(o ripianifica se non serve piu'). Lista attuale:\n%s"
+                "SYSTEM (harness) — the plan bookkeeping is MINE, not yours: I mark "
+                "steps done FOR YOU — do NOT call update_todos. %d step(s) are still "
+                "OPEN. Keep WORKING: for each one run the tool(s) it needs, then report "
+                "the result in plain prose. Stop only when the list is clear. Current "
+                "list:\n%s"
                 % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))), "continue")
             continue
         # JAG-127b: inject any steering message typed while this turn was running.
@@ -2393,9 +2394,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             n = _apply_chat_todos(sess, act, on_event)
             msgs.append({"role": "assistant", "content": answer})
             _inject(
-                "Task list saved (%d new step(s)); the full persistent list "
-                "is in your system state. Now work through it: answer the "
-                "user in plain prose, or call a tool — one step at a time."
+                "SYSTEM (harness) — task list saved (%d new step(s)); I keep it "
+                "updated FOR YOU (never call update_todos). Start working: call the "
+                "tool the first step needs, then report the result in plain prose."
                 % n, "nudge")
             continue
         if isinstance(act, dict) and act.get("action") in ("update_todos", "replan_todos"):
@@ -2479,8 +2480,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             if len(obs) > CHAT_TOOL_OBS_LIMIT:
                 note = _offload_observation(sess, tool, obs)
             else:
-                note = ("Observation for tool %s:\n%s\n\n"
-                        "Now answer the user in plain text, or call another tool."
+                note = ("SYSTEM (harness) — Observation for tool %s:\n%s\n\n"
+                        "Continue: call the next tool, or report the result in plain "
+                        "prose (the harness marks the plan for you)."
                         % (tool, obs))
             msgs.append({"role": "assistant", "content": answer})
             _inject(note, "observation")
@@ -2520,6 +2522,27 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             # JAG-129A: l'harness (la "segretaria") decide se l'agente puo' davvero
             # chiudere. Con passi aperti re-inietta la lista e CONTINUA.
             _g = taskgraph.load(sess["id"]) or {}
+            # JAG-173: the HARNESS owns the plan bookkeeping. A prose answer (no tool
+            # call) while a step is 'doing' means the agent delivered that step: the
+            # SYSTEM marks it done (evidence = the answer) — the model must never be
+            # asked to call update_todos. The model only does WORK.
+            for _n in list(_g.get("nodes", [])):
+                # only when the agent actually DID work on this step (a tool ran
+                # since it became 'doing') — never close just because it wrote prose.
+                if _n.get("status") == "doing" and len(used_tools) > _kg_doing_mark:
+                    try:
+                        _auto = taskgraph.update_node(
+                            _g, _n["id"], status="done",
+                            evidence="delivered by the agent: %s" % (answer or "")[:400],
+                            source="harness:autoclose")
+                        on_event("graph.node.updated", session=sess["id"], node=_auto,
+                                 index=_g["nodes"].index(_auto),
+                                 total=len(_g["nodes"]), changes=["status"])
+                        on_event("plan.autoclosed", session=sess["id"],
+                                 node=_auto.get("id"), label=_auto.get("label"))
+                    except (KeyError, ValueError):
+                        pass
+                    break
             _nodes = _g.get("nodes", [])
             _open = [n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES]
             _cur = _kg.state_hash(_nodes)
@@ -2549,13 +2572,26 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     on_event("chat.steer", session=sess["id"], text=_s, applied=True)
                 on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
                          open=len(_open), total=len(_nodes), difficulty=_diff_level)
+                # JAG-173: the SYSTEM drives the plan state too — with no step
+                # 'doing' it marks the next open one 'doing' for the model.
+                _next = next((n for n in _nodes if n.get("status") == "doing"), None) or \
+                    next((n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES), None)
+                if _next and _next.get("status") != "doing":
+                    try:
+                        taskgraph.update_node(_g, _next["id"], status="doing",
+                                              source="harness:autostart")
+                        on_event("graph.node.updated", session=sess["id"], node=_next,
+                                 index=_g["nodes"].index(_next),
+                                 total=len(_g["nodes"]), changes=["status"])
+                    except (KeyError, ValueError):
+                        pass
+                _kg_doing_mark = len(used_tools)   # JAG-173: baseline for the next step
                 msgs.append({"role": "assistant", "content": answer})
                 _inject(
-                    "CONTINUA: la tua TASK LIST ha ancora %d passo/i aperto/i. NON "
-                    "fermarti e non chiedere il permesso. Per OGNI passo aperto: "
-                    "esegui l'azione con una tool call, poi marcalo 'done' con "
-                    "update_todos e l'evidenza concreta; se non serve piu', "
-                    "ripianifica. Lista attuale:\n%s"
+                    "SYSTEM (harness) — bookkeeping is MINE, not yours: I already mark "
+                    "steps done for you, so do NOT call update_todos. %d step(s) are "
+                    "still open. Just DO the next one with a tool call and report the "
+                    "result in plain prose. List:\n%s"
                     % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))), "continue")
                 continue
             _kg_stop_reason = _dec["reason"]
