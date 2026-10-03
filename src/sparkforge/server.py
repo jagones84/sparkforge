@@ -4343,6 +4343,15 @@ class Handler(BaseHTTPRequestHandler):
         path, qs = self._query()
         if path.startswith("/assets/"):
             return self._send_asset(path[len("/assets/"):])
+        if path in ("/console", "/console.html", "/deck"):
+            # JAG-209: the Command Deck SHELL is public (it holds no secrets); the
+            # data it fetches underneath stays auth-gated. This avoids putting the
+            # token in the URL just to load the page.
+            try:
+                with open(os.path.join(WEBUI_DIR, "console.html"), "r", encoding="utf-8") as f:
+                    return self._send(200, f.read(), ctype="text/html; charset=utf-8")
+            except FileNotFoundError:
+                return self._send(404, {"error": "console missing"})
         if not check_auth(self.headers, qs):
             return self._send(401, {"error": "unauthorized"})
         if api_v02.handle(self, "GET", path, qs, None):

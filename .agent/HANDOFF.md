@@ -1,7 +1,7 @@
 # SparkForge — HANDOFF (sessione autonoma notturna)
 
-Ultimo aggiornamento: 2026-10-04 (notte, agente autonomo).
-Branch: `master`. Ultimo commit: `02d6d33` (JAG-197).
+Ultimo aggiornamento: 2026-10-04/05 (notte, agente autonomo).
+Branch: `master`. Ultimo commit: JAG-209 (Command Deck) — vedi sezione 1.
 
 Questa è la memoria di lavoro. Se l'agente cade, riparti da qui. Aggiorna questo
 file a fine di ogni blocco di lavoro (stato + prossimo passo + trappole).
@@ -131,6 +131,22 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
      `_send`. Verificato: **0 traceback** dopo il caos. Commit `ad8bcbf`.
   *Nota:* body 2MB → connessione chiusa (status 0) ma nessun traceback e server sano;
   da approfondire se serve un 413 esplicito.
+- **JAG-209** "SPARKFORGE // ORBITAL COMMAND DECK" (richiesta utente: "un'app da
+  fantascienza"). Nuova SPA single-file **`webui/console.html`** (~33KB): palette
+  cyan/amber (no viola), starfield su `<canvas>`, pannelli **System Vitals** (4 gauge:
+  MEMORY/CONTEXT/TOOLS/RUNS), **Reactor Core** (SVG rotante), **Tactical Task Graph**
+  (SVG, nodi del plan), **Event Stream** (SSE `/api/feed`), **Flight Log**
+  (`/api/sessions`), **Model Bay** (`/api/status.models`). Nessuna risorsa esterna/CDN,
+  favoricon SVG inline data-URI. Rotta server **pubblica** `/console` (+`/console.html`,
+  `/deck`) inserita **prima** del check auth in `server.py::do_GET`: la shell non ha
+  segreti, i dati sotto restano auth-gated (niente token in URL solo per aprire la
+  pagina). Link nel header della WebUI principale (`webui/index.html`, pulsante 🛰).
+  Robustezza: guardie `state.offline` (niente overwrite del grafo DEMO dai poll),
+  DEMO automatico su `file://` (CORS), empty-state overlay con `.graph-empty[hidden]
+  {display:none}`, `prefers-reduced-motion`, `aria-live`, `tabindex`. Suite
+  `tests/v209_console_deck.py` (18/18, AGGIUNTA al gate). Verificato in browser via
+  chrome-devtools MCP: DEMO su file://, **LIVE** su `http://192.168.1.37:8790/console`
+  (ONLINE, dati reali). Battery **10/10 GREEN**. Commit `<PIN>`.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -144,12 +160,12 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   NON nel gate `battery.sh`.
 
 Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 20/20,
-v205 13/13, v206 10/10, v207 28/28 → **9/9 GREEN**.
+v205 13/13, v206 10/10, v207 28/28, v209 18/18 → **10/10 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).
 - Gate ufficiale = `tests/battery.sh` (v140, v177, v183, v195, v198, v204, v205,
-  v206, v207). Usa `PYTHONPYCACHEPREFIX` su temp (niente bytecode stale).
+  v206, v207, v209). Usa `PYTHONPYCACHEPREFIX` su temp (niente bytecode stale).
 - Suite "hard/bastarde" = `v195_hard.py` (da riusare per regressione SOLO se c'è
   motivo concreto). Scenari etichettati A..I con `check("Xn ...")`.
 - `tests/legacy/` = accettazione storica, NON parte del gate.
