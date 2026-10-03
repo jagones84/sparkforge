@@ -446,6 +446,13 @@
           <label>profondità subagent <input id="rtDepth" type="number" min="0" value="2"></label>
           <button class="ghost" onclick="saveRuntime()">salva runtime</button>
         </div>
+        <div class="card"><b>Verifier · apply-only-if-green</b>
+          <label>attivo <input id="vfOn" type="checkbox"></label>
+          <label>comando di verifica <input id="vfCmd" type="text" placeholder="python3 -m pytest -q"></label>
+          <label>timeout (s) <input id="vfTimeout" type="number" min="0" value="120"></label>
+          <label>path scope (virgole) <input id="vfPaths" type="text" placeholder="opzionale"></label>
+          <button class="ghost" onclick="saveVerifier()">salva verifier</button>
+        </div>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
       </section>
       <section data-section="settings" hidden>
@@ -891,6 +898,7 @@ function send(text) {
   es.addEventListener("plan.incomplete", e => planIncomplete(JSON.parse(e.data)));
   es.addEventListener("plan.continuing", e => { planContinuing(JSON.parse(e.data)); });
   es.addEventListener("plan.stopped", e => planStopped(JSON.parse(e.data)));
+  es.addEventListener("verify.run", e => { const d = JSON.parse(e.data); if (d && d.ran) who("ai", (d.green ? "✅ verifier green" : "⛔ verifier ROSSO — modifica annullata") + " · " + (d.path || "").split("/").pop() + (d.duration_ms ? " · " + d.duration_ms + "ms" : "")); });
   es.addEventListener("run.metrics", e => { runFooter(JSON.parse(e.data).metrics); });
   es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); loadApprovals(); });
   es.addEventListener("done", () => { es.close(); activeSSE = null; endStream(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll(); flushQueue(); });
@@ -1971,6 +1979,24 @@ async function saveRuntime() {
   }});
   who("ai", "✅ runtime aggiornato");
 }
+async function loadVerifier() {
+  const d = await api("GET", "/api/tools");
+  const v = (d && d.verifier) || {};
+  if ($("vfOn")) $("vfOn").checked = !!v.enabled;
+  if ($("vfCmd")) $("vfCmd").value = v.command || "";
+  if ($("vfTimeout")) $("vfTimeout").value = v.timeout_secs ?? 120;
+  if ($("vfPaths")) $("vfPaths").value = (v.paths || []).join(", ");
+}
+async function saveVerifier() {
+  const paths = ($("vfPaths").value || "").split(",").map(s => s.trim()).filter(Boolean);
+  await api("POST", "/api/tools", { verifier: {
+    enabled: !!$("vfOn").checked,
+    command: $("vfCmd").value,
+    timeout_secs: +$("vfTimeout").value,
+    paths: paths,
+  }});
+  who("ai", "✅ verifier aggiornato");
+}
 async function saveProvider() {
   const id = $("provId").value.trim();
   if (!id) { $("provResult").textContent = "id required"; return; }
@@ -2101,7 +2127,7 @@ function openPanel(name) {
   else if (name === "skills") { loadSkills(); }
   else if (name === "rules") { loadRules(); }
   else if (name === "files") { loadFiles(); loadEdits(); }
-  else if (name === "config") { loadRuntime(); api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
+  else if (name === "config") { loadRuntime(); loadVerifier(); api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") {
     // JAG-127: one Settings panel = Self + Providers + Keys + token (no more tabs).
     $("token-input").value = TOKEN || "";

@@ -672,6 +672,7 @@ def handle(handler, method, path, qs, body):
                                      "sandbox": sandbox.probe(force=qs.get("probe") == "1"),
                                      "policy": registry.load_config().get("approvals") or {},
                                      "runtime": registry.load_config().get("runtime") or {},
+                                     "verifier": registry.load_config().get("verifier") or {},
                                      "approvals": approvals.stats()})
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
@@ -1073,6 +1074,22 @@ def update_policy(body):
         registry.load_config(reload=True)
         _publish("tools.update", runtime=dict(cfg["runtime"]))
         return {"ok": True, "tools": registry.catalog(), "runtime": dict(cfg["runtime"])}
+    # JAG-131: verifier "apply-only-if-green" (modulo: enabled/command/timeout/paths)
+    if isinstance(body.get("verifier"), dict):
+        v = cfg.setdefault("verifier", {})
+        src = body["verifier"]
+        if "enabled" in src:
+            v["enabled"] = bool(src["enabled"])
+        if "command" in src:
+            v["command"] = str(src["command"] or "")
+        if src.get("timeout_secs") is not None:
+            v["timeout_secs"] = int(src["timeout_secs"])
+        if isinstance(src.get("paths"), list):
+            v["paths"] = [str(p) for p in src["paths"] if str(p).strip()]
+        registry.save_config(cfg)
+        registry.load_config(reload=True)
+        _publish("tools.update", verifier=dict(v))
+        return {"ok": True, "tools": registry.catalog(), "verifier": dict(v)}
     name = body.get("tool") or body.get("name")
     if not name:
         return {"error": "tool required", "tools": registry.catalog()}

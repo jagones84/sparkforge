@@ -83,6 +83,36 @@ def _journal(run_id, path, before, after, action):
         pass
 
 
+def _verify_edit(tool, path, snap, res, args, run_id):
+    """JAG-131: 'apply-only-if-green' su fs.write/fs.edit.
+
+    Se il verifier e' attivo, esegue il comando di verifica nella sandbox: se
+    fallisce, la modifica viene annullata (rollback al pre-image) e `res` diventa
+    un fallimento con l'errore del check. Mai bloccante su eccezioni interne.
+    """
+    try:
+        import verify as _v
+    except Exception:  # noqa: BLE001
+        return res
+    try:
+        if not _v.should_verify(tool, path):
+            return res
+    except Exception:  # noqa: BLE001
+        return res
+    workspace = args.get("workspace") if isinstance(args, dict) else None
+    try:
+        out, report = _v.verify(tool, path, snap, res, workspace=workspace,
+                               run_id=run_id)
+    except Exception as e:  # noqa: BLE001 — the verifier must never break a write
+        return res
+    try:
+        import server
+        server.publish("verify.run", run=run_id, tool=tool, path=path, **report)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def _fs_write(args, run_id):
     spec = registry.tool_spec("fs.write")
     roots = spec["roots"]
@@ -101,8 +131,10 @@ def _fs_write(args, run_id):
         f.write(content)
     after = (before + content) if append else content
     _journal(run_id, path, before, after, "modified" if existed else "created")
-    return {"ok": True, "path": path, "bytes": len(content), "append": append,
-            "backend": "host", "sandboxed": False, "exit_code": 0}
+    res = {"ok": True, "path": path, "bytes": len(content), "append": append,
+           "backend": "host", "sandboxed": False, "exit_code": 0}
+    return _verify_edit("fs.write", path, {"exists": existed, "content": before},
+                        res, args, run_id)
 
 
 def _fs_edit(args, run_id):
@@ -131,9 +163,11 @@ def _fs_edit(args, run_id):
     with open(path, "w", encoding="utf-8") as f:
         f.write(new)
     _journal(run_id, path, content, new, "modified")
-    return {"ok": True, "path": path, "replacements": n, "bytes_before": len(content),
-            "bytes_after": len(new), "backend": "host", "sandboxed": False,
-            "exit_code": 0}
+    res = {"ok": True, "path": path, "replacements": n, "bytes_before": len(content),
+           "bytes_after": len(new), "backend": "host", "sandboxed": False,
+           "exit_code": 0}
+    return _verify_edit("fs.edit", path, {"exists": True, "content": content},
+                        res, args, run_id)
 
 
 # ------------------------------------------------------------------ git ------

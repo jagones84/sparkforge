@@ -36,6 +36,17 @@ runtime:
   max_wall_secs: 3600       # tetto di tempo per run
   subagent_max_depth: 2     # profondita' massima della matrioska
 
+# ---- verifier "apply-only-if-green" (JAG-131) -------------------------------
+# Quando attivo, dopo OGNI fs.write/fs.edit l'harness esegue `command` nella
+# sandbox: se NON passa, la modifica viene annullata (rollback) e il modello
+# riceve l'errore. Default DISATTIVO (command vuoto) per non sorprendere.
+# Esempio per un repo Python:  command: "python3 -m pytest -q"
+verifier:
+  enabled: false
+  command: ""               # comando di verifica (vuoto = nessuna verifica)
+  timeout_secs: 120         # timeout del check
+  paths: []                 # se non vuoto, verifica solo i path che contengono uno di questi
+
 # ---- tool registry -----------------------------------------------------------
 tools:
 
