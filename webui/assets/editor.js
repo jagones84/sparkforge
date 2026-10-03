@@ -14,7 +14,9 @@ import {
 
 const TOKEN = () => localStorage.getItem("sf_token") || "";
 const LS_W = "sf_ed_w";
-const LS_TABS = "sf_ed_tabs";
+const LS_TABS = "sf_ed_tabs";        // legacy/global tab set (no session)
+const LS_TABS_S = "sf_ed_tabs_";     // JAG-157: per-session tab set
+const LS_OPEN = "sf_dock_open";      // JAG-157: "false" = the user closed the dock
 const IMG_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp", "avif"]);
 const LANG_BY_EXT = {
   js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
@@ -58,6 +60,8 @@ function langExt(name) {
   }
 }
 function basename(p) { const i = String(p).lastIndexOf("/"); return i >= 0 ? p.slice(i + 1) : String(p); }
+function sessId() { return localStorage.getItem("sf_session") || ""; }
+function tabsKey() { const s = sessId(); return s ? (LS_TABS_S + s) : LS_TABS; }
 function esc(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -295,7 +299,7 @@ function renderTabs() {
 }
 
 function persistTabs() {
-  try { localStorage.setItem(LS_TABS, JSON.stringify({ paths: state.tabs.map((t) => t.path), active: state.active })); } catch (e) { /* ignore */ }
+  try { localStorage.setItem(tabsKey(), JSON.stringify({ paths: state.tabs.map((t) => t.path), active: state.active })); } catch (e) { /* ignore */ }
 }
 
 function showCode(show) {
@@ -444,18 +448,37 @@ function toggleRender() {
 function show() {
   buildDock();
   state.dock.hidden = false;
+  localStorage.setItem(LS_OPEN, "true");   // JAG-157: an explicit open sticks
   applyResponsive();
   if (state.treeEl && !state.treeEl.hidden && !state.treeEl.childElementCount) loadTree();
 }
-function close() { syncActive(); if (state.dock) state.dock.hidden = true; }
+function close() { syncActive(); if (state.dock) state.dock.hidden = true; localStorage.setItem(LS_OPEN, "false"); }
 function toggle(e) {
   if (!$id("editorDock")) buildDock();
   if (state.dock.hidden) { if (!state.tabs.length) restoreTabs(); else show(); } else close();
 }
+/* JAG-157: open the editor by default — unless the user closed it on purpose. */
+async function ensureOpen() {
+  buildDock();
+  if (localStorage.getItem(LS_OPEN) === "false") return;
+  if (state.dock.hidden) await restoreTabs();
+}
+/* JAG-157: a session switch changes the workspace AND the tab set — reload both. */
+async function onSessionChange() {
+  syncActive();
+  state.tabs = []; state.active = -1;
+  if (state.host) state.host.destroy();
+  if (state.preview) state.preview.hidden = true;
+  buildDock();
+  if (state.tabsEl) renderTabs();
+  if (localStorage.getItem(LS_OPEN) === "false") return;
+  await restoreTabs();
+  if (state.treeEl) loadTree();
+}
 
 async function restoreTabs() {
   let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(LS_TABS) || "null"); } catch (e) { saved = null; }
+  try { saved = JSON.parse(localStorage.getItem(tabsKey()) || "null"); } catch (e) { saved = null; }
   if (!saved || !Array.isArray(saved.paths) || !saved.paths.length) { show(); return; }
   for (const p of saved.paths.slice(0, 12)) {
     try {
@@ -469,8 +492,10 @@ async function restoreTabs() {
 }
 
 function init() {
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", buildDock);
-  else buildDock();
+  // JAG-157: build the dock and open it (default) on the active session's folder.
+  const start = () => { buildDock(); onSessionChange(); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+  else start();
 }
 
 async function refresh(path) {
@@ -500,6 +525,8 @@ window.SparkEditor = {
   toggle,
   isOpen: () => !!$id("editorDock") && !$id("editorDock").hidden,
   restore: restoreTabs,
+  ensureOpen,
+  onSessionChange,
 };
 
 init();

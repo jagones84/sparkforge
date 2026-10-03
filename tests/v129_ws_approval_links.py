@@ -98,7 +98,9 @@ check("U2 no redundant Self/Providers/Keys tabs",
 check("U2b Settings merges self + providers + keys",
       'id="settingsWin"' in html and 'data-cat="general"' in html and 'id="selfPanel"' in html
       and 'id="provList"' in html and 'id="keysList"' in html, "")
-check("U2c session switch refreshes the workspace", "loadCtx(); loadRules(); closeAside();" in html, "")
+check("U2c session switch refreshes the workspace",
+      "function selectSession(s)" in html and "loadCtx(); loadRules();" in html
+      and "loadPlan();" in html, "")
 check("U3 readable files become links", "a.filelink" in html and "function linkifyFiles" in html, "")
 check("U4 link opens the file in the editor",
       "function openInEditor" in html and "openInEditor(a.dataset.p)" in html, "")

@@ -244,7 +244,8 @@
   #dirPicker[hidden] { display: none; }
   #dirList button { display: block; width: 100%; text-align: left; margin-bottom: 4px; font-size: 12px; }
   .pal-item { cursor: pointer; }
-  .pal-item:hover { background: rgba(108,140,255,.1); }
+  .pal-item:hover, .pal-item.hl { background: rgba(108,140,255,.16); }
+  #palette-results { max-height: 56vh; overflow: auto; }
   /* v0.8.1 resizable columns + panel toggles */
   .resizer { flex: 0 0 5px; width: 5px; cursor: col-resize; background: transparent; }
   .resizer:hover, .resizer.active { background: var(--accent); }
@@ -1103,12 +1104,28 @@ async function api(method, path, body) {
 }
 
 /* ---- sessions ---- */
+/* JAG-157: switch the active session and adapt ALL session-scoped state
+   (workspace/editor, todo/plan, model). Used by the rail and the palette. */
+function selectSession(s) {
+  if (!s || !s.id) return;
+  sessionId = s.id; localStorage.setItem("sf_session", sessionId);
+  _sessModel[s.id] = s.model || _sessModel[s.id] || "";
+  $("log").innerHTML = ""; curThink = curAns = null;
+  if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
+  loadSessions(); loadHistory(); loadCtx(); loadRules(); loadPlan();
+  modelLabel(); closeAside();
+  // JAG-127: the open panel must follow the session switch — its folder
+  // changed, so a stale workspace/tree would be shown otherwise.
+  const filesSec = document.querySelector('#inspector section[data-insp="files"]');
+  if (filesSec && filesSec.classList.contains("insp-open")) { loadFiles(); loadEdits(); }
+}
 async function loadSessions() {
   const out = await api("GET", "/api/sessions");
   const box = $("sessions"); box.innerHTML = "";
   const q = ($("session-search") ? $("session-search").value : "").toLowerCase();
   const hideEmpty = $("hide-empty") ? $("hide-empty").checked : false;
   (out.sessions || []).filter(s => (!hideEmpty || (s.messages || 0) > 0) && ((s.title || s.id || "").toLowerCase().includes(q))).forEach(s => {
+    _sessModel[s.id] = s.model || "";   // JAG-157: cache each session's model
     const d = document.createElement("div");
     d.className = "sess" + (s.id === sessionId ? " active" : "");
     const age = s.age ? (" · " + s.age) : "";
@@ -1116,23 +1133,21 @@ async function loadSessions() {
     d.innerHTML = `${fol}<span class="col"><span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span></span><span class="del" title="delete">✕</span>`;
     d.onclick = e => {
       if (e.target.classList.contains("del")) return;
-      sessionId = s.id; localStorage.setItem("sf_session", sessionId);
-      $("log").innerHTML = ""; curThink = curAns = null;
-      loadSessions(); loadHistory(); loadCtx(); loadRules(); closeAside();
-      // JAG-127: the open panel must follow the session switch — its folder
-      // changed, so a stale workspace/tree would be shown otherwise.
-      const filesSec = document.querySelector('#inspector section[data-insp="files"]');
-      if (filesSec && filesSec.classList.contains("insp-open")) { loadFiles(); loadEdits(); }
+      selectSession(s);
     };
     d.querySelector(".del").onclick = async () => {
       if (!(await confirmDelete("delete session " + (s.title || s.id) + "?"))) return;
       await api("DELETE", "/api/sessions/" + s.id);
-      if (sessionId === s.id) { sessionId = null; localStorage.removeItem("sf_session"); $("log").innerHTML = ""; }
-      loadSessions(); loadCtx();
+      if (sessionId === s.id) {
+        sessionId = null; localStorage.removeItem("sf_session"); $("log").innerHTML = "";
+        if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
+      }
+      loadSessions(); loadCtx(); modelLabel();
     };
     box.appendChild(d);
   });
   if (!(out.sessions || []).length) box.innerHTML = '<div class="remaining">no sessions yet</div>';
+  modelLabel();   // JAG-157: reflect the active session's model once the cache is filled
 }
 /* JAG-117: creating a session asks which local folder to open it in. */
 async function newSession() {
@@ -1160,8 +1175,10 @@ async function createNewSession() {
   if (s.error) { $("nsResult").textContent = "error: " + s.error; return; }
   $("sessInp").value = "";
   sessionId = s.id; localStorage.setItem("sf_session", sessionId);
+  _sessModel[s.id] = "";
   $("log").innerHTML = ""; curThink = curAns = null;
-  closeNewSess(); loadSessions(); loadHistory(); loadRules(); loadCtx(); closeAside();
+  if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
+  closeNewSess(); loadSessions(); loadHistory(); loadRules(); loadCtx(); loadPlan(); modelLabel(); closeAside();
 }
 /* JAG-121: folder picker (file-browser) for the session workspace */
 let _dirState = { path: "", parent: null, roots: [] };
@@ -1439,8 +1456,10 @@ async function resetRunGraph() {
 let _modelsCache = [];   // flat [{ref,id,provider,pname,local,available,ctx,loaded}]
 let _modelItems = [];    // items currently rendered, in visual order
 let _modelHi = 0;        // highlighted index (keyboard)
+let _sessModel = {};     // JAG-157: per-session model {sessionId: modelRef}
 
-function currentModel() { return localStorage.getItem("sf_model") || ""; }
+/* JAG-157: a session remembers its own LLM; fall back to the global default. */
+function currentModel() { return (sessionId && _sessModel[sessionId]) || localStorage.getItem("sf_model") || ""; }
 function _modelShort(ref) { const i = String(ref || "").indexOf(":"); return i >= 0 ? ref.slice(i + 1) : (ref || ""); }
 function modelLabel() {
   const b = $("model-btn");
@@ -1456,10 +1475,11 @@ async function loadModels() {
       ctx: m.context_length || 0, loaded: !!m.loaded,
     })));
     _modelsCache = flat;
-    const cur = localStorage.getItem("sf_model")
+    const cur = currentModel()
       || (flat.find(x => x.loaded) || {}).ref
       || d.default || (flat[0] || {}).ref || "";
-    if (cur) localStorage.setItem("sf_model", cur);
+    // JAG-157: don't overwrite the global default while a session has its own model.
+    if (cur && !(sessionId && _sessModel[sessionId])) localStorage.setItem("sf_model", cur);
     modelLabel(); renderModelMenu();
   } catch (e) { /* selector must never break the app */ }
 }
@@ -1521,6 +1541,11 @@ function modelKey(e) {
 }
 function chooseModel(ref) {
   localStorage.setItem("sf_model", ref);
+  if (sessionId) {
+    // JAG-157: remember the choice on the session itself (server-side).
+    _sessModel[sessionId] = ref;
+    api("POST", "/api/sessions/" + encodeURIComponent(sessionId) + "/model", { model: ref }).catch(() => {});
+  }
   modelLabel();
   const m = $("modelMenu"); if (m) m.hidden = true;
   renderModelMenu();
@@ -3081,6 +3106,10 @@ async function memoryAdd() {
 }
 
 /* ---- v0.8 command palette (Cmd/Ctrl+K) ---- */
+let _palDyn = [];   // JAG-157: sessions/skills/mcp, refreshed on open (best effort)
+let _palList = [];
+let _palHi = 0;
+
 function paletteItems() {
   const items = [
     { label: "\uFF0B New session", run: () => newSession() },
@@ -3092,13 +3121,57 @@ function paletteItems() {
     .forEach(([k, label]) => items.push({ label: "\u25B8 Inspector \u00A7 " + label, run: () => focusInsp(k) }));
   return items;
 }
-function renderPalette(q) {
-  const list = paletteItems().filter(i => i.label.toLowerCase().includes((q || "").toLowerCase()));
-  const ul = $("palette-results");
-  ul.innerHTML = list.map((i, n) => '<li class="pal-item" data-i="' + n + '" style="padding:8px 10px;border-radius:8px">' + i.label + '</li>').join("");
-  ul.querySelectorAll(".pal-item").forEach((li, n) => { li.onclick = () => { closePalette(); list[n].run(); }; });
+/* JAG-157: live items — sessions (switch to it), skills and MCP servers (jump to
+   settings). Loaded when the palette opens, so it always reflects new entries. */
+async function loadPaletteDynamic() {
+  const dyn = [];
+  try {
+    const d = await api("GET", "/api/sessions");
+    (d.sessions || []).slice(0, 40).forEach(s => dyn.push({
+      label: "\uD83D\uDDC2 session \u25B8 " + (s.title || s.id),
+      run: () => selectSession(s),
+    }));
+  } catch (e) { /* best effort */ }
+  try {
+    const d = await api("GET", "/api/skills");
+    (d.skills || []).forEach(s => dyn.push({
+      label: "\uD83E\uDDE9 skill \u25B8 " + s.name + (s.category ? " (" + s.category + ")" : ""),
+      run: () => openSettings("skills"),
+    }));
+  } catch (e) { /* best effort */ }
+  try {
+    const d = await api("GET", "/api/mcp/clients");
+    Object.keys(d.clients || {}).forEach(nm => dyn.push({
+      label: "\uD83D\uDD0C mcp \u25B8 " + nm,
+      run: () => openSettings("mcp"),
+    }));
+  } catch (e) { /* best effort */ }
+  _palDyn = dyn;
 }
-function openPalette() { $("palette").hidden = false; $("palette-input").value = ""; renderPalette(""); $("palette-input").focus(); }
+function renderPalette(q) {
+  const query = (q || "").toLowerCase();
+  _palList = paletteItems().concat(_palDyn).filter(i => i.label.toLowerCase().includes(query));
+  if (_palHi >= _palList.length) _palHi = Math.max(0, _palList.length - 1);
+  const ul = $("palette-results");
+  ul.innerHTML = _palList.map((i, n) => '<li class="pal-item' + (n === _palHi ? " hl" : "") + '" data-i="' + n + '" style="padding:8px 10px;border-radius:8px">' + esc(i.label) + '</li>').join("");
+  ul.querySelectorAll(".pal-item").forEach((li, n) => { li.onclick = () => { closePalette(); _palList[n].run(); }; });
+}
+function paintPalHi() {
+  const ul = $("palette-results"); if (!ul) return;
+  const els = ul.querySelectorAll(".pal-item");
+  els.forEach((el, i) => el.classList.toggle("hl", i === _palHi));
+  const el = els[_palHi]; if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+}
+function paletteKey(e) {
+  if (e.key === "ArrowDown") { e.preventDefault(); _palHi = Math.min(_palHi + 1, _palList.length - 1); paintPalHi(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); _palHi = Math.max(_palHi - 1, 0); paintPalHi(); }
+  else if (e.key === "Enter") { if (_palList[_palHi]) { e.preventDefault(); closePalette(); _palList[_palHi].run(); } }
+}
+function openPalette() {
+  $("palette").hidden = false; $("palette-input").value = ""; _palHi = 0;
+  renderPalette(""); $("palette-input").focus();
+  loadPaletteDynamic().then(() => renderPalette($("palette-input").value));
+}
 function closePalette() { $("palette").hidden = true; }
 function revealToken() { const i = $("token-input"); i.type = i.type === "password" ? "text" : "password"; }
 async function copyToken() {
@@ -3152,7 +3225,8 @@ $("toggle-right").onclick = () => {
   if (innerWidth <= 1100) document.body.classList.toggle("show-right");
   else document.body.classList.toggle("collapsed-right");
 };
-$("palette-input").addEventListener("input", e => renderPalette(e.target.value));
+$("palette-input").addEventListener("input", e => { _palHi = 0; renderPalette(e.target.value); });
+$("palette-input").addEventListener("keydown", paletteKey);
 $("palette").addEventListener("click", e => { if (e.target.id === "palette") closePalette(); });
 $("mcpJsonWin").addEventListener("click", e => { if (e.target.id === "mcpJsonWin") closeMcpJson(); });
 $("session-search").addEventListener("input", loadSessions);

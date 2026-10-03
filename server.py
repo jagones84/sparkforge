@@ -250,7 +250,8 @@ def list_sessions():
                 out.append({"id": s["id"], "title": s.get("title", ""),
                             "created": s.get("created"), "updated": upd,
                             "age": _rel_time(upd), "messages": len(msgs),
-                            "workspace": s.get("workspace")})
+                            "workspace": s.get("workspace"),
+                            "model": s.get("model")})
     except FileNotFoundError:
         pass
     return sorted(out, key=lambda s: s.get("updated") or 0, reverse=True)
@@ -3450,7 +3451,8 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(sid)
-            sess = prepare_session_for_turn(sess, qs.get("model"))  # JAG-70: auto-compact @75%
+            # JAG-157: explicit ?model= wins, else the session's own model.
+            sess = prepare_session_for_turn(sess, qs.get("model") or sess.get("model"))  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
@@ -3546,7 +3548,8 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session"))
-            sess = prepare_session_for_turn(sess, body.get("model"))  # JAG-70: auto-compact @75%
+            # JAG-157: explicit model wins, else the session's own model.
+            sess = prepare_session_for_turn(sess, body.get("model") or sess.get("model"))  # JAG-70: auto-compact @75%
             mark = session_mark(sess)  # JAG-51: boundary of this request
             append_message(sess, "user", message)
             publish("chat.user", session=sess["id"], text=message)
@@ -3695,6 +3698,17 @@ class Handler(BaseHTTPRequestHandler):
             sess = get_or_create_session(None, body.get("title"))
             publish("session.created", session=sess["id"], title=sess["title"])
             return self._send(200, sess)
+        if path.startswith("/api/sessions/") and path.endswith("/model"):
+            # JAG-157: per-session model — the session remembers its own LLM.
+            sid = path[len("/api/sessions/"):-len("/model")].strip("/")
+            if not sid or "/" in sid or ".." in sid:
+                return self._send(404, {"error": "session not found"})
+            sess = load_session(sid)
+            if not sess:
+                return self._send(404, {"error": "session not found"})
+            sess["model"] = str(body.get("model") or "")[:120]
+            save_session(sess)
+            return self._send(200, {"ok": True, "session": sid, "model": sess["model"]})
         if path == "/api/eval/run":
             return self._send(200, eval_run(body.get("model"), int(body.get("max_steps", 6)),
                                             body.get("task_id"), body.get("save", True)))
