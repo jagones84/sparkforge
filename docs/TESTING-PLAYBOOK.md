@@ -30,6 +30,11 @@ Written down so a future session does not have to rediscover it.
    - **Live UI** — the browser: DOM, console, network, screenshots (chrome-devtools MCP).
 5. **Always restore state.** Delete throwaway sessions/test artifacts when done;
    never leave the harness polluted (that was itself a past complaint).
+6. **Never test inside the harness repo.** Bind every live test session to a
+   dedicated workspace under `/home/jagones/Repositories/TESTS/`
+   (e.g. `TESTS/harness-e2e`) — **not** `Repositories/sparkforge`. Driving an
+   agent/tool loop in the harness's own repo pollutes `data/`, risks edits to the
+   source and muddies git state.
 
 ---
 

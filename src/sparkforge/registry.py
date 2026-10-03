@@ -497,7 +497,8 @@ def classify(tool, args, workspace=None):
         return "auto", "approvals.mode=full — never ask"
     if workspace and tool in ("fs.read", "fs.write", "fs.edit") \
             and str(ap.get("outside_workspace", "required")).lower() == "required":
-        p, _err = resolve_path(str((args or {}).get("path", "")), spec["roots"])
+        p, _err = resolve_path(str((args or {}).get("path", "")), spec["roots"],
+                               base=workspace)
         # JAG-127b: the per-run sandbox (data/sandbox/<run>) is the agent's own
         # scratch area — it is always "inside" even when the session folder is
         # elsewhere. Without this every sandbox file op was escalated to
@@ -513,15 +514,22 @@ def classify(tool, args, workspace=None):
     return "required", "mutating action requires approval"
 
 
-def resolve_path(path, roots=None):
-    """Resolve `path` against the repo and check it stays inside an allowed root."""
+def resolve_path(path, roots=None, base=None):
+    """Resolve `path` against a base dir (default: the repo) + check allowed roots.
+
+    JAG-191: when a session workspace is open, a RELATIVE path resolves against
+    it — not the harness repo — so `fs.write {"path": "foo.txt"}` lands in the
+    folder the user actually opened (mirrors the shell tool, which already uses
+    the workspace as cwd). Absolute paths are untouched; the roots stay
+    repo-relative so the allow-list semantics do not change.
+    """
     if roots is None:
         roots = ["."]
-    base = REPO
+    base = os.path.realpath(base) if base else REPO
     p = path if os.path.isabs(path) else os.path.join(base, path)
     p = os.path.realpath(p)
     for r in roots:
-        root = os.path.realpath(r if os.path.isabs(r) else os.path.join(base, r))
+        root = os.path.realpath(r if os.path.isabs(r) else os.path.join(REPO, r))
         if p == root or p.startswith(root + os.sep):
             return p, None
     return None, "path %r outside allowed roots %s" % (path, roots)

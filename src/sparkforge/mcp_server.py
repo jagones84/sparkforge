@@ -9,11 +9,16 @@ HTTP. Register it with any MCP client, e.g.:
       "mcpServers": {
         "sparkforge": {
           "command": "python3",
-          "args": ["/home/jagones/Repositories/sparkforge/src/sparkforge/mcp_server.py"],
+          "args": ["/home/jagones/Repositories/sparkforge/mcp_server.py"],
           "env": {"SPARKFORGE_URL": "http://127.0.0.1:8790"}
         }
       }
     }
+
+NOTE: point the client at the ROOT launcher shim (`sparkforge/mcp_server.py`),
+NOT at this package module. This file uses relative imports (`from . import mcp`)
+so it cannot be run as a standalone script; the root shim adds `src/` to
+`sys.path` and calls `main()`.
 
 Protocol traffic goes to stdout; diagnostics go to stderr (never stdout).
 """

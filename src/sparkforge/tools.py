@@ -64,7 +64,8 @@ def _shell(args, run_id):
 
 def _fs_read(args, run_id):
     roots = registry.tool_spec("fs.read")["roots"]
-    path, err = registry.resolve_path(str(args.get("path", "")), roots)
+    path, err = registry.resolve_path(str(args.get("path", "")), roots,
+                                      base=args.get("workspace"))
     if err:
         return {"ok": False, "error": err}
     if not os.path.isfile(path):
@@ -117,7 +118,8 @@ def _verify_edit(tool, path, snap, res, args, run_id):
 def _fs_write(args, run_id):
     spec = registry.tool_spec("fs.write")
     roots = spec["roots"]
-    path, err = registry.resolve_path(str(args.get("path", "")), roots)
+    path, err = registry.resolve_path(str(args.get("path", "")), roots,
+                                      base=args.get("workspace"))
     if err:
         return {"ok": False, "error": err}
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -141,7 +143,8 @@ def _fs_write(args, run_id):
 def _fs_edit(args, run_id):
     """Surgical edit: replace exact search text with replacement text."""
     spec = registry.tool_spec("fs.edit")
-    path, err = registry.resolve_path(str(args.get("path", "")), spec["roots"])
+    path, err = registry.resolve_path(str(args.get("path", "")), spec["roots"],
+                                      base=args.get("workspace"))
     if err:
         return {"ok": False, "error": err}
     if not os.path.isfile(path):
@@ -181,7 +184,7 @@ def _git(args, run_id):
         return {"ok": False, "error": "bad git args: %s" % e}
     if not argv:
         return {"ok": False, "error": "empty git args"}
-    cwd = args.get("cwd") or REPO
+    cwd = args.get("cwd") or args.get("workspace") or REPO
     if not os.path.isdir(cwd):
         return {"ok": False, "error": "cwd not found: %s" % cwd}
     t0 = time.time()

@@ -110,6 +110,18 @@ python3 forge.py models                           # router model roster/status
 
 > 📖 **Full CLI reference** — every command, every endpoint, examples: **[CLI.md](docs/CLI.md)**.
 
+### Repo layout — entry points are launcher shims
+
+The whole implementation lives in the **`src/sparkforge/`** package. The three
+Python files at the repo **root** — `server.py`, `forge.py`, `mcp_server.py` — are
+**~10-line launcher shims**, not implementations: each prepends `src/` to
+`sys.path` and calls the package `main()`. They exist only so the documented
+entrypoints (`python3 server.py`, `python3 forge.py …`, the MCP stdio
+registration, and the systemd `ExecStart`) keep working after the package move —
+the package modules use relative imports and cannot run standalone. If you point
+an MCP client at `src/sparkforge/mcp_server.py` directly it will fail; use the
+root `mcp_server.py`.
+
 ### Regression battery (the gate)
 
 The **only** regression gate is a single 3-test battery — deterministic, fast and
@@ -123,7 +135,7 @@ bash tests/battery.sh
 It runs exactly three checks:
 - `tests/v140_subagent_todos.py` — subagent spawning, per-child todo lists, depth cap, taskgraph nesting;
 - `tests/v177_session_delete_cascade.py` — deleting a session removes transcript + graph + run + edits;
-- `tests/v183_chat_core.py` — chat loop core: a normal turn runs + persists its reply; a stuck model's repeated failed call is executed ONCE then blocked (anti-loop, JAG-183); the `subagent` action is reachable and delegates once (JAG-189); a fresh message is not hijacked by a stale plan (JAG-189); harness-action cards (`write_todos`/`update_todos`/`subagent`) are persisted so a reload rebuilds them (JAG-190).
+- `tests/v183_chat_core.py` — chat loop core: a normal turn runs + persists its reply; a stuck model's repeated failed call is executed ONCE then blocked (anti-loop, JAG-183); the `subagent` action is reachable and delegates once (JAG-189); a fresh message is not hijacked by a stale plan (JAG-189); harness-action cards (`write_todos`/`update_todos`/`subagent`) are persisted so a reload rebuilds them (JAG-190); a relative `fs.read/write/edit` path resolves inside the session workspace, not the harness repo (JAG-191).
 
 Everything else under `tests/legacy/` is historic acceptance evidence, run ad hoc,
 and is **not** part of the gate.

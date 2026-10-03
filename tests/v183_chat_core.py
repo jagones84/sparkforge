@@ -203,5 +203,32 @@ check("E2 update_todos card persisted (JAG-190)", "update_todos" in _tools,
       "cards=%s" % _tools)
 
 
+# ---- scenario F: relative fs paths bind to the session workspace (JAG-191) --
+# Before the fix, fs.write {"path":"HELLO.txt"} on a session whose workspace was
+# /…/TESTS/harness-e2e wrote to the HARNESS REPO instead. Relative paths must
+# resolve against the workspace (like the shell tool's cwd), not REPO.
+from sparkforge import registry as _reg, tools as _tools  # noqa: E402
+_ws = os.path.join(REPO, "data", "v183ws-%d" % os.getpid())
+os.makedirs(_ws, exist_ok=True)
+atexit.register(lambda: shutil.rmtree(_ws, ignore_errors=True))
+_rp, _rerr = _reg.resolve_path("HELLO.txt", _reg.tool_spec("fs.write")["roots"],
+                               base=_ws)
+check("F1 relative path resolves under the workspace",
+      _rerr is None and _rp == os.path.join(_ws, "HELLO.txt"),
+      "%s err=%s" % (_rp, _rerr))
+_rw = _tools.execute("fs.write", {"path": "HELLO.txt", "content": "hi\n",
+                                  "workspace": _ws})
+check("F2 fs.write lands in the workspace, not the repo",
+      _rw.get("ok") and _rw.get("path") == os.path.join(_ws, "HELLO.txt"),
+      "%s" % _rw.get("path"))
+check("F3 the file really exists in the workspace",
+      os.path.isfile(os.path.join(_ws, "HELLO.txt")))
+_abs = _tools.execute("fs.read", {"path": os.path.join(_ws, "HELLO.txt"),
+                                  "workspace": "/nope-191"})
+check("F4 absolute paths are unaffected by the workspace base",
+      _abs.get("ok") and "hi" in (_abs.get("content") or ""),
+      "%s" % _abs.get("error"))
+
+
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)
