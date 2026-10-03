@@ -425,12 +425,7 @@
     <nav id="rail-tabs">
       <button data-panel="graph" class="active" onclick="openPanel('graph')">Plan</button>
       <button data-panel="context" onclick="openPanel('context')">Context</button>
-      <button data-panel="config" onclick="openPanel('config')">Config</button>
-      <button data-panel="settings" onclick="openPanel('settings')">Settings</button>
       <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
-      <button data-panel="mcp" onclick="openPanel('mcp')">MCP</button>
-      <button data-panel="skills" onclick="openPanel('skills')">Skills</button>
-      <button data-panel="rules" onclick="openPanel('rules')">Rules</button>
       <button data-panel="files" onclick="openPanel('files')">Files</button>
     </nav>
     <div id="panel-body">
@@ -467,8 +462,8 @@
         <h2>Feed</h2>
         <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
       </section>
-      <section data-section="config" hidden>
-        <h2>Config · tools &amp; approval policy</h2>
+      <div class="sw-cat" data-cat="tools" hidden>
+        <h2>Tools &amp; policy</h2>
         <div class="card"><b>Runtime / long-horizon</b>
           <label>giri di continuazione <input id="rtKgMax" type="number" min="0" value="8"></label>
           <label>no-progress rounds <input id="rtNoProg" type="number" min="0" value="2"></label>
@@ -506,10 +501,12 @@
           <button class="ghost" onclick="saveSelfevolve()">salva selfevolve</button>
         </div>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
-      </section>
-      <section data-section="settings" hidden>
+      </div>
+      <div class="sw-cat" data-cat="general" hidden>
         <h2>Self · harness</h2>
         <div class="card" id="selfPanel"><div class="remaining">loading…</div></div>
+      </div>
+      <div class="sw-cat" data-cat="providers" hidden>
         <h2>Providers · LLM</h2>
         <div class="card">
           <div class="remaining" id="provSummary">loading…</div>
@@ -535,6 +532,8 @@
           <div id="provResult" class="remaining" style="margin-top:6px"></div>
           <div class="remaining" style="margin-top:6px">saved in config/providers.local.yaml (outside the repo)</div>
         </div>
+      </div>
+      <div class="sw-cat" data-cat="keys" hidden>
         <h2>Keys · secrets</h2>
         <div class="card">
           <div class="remaining" id="keysSummary">loading…</div>
@@ -549,7 +548,7 @@
           </div>
           <div class="remaining" style="margin-top:6px">saved in localStorage (key sf_token)</div>
         </div>
-      </section>
+      </div>
       <section data-section="approvals" hidden>
         <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
         <div class="card">
@@ -558,7 +557,7 @@
         <div class="remaining" style="margin-top:8px">A tool set to <b>auto</b> never asks.
           To change a tool's policy (<b>auto / required / denied</b>) use the <b>Config</b> panel — the single place for auto-approve.</div>
       </section>
-      <section data-section="mcp" hidden>
+      <div class="sw-cat" data-cat="mcp" hidden>
         <h2>MCP · external servers</h2>
         <div class="card">
           <div class="remaining" id="mcpSummary">loading…</div>
@@ -596,8 +595,8 @@
           <div id="mcpResult" class="remaining" style="margin-top:6px"></div>
           <div class="remaining" style="margin-top:6px">Saved automatically to <code>config/mcp_clients.local.yaml</code> (outside the repo · no committed secrets). You can also edit them by hand in that file if you prefer.</div>
         </div>
-      </section>
-      <section data-section="skills" hidden>
+      </div>
+      <div class="sw-cat" data-cat="skills" hidden>
         <h2>Install from zip</h2>
         <div class="card">
           <input type="file" id="skillZip" accept=".zip" style="font-size:12px">
@@ -612,7 +611,7 @@
           <div class="remaining" id="skillsSummary">loading…</div>
           <div id="skillsList" style="margin-top:8px"></div>
         </div>
-      </section>
+      </div>
       <section data-section="files" hidden>
         <h2>Files · workspace</h2>
         <div class="card">
@@ -638,7 +637,7 @@
           </div>
         </div>
       </section>
-      <section data-section="rules" hidden>
+      <div class="sw-cat" data-cat="rules" hidden>
         <h2>Workspace · folder</h2>
         <div class="card">
           <div class="remaining" id="wsCurrent">loading…</div>
@@ -664,7 +663,7 @@
         </div>
         <h2>Uploaded files</h2>
         <div class="card"><div id="rulesFiles" class="remaining"></div></div>
-      </section>
+      </div>
     </div>
   </aside>
 </main>
@@ -2399,6 +2398,11 @@ function resizify(handle, box, key) {
     document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up); e.preventDefault();
   });
 }
+function moveSettingsCats() {
+  const main = $("swMain"); if (!main) return;
+  document.querySelectorAll("#panel-body > .sw-cat").forEach(el => main.appendChild(el));
+}
+moveSettingsCats();
 function openPanel(name) {
   document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
   document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
