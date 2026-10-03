@@ -221,11 +221,7 @@
   [data-col="sessions"] { flex: 0 0 220px; width: 220px; border-right: 1px solid var(--line); overflow-y: auto; }
   [data-col="chat"]     { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
   [data-col="context"]  { flex: 0 0 238px; width: 238px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden; min-height: 0; }
-  /* the rail scrolls only its body, so the tab titles stay visible */
-  #panel-body { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
-  #rail-tabs { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line-2); }
-  #rail-tabs button { padding: 4px 9px; font-size: 10px; border-radius: 6px; }
-  #rail-tabs button.active { color: var(--txt); border-color: var(--accent); background: rgba(139,123,240,.14); }
+  /* JAG-150: the right rail is now a collapsible inspector (see #inspector) */
   .toolcard-head { cursor: pointer; }
   .toolcard.expanded .toolcard-body { display: block; }
   .toolcard-body { display: none; margin-top: 6px; max-height: 320px; overflow: auto; resize: vertical;
@@ -335,6 +331,16 @@
   a.filelink:hover, a.weblink:hover, a.imglink:hover { color: var(--txt); }
   a.weblink { color: var(--info); }
   a.imglink { color: var(--acc2); }
+  /* JAG-150: inspector (collapsible sections, replaces the rail tabs) */
+  #inspector { flex: 1; min-height: 0; overflow-y: auto; padding: 6px; }
+  #inspector section { border-bottom: 1px solid var(--line-2); }
+  #inspector .insp-hd { display: block; width: 100%; text-align: left; background: transparent; border: 0;
+    color: var(--txt); font-weight: 600; font-size: 12px; padding: 9px 8px; cursor: pointer; }
+  #inspector .insp-hd:hover { color: var(--accent); }
+  #inspector .insp-hd::before { content: "▸ "; color: var(--dim); }
+  #inspector section.insp-open .insp-hd::before { content: "▾ "; color: var(--dim); }
+  #inspector .insp-body { padding: 0 8px 10px; }
+  #inspector .insp-body[hidden] { display: none; }
   /* JAG-150: movable, non-blocking settings window */
   #settingsWin { position: fixed; z-index: 60; width: min(760px, 94vw); height: min(620px, 86vh);
     background: #0f1320; border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column;
@@ -422,14 +428,10 @@
   </div>
   <div class="resizer" id="resize-right" title="drag to resize"></div>
   <aside id="rail" data-col="context">
-    <nav id="rail-tabs">
-      <button data-panel="graph" class="active" onclick="openPanel('graph')">Plan</button>
-      <button data-panel="context" onclick="openPanel('context')">Context</button>
-      <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
-      <button data-panel="files" onclick="openPanel('files')">Files</button>
-    </nav>
-    <div id="panel-body">
-      <section data-section="graph">
+    <div id="inspector">
+      <section data-insp="plan" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('plan')">Plan / Tasks</button>
+        <div class="insp-body">
         <h2>TASK LIST (persistente) <span id="taskCount" class="remaining"></span></h2>
         <div class="card">
           <div style="display:flex;gap:6px;margin-top:8px">
@@ -450,17 +452,24 @@
           <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
           <div id="remaining" class="remaining" style="margin-top:8px"></div>
         </div>
+        </div>
       </section>
-      <section data-section="context" hidden>
-        <h2>Context</h2>
+      <section data-insp="context" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('context')">Context</button>
+        <div class="insp-body">
         <div class="card">
           <div class="ctxbig"><span id="ctxPct" class="ctxpct">–</span><span id="ctxState" class="ctxstate">–</span></div>
           <div class="meter"><i id="ctxBar" style="width:0%;min-width:0"></i></div>
           <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
           <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
         </div>
-        <h2>Feed</h2>
+        </div>
+      </section>
+      <section data-insp="feed" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('feed')">Feed</button>
+        <div class="insp-body">
         <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
+        </div>
       </section>
       <div class="sw-cat" data-cat="tools" hidden>
         <h2>Tools &amp; policy</h2>
@@ -551,13 +560,15 @@
           <div class="remaining" style="margin-top:6px">Salvato in <code>localStorage</code> (key <code>sf_token</code>). Mascherato di default; <b>👁</b> per vederlo, <b>⧉</b> per copiarlo.</div>
         </div>
       </div>
-      <section data-section="approvals" hidden>
-        <h2>Approvals <span id="apprCount" class="remaining"></span></h2>
+      <section data-insp="approvals" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('approvals')">Approvals <span id="apprCount" class="remaining"></span></button>
+        <div class="insp-body">
         <div class="card">
           <div id="approvals" class="remaining">no pending approvals</div>
         </div>
         <div class="remaining" style="margin-top:8px">A tool set to <b>auto</b> never asks.
-          To change a tool's policy (<b>auto / required / denied</b>) use the <b>Config</b> panel — the single place for auto-approve.</div>
+          To change a tool's policy (<b>auto / required / denied</b>) use <b>Impostazioni → Tools &amp; policy</b>.</div>
+        </div>
       </section>
       <div class="sw-cat" data-cat="mcp" hidden>
         <h2>MCP · external servers</h2>
@@ -614,7 +625,9 @@
           <div id="skillsList" style="margin-top:8px"></div>
         </div>
       </div>
-      <section data-section="files" hidden>
+      <section data-insp="files" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('files')">Files &amp; changes</button>
+        <div class="insp-body">
         <h2>Files · workspace</h2>
         <div class="card">
           <div style="display:flex;gap:6px;align-items:center">
@@ -637,6 +650,7 @@
             <button class="ghost" onclick="undoEdits(null)" title="restore every changed file to its pre-image">↩ undo all</button>
             <span class="remaining" style="margin-left:auto">click a file to see the diff</span>
           </div>
+        </div>
         </div>
       </section>
       <div class="sw-cat" data-cat="rules" hidden>
@@ -1011,8 +1025,8 @@ async function loadSessions() {
       loadSessions(); loadHistory(); loadCtx(); loadRules(); closeAside();
       // JAG-127: the open panel must follow the session switch — its folder
       // changed, so a stale workspace/tree would be shown otherwise.
-      const act = document.querySelector("#panel-body > section:not([hidden])");
-      if (act && act.dataset.section === "files") { loadFiles(); loadEdits(); }
+      const filesSec = document.querySelector('#inspector section[data-insp="files"]');
+      if (filesSec && filesSec.classList.contains("insp-open")) { loadFiles(); loadEdits(); }
     };
     d.querySelector(".del").onclick = async () => {
       if (!(await confirmDelete("delete session " + (s.title || s.id) + "?"))) return;
@@ -2436,28 +2450,41 @@ async function saveCompactionModel() {
 }
 function moveSettingsCats() {
   const main = $("swMain"); if (!main) return;
-  document.querySelectorAll("#panel-body > .sw-cat").forEach(el => main.appendChild(el));
+  document.querySelectorAll("#inspector > .sw-cat").forEach(el => main.appendChild(el));
 }
 moveSettingsCats();
-function openPanel(name) {
-  document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
-  document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
-  if (name === "graph") { loadPlan(); loadGraph(); loadCtx(); }
-  else if (name === "context") { loadCtx(); }
-  else if (name === "approvals") { loadApprovals(); }
-  else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); renderMcpCatalog(); }
-  else if (name === "skills") { loadSkills(); }
-  else if (name === "rules") { loadRules(); }
-  else if (name === "files") { loadFiles(); loadEdits(); }
-  else if (name === "config") { loadRuntime(); loadVerifier(); loadBestofn(); loadDifficulty(); loadSelfevolve(); api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
-  else if (name === "settings") {
-    // JAG-127: one Settings panel = Self + Providers + Keys + token (no more tabs).
-    $("token-input").value = TOKEN || "";
-    api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), {error: String(e)}));
-    loadProviders();
-    loadKeys();
-  }
+function toggleInsp(name) {
+  const sec = document.querySelector('#inspector section[data-insp="' + name + '"]');
+  if (!sec) return;
+  const body = sec.querySelector(".insp-body");
+  body.hidden = !body.hidden;
+  sec.classList.toggle("insp-open", !body.hidden);
+  localStorage.setItem("sf_insp_" + name, body.hidden ? "0" : "1");
 }
+function focusInsp(name) {
+  const map = { graph: "plan", plan: "plan", context: "context", approvals: "approvals", files: "files", feed: "feed" };
+  const key = map[name] || name;
+  const sec = document.querySelector('#inspector section[data-insp="' + key + '"]');
+  if (sec) {
+    sec.querySelector(".insp-body").hidden = false;
+    sec.classList.add("insp-open");
+    sec.scrollIntoView({ block: "start" });
+  }
+  localStorage.setItem("sf_insp_" + key, "1");
+  if (key === "plan") { loadPlan(); loadGraph(); }
+  else if (key === "context") { loadCtx(); }
+  else if (key === "approvals") { loadApprovals(); }
+  else if (key === "files") { loadFiles(); loadEdits(); }
+}
+function restoreInspector() {
+  document.querySelectorAll("#inspector section").forEach(s => {
+    const v = localStorage.getItem("sf_insp_" + s.dataset.insp);
+    if (v === "0") { s.querySelector(".insp-body").hidden = true; s.classList.remove("insp-open"); }
+    else if (v === "1") { s.querySelector(".insp-body").hidden = false; s.classList.add("insp-open"); }
+  });
+}
+restoreInspector();
+function openPanel(name) { focusInsp(name); }
 
 /* ---- JAG-124: workspace file tree + editor ---- */
 let _filesRoot = null, _openFile = null;
