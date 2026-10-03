@@ -128,7 +128,7 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
      `MAX_BODY_BYTES` (8MB, env `SPARKFORGE_MAX_BODY`) + drain dei byte eccedenti.
   2. un client che si disconnette mid-risposta produceva un `BrokenPipeError` **non
      gestito** → traceback nel log (0 prima → flood sotto abuso) → ora assorbito in
-     `_send`. Verificato: **0 traceback** dopo il caos. Commit `______`.
+     `_send`. Verificato: **0 traceback** dopo il caos. Commit `ad8bcbf`.
   *Nota:* body 2MB → connessione chiusa (status 0) ma nessun traceback e server sano;
   da approfondire se serve un 413 esplicito.
 
