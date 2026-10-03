@@ -399,7 +399,7 @@
 <body>
 <header id="topbar">
   <span class="logo">⚡ SPARKFORGE</span>
-  <span class="sub">agent harness · dgx spark · local router</span>
+  <span class="sub">agent harness · self-hosted · any OS</span>
   <span style="flex:1"></span>
   <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
   <button class="ghost" id="compactBtn" title="compact the session transcript now">🗜 compact</button>
@@ -417,14 +417,14 @@
   <aside id="aside" data-col="sessions">
     <section>
       <h2>Sessions</h2>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input id="sessInp" class="inp" placeholder="new session title…" style="flex:1;padding:6px 10px;font-size:12px">
+        <button class="ghost" onclick="newSession()">+ new</button>
+      </div>
       <input id="session-search" class="inp" placeholder="search sessions…" style="width:100%;margin-bottom:6px;padding:6px 10px;font-size:12px">
       <label class="remaining" style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><input type="checkbox" id="hide-empty"> hide empty</label>
       <div class="card">
         <div id="sessions"></div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <input id="sessInp" class="inp" placeholder="new session title…" style="flex:1;padding:6px 10px;font-size:12px">
-          <button class="ghost" onclick="newSession()">+ new</button>
-        </div>
       </div>
     </section>
   </aside>
