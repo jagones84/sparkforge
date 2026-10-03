@@ -45,8 +45,23 @@ proposto, dedup del pattern più lungo, soglia min_count, slug safe, scan → bo
 proposal `proposed`, `SKILL.md`, round-trip history, `mine_history`, wiring
 (improve scope=mine + record nel loop). Più la non-regressione della suite.
 
-## Next (stadio 2)
+## Stadio 2 (FATTO — JAG-135)
 
-Generate the script for the drafted pattern, run it in the sandbox on real cases,
-and only if green promote it to `skills/<categoria>/<nome>/` (ciclo
-synthesize → verify → archive, Voyager). Usa il verifier di JAG-131.
+`selfevolve.py` estende il miner con il ciclo Voyager **synthesize → verify → archive**:
+
+- `synth(pattern, out_dir)`: codegen deterministico di `skill.json` (pipeline
+  dichiarativa), `runner.py` (primitivo invocabile `run(invoke)`) e `check.py`
+  (verifica **self-contained**: nessuna import dal repo, gira in qualunque sandbox).
+- `verify(proposal_dir, runner=None)`: esegue `check.py` in sandbox via
+  `sandbox.run` (host backend: cwd = cartella proposta); aggiorna `proposal.json`
+  a `verified`/`rejected`. `runner` iniettabile per i test puri.
+- `promote(proposal_dir, skills_dir=None)`: **write-gate** — archivia in
+  `skills/<category>/<name>/` SOLO se `status == "verified"`; non sovrascrive;
+  marca `archived` + `archived_to`.
+- `pipeline(pattern, ...)`: ciclo completo (draft → synth → verify → promote se verde).
+- Tool `improve` (`scope=mine`) con `action`: `mine` (bozza), `evolve` (stadio 2 su
+  tutta la history), `verify`/`promote` (su una proposta via `path`).
+- Config `selfevolve` (`category`, `verify_timeout`).
+
+Test: `tests/v148_selfevolve2.py` — 15 check (synth/verify/promote/pipeline, write-gate,
+no-overwrite, verify reale in sandbox host per pattern valido e tool sconosciuto, wiring).

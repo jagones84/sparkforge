@@ -68,6 +68,17 @@ difficulty:
   medium_at: 0.35           # punteggio >= -> "medium"
   hard_at: 0.65             # punteggio >= -> "hard"
 
+# ---- self-evolving skills (JAG-133/135) -------------------------------------
+# Se l'harness ripete la stessa sequenza di tool su run diversi, la impacchetta
+# come skill. Stadio 1 = bozza; stadio 2 = synth + verify in sandbox + archive
+# (solo se verde). min_len/min_count/max_len = soglie del miner.
+selfevolve:
+  min_len: 2                # lunghezza minima della sequenza (n. tool)
+  min_count: 3              # su quante run diverse deve ripetersi
+  max_len: 6                # lunghezza massima cercata
+  category: auto            # skills/<category>/<nome> alla promozione
+  verify_timeout: 60        # timeout del check in sandbox
+
 # ---- tool registry -----------------------------------------------------------
 tools:
 

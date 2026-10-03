@@ -41,10 +41,13 @@ finché non passa e poi la **archivia** come nativa riusabile (self-verification
 2. **Best-of-N + rank PRM** — ✅ FATTO (JAG-132, commit `97f0bc3`): `bestofn.py` +
    `prm.rank_text/rank`; campiona N solo quando il primo campione è inutilizzabile
    (early-exit); config `bestofn` + card WebUI. Test `v145` 12/12.
-3. **Budget per difficoltà** — ⏳ da fare: oggi l'unico trigger è "campione rotto";
-   manca una stima di difficoltà per allocare N in anticipo.
-4. **Skill synthesis autonoma** — ⏳ da fare (mine sequenze ripetute → bozza skill →
-   verify sandbox → archive): parte miner implementata in JAG-133, manca il codegen.
+3. **Budget per difficoltà** — ✅ FATTO (JAG-134, commit `9672af0`): `difficulty.py`
+   (stima deterministica dai segnali) → scala N (best-of-N adattivo) e i giri
+   `keepgoing_max`; config `difficulty` + card WebUI. Test `v147` 17/17.
+4. **Skill synthesis autonoma** — ✅ FATTO (JAG-133/135): `selfevolve.py` miner
+   (stadio 1) + stadio 2 synth → verify in sandbox → archive write-gated
+   (`synth`/`verify`/`promote`/`pipeline`, tool `improve` action `evolve`).
+   Test `v146` 12/12 + `v148` 15/15.
 
-Aggiornamento 2026-10-03: 1 e 2 implementati, testati e pushati. Prossimo: (3) difficoltà
-adattiva, poi (4) sintesi+verify autonoma. Vedi `docs/plans/` per gli ultimi spec.
+Aggiornamento 2026-10-03: 1–4 implementati, testati e pushati. Resta l'**armonia**
+dei link tra i meccanismi (config unica + eventi coerenti) e la suite end-to-end.

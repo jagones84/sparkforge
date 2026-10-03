@@ -591,17 +591,58 @@ def _diff(args, run_id):
 
 
 def _improve(args, run_id=None):
-    """Registra una proposta di auto-miglioramento (skill/regole)."""
+    """Registra una proposta di auto-miglioramento (skill/regole).
+
+    scope=mine (JAG-133/135): il self-evolving lavora sulle sequenze di tool
+    realmente osservate. action:
+      - mine   (default) -> mina la history e deposita una BOZZA per pattern;
+      - evolve           -> stadio 2: draft -> synth -> verify in sandbox ->
+                            archive (solo se verde, write-gate);
+      - verify           -> esegue il check di una proposta (`path`);
+      - promote          -> archivia una proposta verificata (`path`).
+    """
     import improve
-    scope = str((args or {}).get("scope", "")).strip()
-    content = str((args or {}).get("content", "")).strip()
+    args = args or {}
+    scope = str(args.get("scope", "")).strip()
+    action = str(args.get("action", "propose") or "propose").strip()
+    content = str(args.get("content", "")).strip()
     if scope == "mine":
-        # JAG-133: self-evolving — mina le sequenze di tool ripetute nella history
-        # dei run e deposita una BOZZA di skill per ciascun pattern ricorrente.
+        import selfevolve
+        out = os.path.join(registry.REPO, "data", "proposals", "skills")
+        path = str(args.get("path", "") or "").strip()
+
+        def _pub(ev, **kw):
+            try:
+                import server as _srv
+                _srv.publish(ev, **kw)
+            except Exception:  # noqa: BLE001 — l'evento non deve rompere il tool
+                pass
+
+        if action == "verify":
+            if not path:
+                return {"error": "path richiesto per action=verify"}
+            rep = selfevolve.verify(path)
+            _pub("improve.verify", path=path, green=bool(rep.get("green")))
+            return {"ok": True, "verify": rep}
+        if action == "promote":
+            if not path:
+                return {"error": "path richiesto per action=promote"}
+            res = selfevolve.promote(path)
+            if res.get("ok"):
+                _pub("improve.archived", name=res.get("name"), rel=res.get("rel"))
+            return res
+        if action == "evolve":
+            c = selfevolve.cfg()
+            reports = []
+            for cand in selfevolve.mine(selfevolve.history(), c):
+                rep = selfevolve.pipeline(cand["pattern"], out, cand["support"])
+                green = bool((rep.get("verify") or {}).get("green"))
+                reports.append({"pattern": cand["pattern"], "green": green,
+                                "archived": rep.get("archived")})
+                _pub("improve.evolve", pattern=cand["pattern"], green=green)
+            return {"ok": True, "evolved": len(reports), "reports": reports}
         try:
-            import selfevolve
-            out = os.path.join(registry.REPO, "data", "proposals", "skills")
-            paths = selfevolve.mine_history(out, note=str((args or {}).get("reason", "")))
+            paths = selfevolve.mine_history(out, note=str(args.get("reason", "")))
         except Exception as e:  # noqa: BLE001
             return {"error": "mine failed: %s" % e}
         recs = []
@@ -609,17 +650,13 @@ def _improve(args, run_id=None):
             rec = {"scope": "skill", "path": p, "status": "proposed",
                    "reason": "pattern di tool ripetuto rilevato (selfevolve)"}
             recs.append(rec)
-            try:
-                import server as _srv
-                _srv.publish("improve.proposal", **rec)
-            except Exception:  # noqa: BLE001
-                pass
+            _pub("improve.proposal", **rec)
         return {"ok": True, "mined": len(recs), "proposals": recs}
     if scope not in ("skill", "project", "global") or not content:
         return {"error": "scope in {skill,project,global,mine} and content required"}
     if improve.AGENT_WRITE.get(scope) == "forbidden":
         return {"error": "scope not writable"}
-    rec = improve.propose(scope, content, reason=str((args or {}).get("reason", "")))
+    rec = improve.propose(scope, content, reason=str(args.get("reason", "")))
     try:
         import server as _srv
         _srv.publish("improve.proposal", **rec)

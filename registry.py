@@ -39,6 +39,7 @@ DEFAULT_CONFIG = {
     "verifier": {},
     "bestofn": {},
     "difficulty": {},
+    "selfevolve": {},
     "tools": {},
 }
 
@@ -152,9 +153,13 @@ TOOL_SCHEMAS = {
     "improve": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["propose"]},
+            "action": {"type": "string",
+                       "enum": ["propose", "mine", "evolve", "verify", "promote"],
+                       "default": "propose"},
             "scope": {"type": "string", "enum": ["skill", "project", "global", "mine"]},
             "content": {"type": "string"},
+            "path": {"type": "string",
+                     "description": "cartella proposta (per verify/promote)"},
             "reason": {"type": "string"},
         },
         "required": ["action", "scope"],
@@ -221,7 +226,7 @@ def _merge_into(cfg, data):
     if not isinstance(data, dict):
         return
     for key in ("sandbox", "approvals", "runtime", "verifier", "bestofn",
-                "difficulty"):
+                "difficulty", "selfevolve"):
         if isinstance(data.get(key), dict):
             cfg[key].update(data[key])
     for tname, tentry in (data.get("tools") or {}).items():
@@ -302,7 +307,7 @@ def _diff_overlay(cfg, base_data):
     if tools_diff:
         out["tools"] = tools_diff
     for key in ("sandbox", "approvals", "runtime", "verifier", "bestofn",
-                "difficulty"):
+                "difficulty", "selfevolve"):
         e = eff.get(key) or {}
         d = {k: v for k, v in (cfg.get(key) or {}).items() if e.get(k) != v}
         if d:

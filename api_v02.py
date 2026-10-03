@@ -675,6 +675,7 @@ def handle(handler, method, path, qs, body):
                                      "verifier": registry.load_config().get("verifier") or {},
                                      "bestofn": registry.load_config().get("bestofn") or {},
                                      "difficulty": registry.load_config().get("difficulty") or {},
+                                     "selfevolve": registry.load_config().get("selfevolve") or {},
                                      "approvals": approvals.stats()})
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
@@ -1122,6 +1123,19 @@ def update_policy(body):
         registry.load_config(reload=True)
         _publish("tools.update", difficulty=dict(d))
         return {"ok": True, "tools": registry.catalog(), "difficulty": dict(d)}
+    # JAG-133/135: self-evolving (miner di sequenze + stadio 2)
+    if isinstance(body.get("selfevolve"), dict):
+        s = cfg.setdefault("selfevolve", {})
+        src = body["selfevolve"]
+        for k in ("min_len", "min_count", "max_len", "verify_timeout"):
+            if src.get(k) is not None:
+                s[k] = max(1, int(src[k]))
+        if "category" in src:
+            s["category"] = str(src["category"] or "auto").strip() or "auto"
+        registry.save_config(cfg)
+        registry.load_config(reload=True)
+        _publish("tools.update", selfevolve=dict(s))
+        return {"ok": True, "tools": registry.catalog(), "selfevolve": dict(s)}
     name = body.get("tool") or body.get("name")
     if not name:
         return {"error": "tool required", "tools": registry.catalog()}
