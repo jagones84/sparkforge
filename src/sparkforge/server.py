@@ -1874,6 +1874,26 @@ def _stuck_note(tool, obs, fail_streak, repeats, hints):
     ])
 
 
+def _repeat_block_note(tool, err, repeats, hints):
+    """JAG-183: hard anti-loop directive. When the model re-issues an IDENTICAL
+    call that already FAILED, the harness refuses to run it again (see the call
+    site) and hands back this directive instead of a socratic question. Without it
+    a stuck model burned the step budget looping and then resigned with a bare
+    "mi fermo e chiedo" (session v176: 3x `adb ... input tap` -> exit 1)."""
+    return "\n".join([
+        "SYSTEM (harness) — CALL BLOCKED (repeat #%d). It was NOT executed." % repeats,
+        "You already ran exactly this `%s` and it FAILED:" % tool,
+        "  %s" % ((err or "").strip()[:300] or "(no error text)"),
+        "Re-running it verbatim will fail again. Do ONE of these NOW:",
+        "  1) a DIFFERENT command / a different route to the same result;",
+        "  2) READ the skill that covers this%s;"
+        % ((" — e.g. " + ", ".join(hints)) if hints else " (check your system prompt)"),
+        "  3) if it is truly blocked, answer the user with ONE precise question:"
+        " what you tried, the EXACT error, and what you need from them.",
+        "Do NOT repeat the same call.",
+    ])
+
+
 def _open_plan_steps(sess):
     """How many plan nodes are still OPEN (todo/doing/blocked) for this session.
 
@@ -2342,6 +2362,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     _fail_streak = 0        # JAG-178: consecutive failing tool calls
     _last_tool_hash = None  # JAG-178: detect a repeated identical call
     _tool_repeat = 0
+    _last_failed_hash = None  # JAG-183: last FAILED (tool,args) -> verbatim re-run blocked
+    _last_failed_err = ""
+    _blocked_repeat = 0
     _kg_started = time.time()
     _kg_last_tool = None
     _last_tool_ok = None
@@ -2560,6 +2583,19 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 _think_buf["t"] += _th + "\n"   # JAG-170: kept with the card
                 on_delta("think", _th + "\n")
             tool, args = tc
+            # JAG-183: HARD anti-loop guard. An IDENTICAL call that already FAILED
+            # is NOT executed again: it burned the step budget and led to a resigned
+            # stop (v176: 3x `adb ... input tap` -> exit 1 -> "mi fermo"). We refuse
+            # it and hand back a directive so the model MUST change route, read a
+            # skill, or ask ONE precise question.
+            _call_h = _kg.tool_hash(tool, args)
+            if _call_h == _last_failed_hash:
+                _blocked_repeat += 1
+                msgs.append({"role": "assistant", "content": answer})
+                _inject(_repeat_block_note(tool, _last_failed_err, _blocked_repeat,
+                                           _skill_hints(tool + " " + (_last_failed_err or ""))),
+                        "nudge")
+                continue
             work_steps += 1
             used_tools.append(tool)
             on_event("tool.call", session=sess["id"], tool=tool, args=args, inline=True)
@@ -2620,13 +2656,19 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             obs = str(obs)
             # JAG-178: track consecutive failures + repeated identical calls, and
             # COACH a stuck model (socratic) instead of the generic continue.
-            _th = _kg.tool_hash(tool, args)
-            if _th == _last_tool_hash:
+            if _call_h == _last_tool_hash:
                 _tool_repeat += 1
             else:
                 _tool_repeat = 0
-            _last_tool_hash = _th
+            _last_tool_hash = _call_h
             _fail_streak = (_fail_streak + 1) if _tool_failed else 0
+            # JAG-183: remember the (tool,args) of a FAILED call so the next verbatim
+            # re-issue is blocked (a SUCCESS clears it — only failed calls are frozen).
+            if _tool_failed:
+                _last_failed_hash = _call_h
+                _last_failed_err = obs[:300]
+            else:
+                _last_failed_hash = None
             if len(obs) <= CHAT_TOOL_OBS_LIMIT and (_fail_streak >= 2 or _tool_repeat >= 1):
                 note = _stuck_note(tool, obs, _fail_streak, _tool_repeat,
                                    _skill_hints(tool + " " + obs))
