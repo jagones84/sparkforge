@@ -164,7 +164,9 @@ def _provider_rules(sess, ws, ctx):
 def _provider_skills(sess, ws, ctx):
     try:
         import skills
-        return skills.skills_context(max_chars=3600)
+        # JAG-163: name + one-line description, budgeted so a large library is
+        # still capped instead of flooding the prompt.
+        return skills.skills_context(max_chars=8000)
     except Exception:  # noqa: BLE001
         return ""
 

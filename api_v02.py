@@ -156,6 +156,11 @@ def tool_action(st, tool, args, on_event, workspace=None):
     """
     run_id = st.id if st else None
     args = args or {}
+    # JAG-163: the session workspace IS the tool's working directory. Without
+    # this, `shell` fell back to the per-run scratch dir (data/sandbox/<run>) and
+    # the agent explored an empty folder, never the project it was asked about.
+    if workspace and "workspace" not in args:
+        args["workspace"] = workspace
     spec = registry.tool_spec(tool)
     if spec is None:
         obs = "unknown tool %r — available: %s" % (tool, ", ".join(registry.tool_names()))
@@ -229,11 +234,15 @@ def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None, works
     if not spec["enabled"]:
         _publish("tool.blocked", run=run_id, tool=tool, reason="not enabled")
         return {"status": "blocked", "reason": "tool %r is disabled (allowlist)" % tool}
-    decision, reason = registry.classify(tool, args or {}, workspace)
+    args = dict(args or {})
+    # JAG-163: run the tool INSIDE the session workspace (see tool_action above).
+    if workspace and "workspace" not in args:
+        args["workspace"] = workspace
+    decision, reason = registry.classify(tool, args, workspace)
     if decision in ("disabled", "denied"):
         _publish("tool.blocked", run=run_id, tool=tool, args=args, reason=reason)
         return {"status": "blocked", "reason": reason}
-    rec = approvals.create(tool, args or {}, run_id=run_id,
+    rec = approvals.create(tool, args, run_id=run_id,
                            decision="auto_approved" if decision == "auto" else "pending",
                            reason=reason)
     if rec["status"] == "pending":
@@ -252,7 +261,7 @@ def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None, works
     else:
         _publish("approval.auto", id=rec["id"], run=run_id, tool=tool,
                  summary=rec["summary"], reason=reason)
-    res = toolmod.execute(tool, args or {}, run_id=run_id)
+    res = toolmod.execute(tool, args, run_id=run_id)
     _publish("tool.result", run=run_id, tool=tool, approval=rec["id"], ok=res.get("ok"),
              exit_code=res.get("exit_code"), backend=res.get("backend"),
              sandboxed=res.get("sandboxed"), stdout=(res.get("stdout") or "")[:2000])
@@ -364,9 +373,18 @@ def agent_run_v2(goal, max_steps=6, model=None, on_event=None, script=None, run_
                 on_event("agent.thought", run=st.id, i=i + 1, thought=thought,
                          action=action, scripted=True)
             else:
+                # JAG-163: the agent loop now preloads the same SKILLS block as
+                # the chat loop (name + one-line description). Before this it saw
+                # NO skills at all and could not pick the right one proactively.
+                try:
+                    import skills as _skills_mod
+                    _sk = _skills_mod.skills_context(max_chars=8000)
+                except Exception:  # noqa: BLE001
+                    _sk = ""
                 sysp = (prompt_mod.prompt_map_text() + "\n\n" + prompt_mod.capability_text()
                         + "\n\n" + srv.SYSTEM_PROMPT + "\n\n" + AGENT_PROMPT_V2 + "\n\n"
                         + srv.RULES_POLICY + ("\n" + rb if rb else "") + "\n\n"
+                        + srv.SKILLS_POLICY + ("\n" + _sk if _sk else "") + "\n\n"
                         + tool_context() + "\n\nHarness state (your persistent task list):\n"
                         + srv.context_summary(graph_key=st.id))
                 if not hist:
@@ -1001,6 +1019,10 @@ def handle(handler, method, path, qs, body):
             # JAG-161: set/clear an env var and persist it to the gitignored .env.
             res = _srv().set_key(body.get("name"), body.get("value"))
             return _r(handler, 200 if res.get("ok") else 400, res)
+        if path == "/api/keys/reveal":
+            # JAG-163: on-demand single-value reveal for the eye / copy buttons.
+            res = _srv().reveal_key(body.get("name"))
+            return _r(handler, 200 if not res.get("error") else 400, res)
         if path == "/api/routing":
             _lazy('routing')
             return _r(handler, 200, _ROUTING.update(body))

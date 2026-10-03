@@ -785,20 +785,6 @@
     <nav class="sw-nav" id="swNav"></nav>
     <div class="sw-main" id="swMain">
       <div class="sw-cat" data-cat="models" hidden>
-        <h2>Available models</h2>
-        <div class="card" id="modelsList"><div class="remaining">loading…</div></div>
-        <h2>Compaction model</h2>
-        <div class="card">
-          <div class="remaining" style="margin-bottom:6px">Model that summarizes the transcript when you run <b>compact</b> — the same list as the chat model selector.</div>
-          <select id="compactionModel" class="inp" style="width:100%;padding:6px 10px;font-size:12px"></select>
-          <button class="ghost" onclick="saveCompactionModel()" style="margin-top:8px">save</button>
-          <div class="remaining" id="compactionResult" style="margin-top:6px"></div>
-        </div>
-        <h2>Providers</h2>
-        <div class="card">
-          <div class="remaining" id="provSummary">loading…</div>
-          <div id="provList" style="margin-top:8px"></div>
-        </div>
         <h2>Add / edit provider</h2>
         <div class="card">
           <input id="provId" class="inp" placeholder="id (e.g. openrouter) *" style="width:100%;padding:6px 10px;font-size:12px">
@@ -818,6 +804,20 @@
           <button class="ghost" onclick="saveProvider()" style="margin-top:8px">save provider</button>
           <div id="provResult" class="remaining" style="margin-top:6px"></div>
           <div class="remaining" style="margin-top:6px">Saved in <code>config/providers.local.yaml</code> (outside the repo).</div>
+        </div>
+        <h2>Providers</h2>
+        <div class="card">
+          <div class="remaining" id="provSummary">loading…</div>
+          <div id="provList" style="margin-top:8px"></div>
+        </div>
+        <h2>Available models</h2>
+        <div class="card" id="modelsList"><div class="remaining">loading…</div></div>
+        <h2>Compaction model</h2>
+        <div class="card">
+          <div class="remaining" style="margin-bottom:6px">Model that summarizes the transcript when you run <b>compact</b> — the same list as the chat model selector.</div>
+          <select id="compactionModel" class="inp" style="width:100%;padding:6px 10px;font-size:12px"></select>
+          <button class="ghost" onclick="saveCompactionModel()" style="margin-top:8px">save</button>
+          <div class="remaining" id="compactionResult" style="margin-top:6px"></div>
         </div>
       </div>
     </div>
@@ -981,7 +981,13 @@ function toolCard(tool, args) {
     if (a) a.textContent = "input: " + (typeof args === "string" ? args : JSON.stringify(args));
   }
   d.classList.add("pending");
-  $("log").appendChild(d); scroll(); return d;
+  $("log").appendChild(d);
+  // JAG-163: start a FRESH reasoning block after each tool card, so the model's
+  // next `thought` renders BETWEEN this tool call and the next one (previously
+  // every think delta piled into the first block, hiding the reasoning).
+  if (curThink) { const _t = curThink.querySelector("details"); if (_t) _t.open = true; }
+  curThink = null;
+  scroll(); return d;
 }
 function toggleTool(id) { const el = document.getElementById(id); if (el) el.parentElement.classList.toggle("expanded"); }
 function updateToolCard(data) {
@@ -2423,9 +2429,9 @@ async function loadKeys() {
     const rows = d.keys || [];
     $("keysSummary").textContent = rows.length + " keys · " +
       rows.filter(k => k.set).length + " set";
-    if (d.env_file && $("keysFile")) {
-      $("keysFile").innerHTML = "Values are never in the repo: they are written to " +
-        "<code>" + esc(d.env_file) + "</code> (gitignored). Providers and MCP reference a key by NAME only.";
+    if ($("keysFile")) {
+      $("keysFile").innerHTML = "Values are never in the repo: they are written to the gitignored " +
+        "<code>.env</code>. Providers and MCP reference a key by NAME only.";
     }
     const box = $("keysList"); box.innerHTML = "";
     if (!rows.length) { box.innerHTML = '<div class="remaining">no keys known</div>'; return; }
@@ -2447,7 +2453,8 @@ async function loadKeys() {
       const edit = document.createElement("div");
       edit.style.cssText = "display:flex;gap:6px;align-items:center;margin-top:6px";
       const inp = document.createElement("input");
-      inp.type = "password"; inp.className = "inp"; inp.placeholder = "new value…";
+      inp.type = "password"; inp.className = "inp";
+      inp.placeholder = k.set ? "•••••••• (stored — 👁 to reveal)" : "new value…";
       inp.style.cssText = "flex:1;padding:6px 10px;font-size:12px";
       inp.addEventListener("keydown", (e) => { if (e.key === "Enter") setKey(k.env, inp.value, saveBtn); });
       const saveBtn = document.createElement("button");
@@ -2455,10 +2462,18 @@ async function loadKeys() {
       saveBtn.onclick = () => setKey(k.env, inp.value, saveBtn);
       edit.append(inp, saveBtn);
       if (k.set) {
+        // JAG-163: the stored value is masked (••••); the eye reveals it and ⧉
+        // copies it on demand (fetched from /api/keys/reveal, never listed).
+        const eye = document.createElement("button");
+        eye.className = "ghost"; eye.textContent = "👁"; eye.title = "show / hide value";
+        eye.onclick = () => revealKey(k.env, inp, eye);
+        const cp = document.createElement("button");
+        cp.className = "ghost"; cp.textContent = "⧉"; cp.title = "copy value";
+        cp.onclick = () => copyKeyValue(k.env, cp);
         const clr = document.createElement("button");
         clr.className = "ghost"; clr.textContent = "clear";
         clr.onclick = () => setKey(k.env, "", clr);
-        edit.append(clr);
+        edit.append(eye, cp, clr);
       }
       row.append(head, edit);
       box.appendChild(row);
@@ -2472,6 +2487,22 @@ async function setKey(name, value, btn) {
     if (r.error) { btn.textContent = "err"; setTimeout(() => { btn.textContent = prev; }, 1200); return; }
     loadKeys();
   } catch (e) { btn.textContent = "err"; setTimeout(() => { btn.textContent = prev; }, 1200); }
+}
+/* JAG-163: reveal/copy a stored value on demand (never listed in /api/keys). */
+async function revealKey(name, inp, btn) {
+  if (inp.type === "text") { inp.type = "password"; btn.textContent = "👁"; return; }
+  try {
+    const r = await api("POST", "/api/keys/reveal", { name: name });
+    if (r.error) return;
+    inp.value = r.value || ""; inp.type = "text"; btn.textContent = "🙈";
+  } catch (e) {}
+}
+async function copyKeyValue(name, btn) {
+  try {
+    const r = await api("POST", "/api/keys/reveal", { name: name });
+    if (r.error) return;
+    copyText(btn, r.value || "");
+  } catch (e) {}
 }
 /* ---- rules + workspace (JAG-114/115): global / project + per-session folder ---- */
 let _rulePathGlobal = null, _rulePathProject = null;

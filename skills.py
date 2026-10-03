@@ -252,17 +252,28 @@ def get_skill(name):
 
 
 def skills_context(max_chars=2200):
-    """Compact skills block injected into the agent's system prompt."""
+    """Compact skills block injected into the agent's system prompt.
+
+    JAG-163: mirrors the frontier pattern (Claude Code / openclaw / hermes) — the
+    model always sees every installed skill as NAME + a one-line description, so
+    it knows what it has WITHOUT a discovery round-trip (previously only bare
+    names were preloaded, and only into the chat loop). The full SKILL.md body is
+    still loaded on demand with the `skills` tool, keeping the prompt bounded.
+    """
     skills = list_skills()
     if not skills:
         return "Skills: none found in %s." % SKILLS_DIR
     cats = {}
     for s in skills:
-        cats.setdefault(s["category"], []).append(s["name"])
-    lines = ["Skills (use the `skills` tool: {\"action\":\"list\"} for details or "
-             "{\"action\":\"read\",\"name\":\"<name>\"} to load a SKILL.md and "
-             "follow its instructions):"]
+        cats.setdefault(s["category"], []).append(s)
+    lines = ["Skills (the `skills` tool loads one: "
+             '{"action":"read","name":"<name>"} \u2192 follow its instructions):']
     for cat in sorted(cats):
-        lines.append("  %s: %s" % (cat, ", ".join(cats[cat])))
+        lines.append("- %s:" % cat)
+        for s in sorted(cats[cat], key=lambda x: x["name"]):
+            d = (s.get("description") or "").strip().replace("\n", " ")
+            if len(d) > 80:
+                d = d[:77].rstrip() + "\u2026"
+            lines.append(("    %s \u2014 %s" % (s["name"], d)) if d else ("    %s" % s["name"]))
     out = "\n".join(lines)
     return out if len(out) <= max_chars else out[:max_chars] + "\n…[truncated]"

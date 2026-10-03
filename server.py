@@ -462,6 +462,31 @@ def set_key(name, value):
     return out
 
 
+def reveal_key(name):
+    """POST /api/keys/reveal — return ONE stored value, on demand.
+
+    The bulk `keys_status()` deliberately never returns values; the UI calls this
+    only when the operator clicks the eye / copy on a specific row, so a secret
+    is fetched explicitly and never listed.
+    """
+    import re as _re
+    name = (name or "").strip()
+    if not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        return {"error": "invalid variable name"}
+    val = os.environ.get(name)
+    if not val and os.path.isfile(ENV_FILE):
+        prefix = name + "="
+        try:
+            for ln in open(ENV_FILE, encoding="utf-8"):
+                ln = ln.rstrip("\n")
+                if ln.startswith(prefix):
+                    val = ln[len(prefix):]
+                    break
+        except Exception as e:  # noqa: BLE001
+            return {"error": str(e)}
+    return {"name": name, "value": val or "", "set": bool(val)}
+
+
 def keys_status():
     """JAG-113: which env-var NAMES the harness needs and whether they are set.
 
@@ -1466,20 +1491,72 @@ def context_summary(session_id=None, graph_key=None):
     return "\n".join(lines) if lines else "(no task list yet)"
 
 
+def _iter_json_objects(text):
+    """Every balanced top-level JSON object/array found in `text`, in order.
+
+    Models frequently wrap their action JSON in prose ("Ecco il piano. {..} Ora
+    procedo. {..}") or emit SEVERAL actions in one message. The old
+    first-`{`..last-`}` slice swallowed the prose between the objects and failed
+    to parse, so the turn fell through to "announce and stop". This scanner walks
+    the text with a brace/quote-aware cursor and yields each complete value
+    independently.
+    """
+    objs, i, n = [], 0, len(text)
+    while i < n:
+        if text[i] in "{[":
+            depth, instr, esc, start = 0, False, False, i
+            j = i
+            while j < n:
+                c = text[j]
+                if instr:
+                    if esc:
+                        esc = False
+                    elif c == "\\":
+                        esc = True
+                    elif c == '"':
+                        instr = False
+                else:
+                    if c == '"':
+                        instr = True
+                    elif c in "{[":
+                        depth += 1
+                    elif c in "}]":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                j += 1
+            if depth == 0 and j < n:
+                try:
+                    objs.append(json.loads(text[start:j + 1]))
+                except Exception:  # noqa: BLE001 — skip an unparseable blob
+                    pass
+                i = j + 1
+                continue
+        i += 1
+    return objs
+
+
 def extract_json(text):
-    text = text.strip()
+    """First JSON value in `text` (prose-tolerant, multi-object safe).
+
+    Tolerates prose around and BETWEEN objects: returns the FIRST complete
+    {"action": ...} the model emitted, so the chat/agent loop acts on it instead
+    of dropping the whole turn.
+    """
+    text = (text or "").strip()
+    if not text:
+        return None
     try:
         return json.loads(text)
     except Exception:
         pass
-    for opener, closer in (("{", "}"), ("[", "]")):
-        i, j = text.find(opener), text.rfind(closer)
-        if 0 <= i < j:
-            try:
-                return json.loads(text[i:j + 1])
-            except Exception:
-                continue
-    return None
+    objs = _iter_json_objects(text)
+    return objs[0] if objs else None
+
+
+def extract_actions(text):
+    """ALL JSON values in `text`, in emission order (see `_iter_json_objects`)."""
+    return _iter_json_objects(text or "")
 
 
 def start_run_graph(run_id, goal, session_id=None, model=None, on_event=None):
