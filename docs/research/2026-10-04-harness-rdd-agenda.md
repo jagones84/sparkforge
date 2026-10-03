@@ -103,4 +103,10 @@ P5 (igiene, basso rischio) → P4 (contesto) → P1 (auditor, alto impatto) → 
   su filesystem (task graph persistente, memoria file-based), context budget reale
   `n_ctx`, anti-loop (ri-run verbatim bloccato), compaction. Da misurare: metrica
   goal-drift + tasso di amplificazione errori nei feedback loop.
-- **2) — [MANCANTE: l'utente completerà]**
+- **2) → "il loop di auto-miglioramento sigillato" (proposta, approvata).** L'harness
+  modifica sé stesso (skill/prompt/strategia) ma il **verifier è held-out,
+  deterministico e fuori dallo spazio modificabile**: una modifica entra solo se supera
+  un **gate held-out** ed è provenance-tracked + revertibile. Unifica P1 (auditor
+  read-only) + P3 (budget di verifica) + P6 (self-evoluzione). Fondamento
+  realizzato: **JAG-205** (`heldout.py`, `promote` fail-closed) — spec in
+  `docs/specs/2026-10-04-heldout-verifier-gate-design.md`, piano in `docs/plans/`.

@@ -94,6 +94,16 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   record (per questo in recall si vedeva `(None, ...)`!). Riscritto come macchina a
   stati. Nuova suite `tests/v204_memory_governance.py` (20/20, AGGIUNTA al gate).
   Schema tool `memory` aggiornato. Commit `2d7d1e1`.
+- **JAG-205** Gate held-out sigillato (RDD "punto 2", fondamento di P6/P1): nuovo
+  modulo `src/sparkforge/heldout.py` (dir/manifest/integrity/run/gate/pin) — store
+  giudice FUORI dallo spazio agente (`SPARKFORGE_HELDOUT_DIR`, default
+  `~/.sparkforge/heldout`), hash-pinnato. `selfevolve.promote` ora **fail-closed**:
+  archivia solo se la suite esterna è verde (il `check.py` locale non basta più).
+  Spec `docs/specs/2026-10-04-heldout-verifier-gate-design.md`, piano `docs/plans/`.
+  Suite `tests/v205_heldout_gate.py` (13/13) nel gate → battery **7/7 GREEN**.
+  Opt-out esplicito `SPARKFORGE_REQUIRE_HELDOUT=0` solo per dev. Commit `______`.
+  *Nota:* `tests/legacy/v148_selfevolve2.py` era GIA' stale (apre `api_v02.py` nella
+  root, ora in `src/sparkforge/`) — pre-esistente, non nel gate.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -105,12 +115,12 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
 - `v199_endpoint_sweep.py` (51/51), `v200_concurrent_chat.py` (7/7),
   `v202_concurrent_stream.py` (4/4). NON nel gate `battery.sh`.
 
-Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 20/20
-→ **6/6 GREEN**.
+Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 20/20,
+v205 13/13 → **7/7 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).
-- Gate ufficiale = `tests/battery.sh` (oggi: v140, v177, v183, v195, v198, v204).
+- Gate ufficiale = `tests/battery.sh` (oggi: v140, v177, v183, v195, v198, v204, v205).
 - Suite "hard/bastarde" = `v195_hard.py` (da riusare per regressione SOLO se c'è
   motivo concreto). Scenari etichettati A..I con `check("Xn ...")`.
 - `tests/legacy/` = accettazione storica, NON parte del gate.
@@ -153,6 +163,9 @@ Fatto in questa sessione (tutti i punti 0-5 avviati):
 4. Bug trovato e risolto: **JAG-201** (concorrenza stessa sessione).
 5. **RDD in corso** — P5 (audit skill, JAG-203), P2 (verifica memoria, JAG-204,
    con bug parser reale corretto). Prossimi P1 (step auditor) e P3 (budget).
+6. **Punto 2 RDD** (fondamento del "loop sigillato"): JAG-205 gate held-out esterno
+   hash-pinnato, `promote` fail-closed. Spec+piano+test. Prossimo: applicarlo ad
+   altri target (skill/prompt/tool) e costruire il vero step auditor (P1).
 
 ### Prossimi bug-hunt frontier (NON ancora fatti)
 - **Steer** durante un turno (`/api/chat/steer`) → il modello lo applica al confine?

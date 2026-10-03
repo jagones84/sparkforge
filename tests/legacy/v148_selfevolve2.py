@@ -12,6 +12,9 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
+# JAG-205: questo test legacy esercita il write-gate del selfevolve (stagio 2),
+# non il gate held-out sigillato: opt-out esplicito (il seal ha la sua suite v205).
+os.environ.setdefault("SPARKFORGE_REQUIRE_HELDOUT", "0")
 results = []
 
 

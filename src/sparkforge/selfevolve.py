@@ -372,6 +372,14 @@ def promote(proposal_dir, skills_dir=None, c=None):
     if prop.get("status") != "verified":
         return {"ok": False, "error": "proposta non verificata (status=%s)"
                 % prop.get("status", "?")}
+    # RDD punto 2: gate held-out sigillato (fail-closed). Il verifier locale
+    # (check.py) NON basta: la promozione richiede la suite giudice esterna.
+    from . import heldout
+    if heldout.require_enabled():
+        g = heldout.gate(proposal_dir, c=c)
+        if not g.get("green"):
+            return {"ok": False, "gate": g,
+                    "error": "held-out gate not green (%s)" % g.get("reason")}
     name = prop.get("name") or os.path.basename(proposal_dir)
     root = skills_dir or os.path.join(REPO, "skills")
     target = os.path.join(root, str(c.get("category") or "auto"), name)
