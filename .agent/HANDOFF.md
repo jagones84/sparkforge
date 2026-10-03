@@ -146,7 +146,7 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   {display:none}`, `prefers-reduced-motion`, `aria-live`, `tabindex`. Suite
   `tests/v209_console_deck.py` (18/18, AGGIUNTA al gate). Verificato in browser via
   chrome-devtools MCP: DEMO su file://, **LIVE** su `http://192.168.1.37:8790/console`
-  (ONLINE, dati reali). Battery **10/10 GREEN**. Commit `<PIN>`.
+  (ONLINE, dati reali). Battery **10/10 GREEN**. Commit `32aa1e0`.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
