@@ -376,7 +376,7 @@
   <span class="pill" id="server-badge">server</span>
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
   <button class="ghost" id="toggle-left" title="show/hide sessions">▤</button>
-  <button class="ghost" id="toggle-right" title="show/hide panels">▥</button>
+  <button class="ghost" id="toggle-right" title="show/hide inspector">▥</button>
   <button class="ghost" id="settingsBtn" title="impostazioni" onclick="openSettings()">⚙</button>
   <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
 </header>
@@ -2780,8 +2780,11 @@ function paletteItems() {
   const items = [
     { label: "\uFF0B New session", run: () => newSession() },
     { label: "\u21BB Compact context", run: () => compactNow() },
+    { label: "\u2699 Open settings", run: () => openSettings() },
   ];
-  ["graph", "config", "settings", "approvals", "mcp", "skills", "rules", "files"].forEach(p => items.push({ label: "\u25B8 Panel " + p, run: () => openPanel(p) }));
+  SETTINGS_CATS.forEach(([k, label]) => items.push({ label: "\u2699 Settings \u25B8 " + label, run: () => openSettings(k) }));
+  [["plan", "Plan / Tasks"], ["context", "Context"], ["approvals", "Approvals"], ["files", "Files & changes"], ["feed", "Feed"]]
+    .forEach(([k, label]) => items.push({ label: "\u25B8 Inspector \u00A7 " + label, run: () => focusInsp(k) }));
   return items;
 }
 function renderPalette(q) {
