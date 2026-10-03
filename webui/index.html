@@ -365,6 +365,17 @@
   #settingsWin .sw-cat[hidden] { display: none; }
   #settingsWin .sw-resize { position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
     cursor: nwse-resize; color: var(--dim); }
+  /* JAG-152: MCP JSON "configure manually" (read the final config + paste your own) */
+  #mcpJsonWin { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; padding: 4vh 4vw; }
+  #mcpJsonWin[hidden] { display: none; }
+  #mcpJsonWin .mj-card { width: min(720px, 94vw); max-height: 88vh; display: flex; flex-direction: column;
+    background: #0f1320; border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.55); }
+  #mcpJsonWin .mj-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  #mcpJsonWin textarea { flex: 1; min-height: 300px; width: 100%; box-sizing: border-box; resize: vertical;
+    font-family: monospace; font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: #0b0f18; color: var(--txt); }
 </style>
 </head>
 <body>
@@ -577,7 +588,10 @@
       <div class="sw-cat" data-cat="mcp" hidden>
         <h2>MCP · external servers</h2>
         <div class="card">
-          <div class="remaining" id="mcpSummary">loading…</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="remaining" id="mcpSummary" style="flex:1">loading…</div>
+            <button class="ghost" onclick="openMcpJson()" title="show / edit the final mcpServers JSON (paste into any MCP client)">⧉ MCP JSON</button>
+          </div>
           <div id="mcpList" style="margin-top:8px"></div>
         </div>
         <h2>Catalog · add in one click</h2>
@@ -716,6 +730,20 @@
   <div class="card" style="width:min(560px,92vw)">
     <input id="palette-input" class="inp" placeholder="go to session / panel / action…" style="width:100%;padding:10px 14px">
     <ul id="palette-results" style="list-style:none;padding:8px 0 0;margin:0"></ul>
+  </div>
+</div>
+<div id="mcpJsonWin" hidden>
+  <div class="mj-card">
+    <div class="mj-head"><b>MCP JSON · configure manually</b><span style="flex:1"></span>
+      <button class="ghost" onclick="closeMcpJson()" title="close (Esc)">✕</button></div>
+    <div class="remaining" style="margin:10px 0 8px">Final <code>mcpServers</code> config of this harness — copy it into any MCP client, or paste/edit your own and press <b>confirm</b> to add/update the servers you list (existing servers are updated, none are removed).</div>
+    <textarea id="mcpJsonText" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+    <div id="mcpJsonMsg" class="remaining" style="margin-top:6px"></div>
+    <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">
+      <button class="ghost" onclick="copyMcpJson()">⧉ copia</button>
+      <button class="ghost" onclick="closeMcpJson()">cancel</button>
+      <button class="ghost" onclick="applyMcpJson()">confirm</button>
+    </div>
   </div>
 </div>
 <div id="nsBackdrop" hidden onclick="closeNewSess()"></div>
@@ -2001,6 +2029,70 @@ async function reloadMcp() {
     loadMcpClients();
   } catch (e) { $("mcpResult").textContent = "error: " + e; }
 }
+/* JAG-152: expose the final `mcpServers` JSON (read/copy it, or paste your own
+   and import it) — Trae-style "configure manually". */
+function mcpClientsToJson(cls) {
+  const out = {};
+  Object.keys(cls || {}).forEach(n => {
+    const c = cls[n] || {};
+    if (c.transport === "http") {
+      out[n] = { url: c.url || "" };
+      if (c.headers && Object.keys(c.headers).length) out[n].headers = c.headers;
+    } else {
+      out[n] = { command: c.command || "", args: Array.isArray(c.args) ? c.args : [] };
+      if (c.env && Object.keys(c.env).length) out[n].env = c.env;
+    }
+  });
+  return out;
+}
+function mcpJsonSpec(name, s) {
+  s = s || {};
+  if (s.url || s.serverUrl || s.type === "http" || s.transport === "http") {
+    const spec = { name: name, enabled: true, transport: "http", url: s.url || s.serverUrl || "" };
+    if (s.headers && typeof s.headers === "object") spec.headers = s.headers;
+    return spec;
+  }
+  const args = Array.isArray(s.args) ? s.args : (s.args ? String(s.args).split(/\s+/) : []);
+  const spec = { name: name, enabled: true, transport: "stdio", command: s.command || "", args: args };
+  if (s.env && typeof s.env === "object") spec.env = s.env;
+  return spec;
+}
+async function openMcpJson() {
+  const ta = $("mcpJsonText"), msg = $("mcpJsonMsg");
+  msg.textContent = ""; ta.value = "loading…"; $("mcpJsonWin").hidden = false;
+  try {
+    const d = await api("GET", "/api/mcp/clients");
+    ta.value = JSON.stringify({ mcpServers: mcpClientsToJson(d.clients || {}) }, null, 2);
+  } catch (e) { ta.value = ""; msg.textContent = "error: " + e; }
+  ta.focus();
+}
+function closeMcpJson() { $("mcpJsonWin").hidden = true; }
+async function copyMcpJson() {
+  const ta = $("mcpJsonText"), msg = $("mcpJsonMsg"), v = ta.value || "";
+  try { await navigator.clipboard.writeText(v); }
+  catch (e) { ta.select(); document.execCommand("copy"); }
+  msg.textContent = "copiato ✓ (" + v.length + " caratteri)";
+}
+async function applyMcpJson() {
+  const msg = $("mcpJsonMsg"); let obj;
+  try { obj = JSON.parse($("mcpJsonText").value || "{}"); }
+  catch (e) { msg.textContent = "JSON non valido: " + e.message; return; }
+  const servers = (obj && obj.mcpServers) ? obj.mcpServers : obj;
+  if (!servers || typeof servers !== "object" || Array.isArray(servers)) { msg.textContent = "atteso un oggetto { mcpServers: { … } }"; return; }
+  const names = Object.keys(servers);
+  if (!names.length) { msg.textContent = "nessun server da applicare"; return; }
+  msg.textContent = "applico " + names.length + "…";
+  let ok = 0; const fail = [];
+  for (const n of names) {
+    try {
+      const r = await api("POST", "/api/mcp/clients", mcpJsonSpec(n, servers[n]));
+      if (r && r.error) fail.push(n + ": " + r.error); else ok++;
+    } catch (e) { fail.push(n + ": " + e); }
+  }
+  await loadMcpClients();
+  msg.textContent = "applicati " + ok + "/" + names.length + (fail.length ? (" · errori → " + fail.join("; ")) : " · ok");
+  if (!fail.length) setTimeout(closeMcpJson, 800);
+}
 
 /* ---- JAG-109: skills panel + '/' autocomplete (engine = /api/skills) ---- */
 let _skillsCache = [];
@@ -2853,12 +2945,14 @@ $("toggle-right").onclick = () => {
 };
 $("palette-input").addEventListener("input", e => renderPalette(e.target.value));
 $("palette").addEventListener("click", e => { if (e.target.id === "palette") closePalette(); });
+$("mcpJsonWin").addEventListener("click", e => { if (e.target.id === "mcpJsonWin") closeMcpJson(); });
 $("session-search").addEventListener("input", loadSessions);
 { const _qm = $("qmode");
   if (_qm) { _qm.value = localStorage.getItem("sf_qmode") || "queue";
     _qm.onchange = () => localStorage.setItem("sf_qmode", _qm.value); } }
 $("hide-empty").addEventListener("change", loadSessions);
 addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("mcpJsonWin").hidden) { closeMcpJson(); return; }
   if (e.key === "Escape" && settingsWin() && !settingsWin().hidden) { closeSettings(); return; }
   if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); openPalette(); }
   if (e.key === "Escape") { closePalette(); closeNewSess(); closeDirPicker(); closeSkillView(); closeImage(); }
