@@ -339,13 +339,15 @@ def append_message(sess, role, content, reasoning=None, meta=None):
 
 
 def persist_tool_card(sess, tool, ok, args=None, result="", error="",
-                      exit_code=None, backend=None):
+                      exit_code=None, backend=None, node=None):
     """JAG-96: persist an inline tool card so cold-start UIs can rebuild it.
 
     Stored in `sess["tool_cards"]` — NOT in `messages` — so it never reaches the
     model prompt (`context_engine.build` only reads `messages`). `after` is the
     number of already-persisted messages the card follows, letting the WebUI and
     the mobile mirror interleave cards with the transcript on history reload.
+    `node` (JAG-167) is the todo node the card belongs to, so the in-chat tree can
+    nest it under the right node on reload.
     """
     try:
         args_str = args if isinstance(args, str) else json.dumps(args or {},
@@ -358,6 +360,7 @@ def persist_tool_card(sess, tool, ok, args=None, result="", error="",
             "error": str(error or "")[:2000],
             "exit_code": exit_code,
             "backend": backend,
+            "node": node,
             "after": len(sess.get("messages", [])),
             "ts": round(time.time(), 3),
         }
@@ -365,6 +368,24 @@ def persist_tool_card(sess, tool, ok, args=None, result="", error="",
         save_session(sess)
         return card
     except Exception:  # noqa: BLE001 — persisting a card must never break a turn
+        return None
+
+
+def persist_inject(sess, kind, text, node=None):
+    """JAG-167: persist a harness→LLM injection so the chat can rebuild it on reload.
+
+    Mirrors `persist_tool_card`: stored in `sess["injects"]` (never sent to the
+    model), with `after` (message boundary) + `node` (the todo node it belongs to)
+    + `ts`, so `loadHistory` re-nests it under the right node.
+    """
+    try:
+        rec = {"kind": str(kind or "inject"), "text": str(text or "")[:8000],
+               "node": node, "after": len(sess.get("messages", [])),
+               "ts": round(time.time(), 3)}
+        sess.setdefault("injects", []).append(rec)
+        save_session(sess)
+        return rec
+    except Exception:  # noqa: BLE001 — persisting an inject must never break a turn
         return None
 
 
@@ -931,7 +952,17 @@ class _RepetitionGuard:
 
 def _completion_body(model_id, messages, stream, max_tokens=None):
     """Single place that builds the OpenAI-compatible request body (JAG-111)."""
-    body = {"model": model_id, "messages": messages, "stream": bool(stream),
+    # JAG-167: strip harness-only metadata (e.g. the per-message `node` used to
+    # rebuild the in-chat tree) so ONLY wire-valid fields reach the provider.
+    clean = []
+    for m in messages or []:
+        if not isinstance(m, dict):
+            continue
+        cm = {"role": m.get("role", "user"), "content": m.get("content", "")}
+        if m.get("name"):
+            cm["name"] = m["name"]
+        clean.append(cm)
+    body = {"model": model_id, "messages": clean, "stream": bool(stream),
             "temperature": 0.7}
     if stream:
         body["stream_options"] = {"include_usage": True}
@@ -2154,6 +2185,20 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         except Exception:  # noqa: BLE001
             _diff_level = None
 
+    def _cur_node():
+        """JAG-167: id of the todo node being worked on right now (first `doing`,
+        else first open), so persisted cards/injects nest under the right in-chat
+        node on reload. Returns None when the graph is empty or fully closed."""
+        try:
+            _g = taskgraph.load(sess["id"]) or {}
+        except Exception:  # noqa: BLE001
+            return None
+        for _st in ("doing", "todo", "blocked"):
+            for _n in _g.get("nodes", []):
+                if _n.get("status") == _st:
+                    return _n.get("id")
+        return None
+
     def _inject(content, kind):
         """JAG-166: add a synthetic message to the LLM context AND surface it.
 
@@ -2165,6 +2210,11 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         # NOTE: the payload key must NOT be `kind` — the SSE emitters take the
         # event name as a positional `kind`, so a `kind` kwarg collides.
         on_event("harness.inject", session=sess["id"], inject_kind=kind, text=content)
+        # JAG-167: persist the injection so a reload rebuilds the in-chat tree.
+        # The 'system' prompt is re-published every turn and is transient by
+        # design → it is NOT persisted (avoids N identical copies in history).
+        if kind != "system":
+            persist_inject(sess, kind, content, node=_cur_node())
 
     # JAG-166: publish the assembled system prompt once per turn (collapsed in the
     # UI), so the operator can read the real prompt the model received.
@@ -2340,7 +2390,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                                   result=sub.get("stdout") or obs or "",
                                   error=sub.get("stderr") or "",
                                   exit_code=sub.get("exit_code"),
-                                  backend=sub.get("backend") or "harness")
+                                  backend=sub.get("backend") or "harness",
+                                  node=_cur_node())
                 on_event("tool.result", session=sess["id"], **_tool_event(
                     tool, ok, args=args, output=(sub.get("stdout") or obs or ""),
                     exit_code=sub.get("exit_code"),
@@ -2349,7 +2400,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             except Exception as e:  # noqa: BLE001 — a tool failure must not kill chat
                 obs, ok = "tool error: %s" % e, False
                 persist_tool_card(sess, tool, False, args=args, error=str(e)[:200],
-                                  backend="harness")
+                                  backend="harness", node=_cur_node())
                 on_event("tool.result", session=sess["id"], **_tool_event(
                     tool, False, args=args, output=str(e)[:200],
                     backend="harness", inline=True, summary="errore"))
@@ -2487,7 +2538,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     if trace:
         trace.span("llm.chat", model=model, context=ctx_stats)
         trace.llm_call(msgs, answer + think)
-    meta = {"model": model}
+    meta = {"model": model, "node": _cur_node()}
     content = answer.strip()
     if _looks_like_json_action(content) or not content:
         # JAG-64/78b: last-resort guard — never show/persist raw tool-call JSON

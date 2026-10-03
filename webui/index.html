@@ -1242,6 +1242,8 @@ function selectSession(s) {
   sessionId = s.id; localStorage.setItem("sf_session", sessionId);
   _sessModel[s.id] = s.model || _sessModel[s.id] || "";
   $("log").innerHTML = ""; curThink = curAns = null; _resetChatTree();
+  // JAG-167: never carry another session's run graph into this one.
+  curRunId = null; localStorage.removeItem("sf_run"); graph = null;
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
   loadSessions(); loadHistory(); loadCtx(); loadRules(); loadPlan();
   modelLabel(); closeAside();
@@ -1307,7 +1309,7 @@ async function createNewSession() {
   $("sessInp").value = "";
   sessionId = s.id; localStorage.setItem("sf_session", sessionId);
   _sessModel[s.id] = "";
-  $("log").innerHTML = ""; curThink = curAns = null;
+  $("log").innerHTML = ""; curThink = curAns = null; _resetChatTree();
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
   closeNewSess(); loadSessions(); loadHistory(); loadRules(); loadCtx(); loadPlan(); modelLabel(); closeAside();
 }
@@ -1337,25 +1339,52 @@ async function loadHistory() {
   if (!sessionId) return;
   _stick = true;  // JAG-116: opening a session always lands at the latest message
   const s = await api("GET", "/api/history?session=" + encodeURIComponent(sessionId));
-  // JAG-96: rebuild the inline tool cards persisted by the harness, interleaved
-  // at the position (`after` = messages already sent) where each call happened.
+  // JAG-167: rebuild the PERSISTENT in-chat tree from THIS session's graph.
+  // Every todo node becomes a collapsible <details>; tool cards, harness
+  // injections and assistant replies are re-nested under the node they were
+  // written under (the server records `node` on each). A reload/refresh must
+  // NEVER erase what was already written in chat.
+  let g = null;
+  try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
+  if (g && g.nodes && g.nodes.length) {
+    graph = g;
+    (g.nodes || []).forEach(n => chatNodeAdd(n));
+    _activeScope = null;
+  }
+  const scopeFor = (nodeId) => (nodeId && _chatNodes[nodeId])
+    ? _chatNodes[nodeId].querySelector(".tc-kids") : $("log");
+  // JAG-96/167: interleave persisted cards + injections at the message boundary
+  // (`after` = messages already sent) where each one happened.
   const nMsgs = (s.messages || []).length;
   const byAfter = {};
-  (s.tool_cards || []).forEach(c => {
-    const k = String(c.after == null ? nMsgs : c.after);
-    (byAfter[k] = byAfter[k] || []).push(c);
-  });
-  const drawCards = (i) => (byAfter[String(i)] || []).forEach(c => {
-    toolCard(c.tool);
-    updateToolCard({ tool: c.tool, ok: c.ok, exit_code: c.exit_code,
-                     backend: c.backend, result: c.result, error: c.error,
-                     args: c.args, summary: c.error ? "error" : "" });
-  });
+  const bucket = (k, item) => { (byAfter[String(k)] = byAfter[String(k)] || []).push(item); };
+  (s.tool_cards || []).forEach(c => bucket(c.after == null ? nMsgs : c.after, { t: "c", v: c }));
+  (s.injects || []).forEach(r => bucket(r.after == null ? nMsgs : r.after, { t: "i", v: r }));
+  const drawAt = (i) => {
+    (byAfter[String(i)] || [])
+      .sort((a, b) => ((a.v.ts || 0) - (b.v.ts || 0)))
+      .forEach(item => {
+        if (item.t === "c") {
+          const c = item.v;
+          _activeScope = scopeFor(c.node);
+          toolCard(c.tool);
+          updateToolCard({ tool: c.tool, ok: c.ok, exit_code: c.exit_code,
+                           backend: c.backend, result: c.result, error: c.error,
+                           args: c.args, summary: c.error ? "error" : "" });
+        } else {
+          const r = item.v;
+          _activeScope = scopeFor(r.node);
+          harnessInject({ inject_kind: r.kind || "inject", text: r.text });
+        }
+      });
+    _activeScope = null;
+  };
   (s.messages || []).forEach((m, i) => {
-    drawCards(i);
+    drawAt(i);
     if (m.role === "user") { who("user", m.content); return; }
     // v1.6.3 (JAG-55): some models inline their chain-of-thought in `content`
     // as a trailing "think: …" tail. The reply must stay the primary text.
+    _activeScope = scopeFor(m.node);
     const [reply, tail] = splitThinkTail(m.content);
     const d = who("ai", reply);
     const cot = m.reasoning || tail;
@@ -1366,8 +1395,10 @@ async function loadHistory() {
       // v1.6.3 (JAG-55): reply stays the primary text; CoT goes below it.
       d.appendChild(det);
     }
+    _activeScope = null;
   });
-  drawCards((s.messages || []).length);
+  drawAt(nMsgs);
+  _activeScope = null;
   linkifyAll();
   // JAG-127: baseline the edit journal so the next turn reports only its own diff.
   try { _editsBase = await api("GET", "/api/edits?session=" + encodeURIComponent(sessionId)); } catch (e) { _editsBase = null; }
@@ -1436,17 +1467,20 @@ async function compactNow() {
   if (r.error) { alert(r.error); return; }
   const kind = r.summary === "llm" ? ("llm:" + (r.summarizer || "?")) : (r.summary || "—");
   who("ai", `🗜 compacted: ${r.input_messages} → ${r.input_messages - r.compacted} messages (${r.compacted} compacted · ${kind} · ${r.tokens_after} tok after)`);
-  $("log").innerHTML = ""; loadHistory(); loadCtx();
+  $("log").innerHTML = ""; _resetChatTree(); loadHistory(); loadCtx();
 }
 
 /* ---- plan / tasks ---- */
 /* JAG-91: the plan is the PERSISTENT per-session task graph (the same list the
  * model owns and re-receives every turn), not the orphaned global plan.json. */
 async function loadPlan() {
-  if (!sessionId) { renderGraph(); return; }
+  // JAG-167: the todo list is PER SESSION. Always REPLACE the graph with this
+  // session's graph — even when empty — otherwise switching sessions kept the
+  // previous session's todos on screen ("una sola lista per tutto").
+  if (!sessionId) { graph = null; renderGraph(); return; }
   let g = null;
   try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
-  if (g && g.nodes && g.nodes.length) { graph = g; }
+  graph = (g && g.nodes && g.nodes.length) ? g : null;
   renderGraph();
 }
 /* v0.8: dedupe identical plan steps (the "say hello" x9 bug) */
