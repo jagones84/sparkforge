@@ -17,7 +17,7 @@ checks = {
         "if (d.session && d.session !== sessionId) return;" in html,
     "sidebar busy marker": 'classList.toggle("running"' in html,
     "queue/flush gated per session":
-        "if (turnSSE[sessionId] || !msgQueue.length) return;" in html,
+        "function flushQueue(sid)" in html and "if (sessionId !== s || turnSSE[s]) return;" in html,
     "stop aborts the server turn": '"/api/chat/abort"' in html and "session: sessionId" in html,
 }
 bad = [k for k, ok in checks.items() if not ok]

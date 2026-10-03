@@ -2212,7 +2212,6 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     _kg_stop_reason = None
     _kg_prev = None
     _kg_stale = 0
-    _kg_doing_mark = 0   # JAG-173: real tool count when the current step started
     _kg_started = time.time()
     _kg_last_tool = None
     _last_tool_ok = None
@@ -2326,11 +2325,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
                      open=len(_open), total=len(_nodes), difficulty=_diff_level)
             _inject(
-                "SYSTEM (harness) — the plan bookkeeping is MINE, not yours: I mark "
-                "steps done FOR YOU — do NOT call update_todos. %d step(s) are still "
-                "OPEN. Keep WORKING: for each one run the tool(s) it needs, then report "
-                "the result in plain prose. Stop only when the list is clear. Current "
-                "list:\n%s"
+                "CONTINUE — %d task(s) are still OPEN. Work through the list ONE step "
+                "at a time: mark the current step 'doing', do the work with a tool call, "
+                "then mark it 'done' with the concrete evidence via update_todos. Never "
+                "redo a step already marked [x]. List:\n%s"
                 % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))), "continue")
             continue
         # JAG-127b: inject any steering message typed while this turn was running.
@@ -2358,9 +2356,16 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             # JAG-129D: Stop ha interrotto la generazione. Nessun tool puo' girare
             # dopo un abort: si chiude subito il turno con un esito esplicito.
             publish("chat.interrupted", session=sess["id"])
-            for ch, t in collected:
-                on_delta(ch, t)
-            final_answer, think = (answer or "⏹ Interrotto dall'utente."), think
+            # JAG-175: an abort can cut the model mid tool-call, so the buffered
+            # answer may be RAW tool-call JSON. Never stream/persist that as the
+            # user's reply — fall back to a neutral stop note.
+            if answer and not _looks_like_json_action(answer):
+                for ch, t in collected:
+                    on_delta(ch, t)
+                final_answer = answer
+            else:
+                final_answer = "⏹ Interrotto dall'utente."
+                on_delta("answer", final_answer)
             _kg_stop_reason = "user_stop"
             break
         # JAG-132/134: best-of-N adattivo. Solo quando il primo campione NON e' usabile
@@ -2394,19 +2399,19 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             n = _apply_chat_todos(sess, act, on_event)
             msgs.append({"role": "assistant", "content": answer})
             _inject(
-                "SYSTEM (harness) — task list saved (%d new step(s)); I keep it "
-                "updated FOR YOU (never call update_todos). Start working: call the "
-                "tool the first step needs, then report the result in plain prose."
-                % n, "nudge")
+                "Task list saved (%d new step(s)) — it is YOURS to keep current. Work "
+                "through it one step at a time: mark a step 'doing' before you start it "
+                "and 'done' with evidence when it is really finished. Start with the "
+                "first step: call the tool it needs." % n, "nudge")
             continue
         if isinstance(act, dict) and act.get("action") in ("update_todos", "replan_todos"):
             # JAG-75: the model advances its own plan mid-run (in_progress → done
             # with evidence), or briefly re-plans. Then it must resume the plan.
             if act["action"] == "update_todos":
                 _apply_chat_todo_updates(sess, act, on_event)
-                nudge = ("Task list updated. Continue STRICTLY following the plan: mark "
-                         "the next step 'doing' before you start it, and 'done' with "
-                         "evidence when it is finished — then move to the next step.")
+                nudge = ("Noted. Continue strictly: mark the next step 'doing' before "
+                         "you start it, and 'done' with concrete evidence when it is "
+                         "really finished — then move on. Never redo a step already done.")
             else:
                 _apply_chat_replan(sess, act, on_event)
                 nudge = ("Plan updated. Now resume following the plan from where you "
@@ -2480,9 +2485,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             if len(obs) > CHAT_TOOL_OBS_LIMIT:
                 note = _offload_observation(sess, tool, obs)
             else:
-                note = ("SYSTEM (harness) — Observation for tool %s:\n%s\n\n"
-                        "Continue: call the next tool, or report the result in plain "
-                        "prose (the harness marks the plan for you)."
+                note = ("Observation for tool %s:\n%s\n\n"
+                        "Continue: call the next tool, or report the result. Keep your "
+                        "task list current (mark a finished step done with evidence)."
                         % (tool, obs))
             msgs.append({"role": "assistant", "content": answer})
             _inject(note, "observation")
@@ -2521,28 +2526,12 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         if tool_ctx:
             # JAG-129A: l'harness (la "segretaria") decide se l'agente puo' davvero
             # chiudere. Con passi aperti re-inietta la lista e CONTINUA.
+            # JAG-173 (rev): the MODEL owns the todo list — the standard contract
+            # (Claude Code TodoWrite): the agent marks a step 'doing' before it
+            # starts and 'done' with evidence when it is really finished. The harness
+            # only ENFORCES and REMINDS; it never auto-closes a step, because closing
+            # a step that is not truly done is "lying about completion".
             _g = taskgraph.load(sess["id"]) or {}
-            # JAG-173: the HARNESS owns the plan bookkeeping. A prose answer (no tool
-            # call) while a step is 'doing' means the agent delivered that step: the
-            # SYSTEM marks it done (evidence = the answer) — the model must never be
-            # asked to call update_todos. The model only does WORK.
-            for _n in list(_g.get("nodes", [])):
-                # only when the agent actually DID work on this step (a tool ran
-                # since it became 'doing') — never close just because it wrote prose.
-                if _n.get("status") == "doing" and len(used_tools) > _kg_doing_mark:
-                    try:
-                        _auto = taskgraph.update_node(
-                            _g, _n["id"], status="done",
-                            evidence="delivered by the agent: %s" % (answer or "")[:400],
-                            source="harness:autoclose")
-                        on_event("graph.node.updated", session=sess["id"], node=_auto,
-                                 index=_g["nodes"].index(_auto),
-                                 total=len(_g["nodes"]), changes=["status"])
-                        on_event("plan.autoclosed", session=sess["id"],
-                                 node=_auto.get("id"), label=_auto.get("label"))
-                    except (KeyError, ValueError):
-                        pass
-                    break
             _nodes = _g.get("nodes", [])
             _open = [n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES]
             _cur = _kg.state_hash(_nodes)
@@ -2572,26 +2561,13 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     on_event("chat.steer", session=sess["id"], text=_s, applied=True)
                 on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
                          open=len(_open), total=len(_nodes), difficulty=_diff_level)
-                # JAG-173: the SYSTEM drives the plan state too — with no step
-                # 'doing' it marks the next open one 'doing' for the model.
-                _next = next((n for n in _nodes if n.get("status") == "doing"), None) or \
-                    next((n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES), None)
-                if _next and _next.get("status") != "doing":
-                    try:
-                        taskgraph.update_node(_g, _next["id"], status="doing",
-                                              source="harness:autostart")
-                        on_event("graph.node.updated", session=sess["id"], node=_next,
-                                 index=_g["nodes"].index(_next),
-                                 total=len(_g["nodes"]), changes=["status"])
-                    except (KeyError, ValueError):
-                        pass
-                _kg_doing_mark = len(used_tools)   # JAG-173: baseline for the next step
                 msgs.append({"role": "assistant", "content": answer})
                 _inject(
-                    "SYSTEM (harness) — bookkeeping is MINE, not yours: I already mark "
-                    "steps done for you, so do NOT call update_todos. %d step(s) are "
-                    "still open. Just DO the next one with a tool call and report the "
-                    "result in plain prose. List:\n%s"
+                    "CONTINUE — your TASK LIST still has %d open step(s), and it is "
+                    "YOURS: mark the step you are working on 'doing', and when it is "
+                    "REALLY finished mark it 'done' with the concrete evidence (the "
+                    "command you ran and its result) via update_todos. One step at a "
+                    "time. NEVER redo a step already marked [x]. List:\n%s"
                     % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))), "continue")
                 continue
             _kg_stop_reason = _dec["reason"]

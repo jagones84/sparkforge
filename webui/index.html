@@ -1153,12 +1153,26 @@ function chatNodeUpdate(node) {
 }
 function harnessInject(d) {
   if (!d) return;
+  const kind = d.inject_kind || "inject";
+  const text = d.text || "";
+  const key = kind + "\u0000" + text;
+  // JAG-174: collapse a run of IDENTICAL harness messages (the harness can repeat
+  // the same nudge many times) — one block with a ×N counter instead of a wall.
+  if (kind !== "system") {
+    const prev = _scope().lastElementChild;
+    if (prev && prev.classList && prev.classList.contains("hinj") && prev.dataset.k === key) {
+      prev.dataset.n = String((+prev.dataset.n || 1) + 1);
+      const c = prev.querySelector("summary .hcount");
+      if (c) c.textContent = " ×" + prev.dataset.n;
+      scroll(); return;
+    }
+  }
   const det = document.createElement("details");
   det.className = "hinj";
-  const kind = d.inject_kind || "inject";
-  det.innerHTML = '<summary>🔌 harness &rarr; LLM<span class="hkind"></span></summary><pre class="hbody"></pre>';
+  det.dataset.k = key; det.dataset.n = "1";
+  det.innerHTML = '<summary>🔌 harness &rarr; LLM<span class="hkind"></span><span class="hcount"></span></summary><pre class="hbody"></pre>';
   det.querySelector(".hkind").textContent = kind;
-  det.querySelector(".hbody").textContent = d.text || "";
+  det.querySelector(".hbody").textContent = text;
   if (kind === "system") {
     // one 'system prompt' block per turn, at the top of the turn
     if (_sysInjectEl) _sysInjectEl.remove();
@@ -1227,12 +1241,14 @@ function cotFeed(text) {
  * Default: they wait in a visible queue and are flushed one-by-one when the
  * turn ends. The "⇢" chip steers them into the RUNNING turn instead (injected
  * server-side at the next loop boundary — no second turn). */
-let msgQueue = [];
-function enqueueMsg(m) { msgQueue.push(m); renderQueue(); }
+let msgQueue = {};   // JAG-174: sessionId -> [messages] waiting for THAT session
+function _q(sid) { const k = sid || sessionId; return (msgQueue[k] = msgQueue[k] || []); }
+function enqueueMsg(m) { _q().push(m); renderQueue(); }
 function renderQueue() {
   const bar = $("queueBar"); if (!bar) return;
-  bar.innerHTML = ""; bar.hidden = !msgQueue.length;
-  msgQueue.forEach((m, i) => {
+  const q = _q();
+  bar.innerHTML = ""; bar.hidden = !q.length;
+  q.forEach((m, i) => {
     const chip = document.createElement("span"); chip.className = "qchip";
     const t = document.createElement("span"); t.textContent = (i + 1) + ". " + m; t.title = m;
     const st = document.createElement("button"); st.className = "ghost"; st.textContent = "⇢";
@@ -1240,18 +1256,23 @@ function renderQueue() {
     st.onclick = () => steerQueued(i);
     const x = document.createElement("button"); x.className = "ghost"; x.textContent = "×";
     x.title = "remove from queue";
-    x.onclick = () => { msgQueue.splice(i, 1); renderQueue(); };
+    x.onclick = () => { q.splice(i, 1); renderQueue(); };
     chip.appendChild(t); chip.appendChild(st); chip.appendChild(x); bar.appendChild(chip);
   });
 }
 function steerQueued(i) {
-  const m = msgQueue.splice(i, 1)[0]; if (m === undefined) return; renderQueue();
+  const q = _q(); const m = q.splice(i, 1)[0]; if (m === undefined) return renderQueue();
   who("user", "🎯 steer: " + m);
   api("POST", "/api/chat/steer", { session: sessionId, message: m }).catch(() => {});
 }
-function flushQueue() {
-  if (turnSSE[sessionId] || !msgQueue.length) return;
-  const m = msgQueue.shift(); renderQueue(); send(m);
+function flushQueue(sid) {
+  // JAG-174: never flush a message queued in session A into session B — only the
+  // session the message belongs to, and only when it is idle and on screen.
+  const s = sid || sessionId;
+  if (sessionId !== s || turnSSE[s]) return;
+  const q = _q(s);
+  if (!q.length) return;
+  const m = q.shift(); renderQueue(); send(m);
 }
 
 function send(text) {
@@ -1350,6 +1371,7 @@ function selectSession(s) {
   // JAG-173: the live CoT drawer belongs to the CURRENT turn — never carry
   // another session's chain-of-thought into this one.
   cotText = ""; try { const _ct = $("cotDrawer").querySelector(".t"); if (_ct) _ct.textContent = ""; } catch (e) {}
+  renderQueue();   // JAG-174: show THIS session's queued messages, not the last one's
   // JAG-167: never carry another session's run graph into this one.
   curRunId = null; localStorage.removeItem("sf_run"); graph = null;
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
@@ -2100,7 +2122,7 @@ function connectFeed() {
   es.addEventListener("agent.start", e => { const d = JSON.parse(e.data || "{}"); push("⚡ agent: " + (d.goal || "").slice(0, 60)); });
   es.addEventListener("agent.finish", () => push("🏁 agent finished"));
   es.addEventListener("prm.feedback", e => { const d = JSON.parse(e.data || "{}"); push("📉 verify: score " + d.score + " — " + (d.feedback || "").slice(0, 90)); });
-  es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); loadApprovals(); if (!d.session || d.session === sessionId) approvalCard(d); });
+  es.addEventListener("approval.request", e => { const d = JSON.parse(e.data); loadApprovals(); const _s = d.session || d.run; if (!_s || _s === sessionId) approvalCard(d); });
   es.addEventListener("approval.auto", e => { const d = JSON.parse(e.data); push("✅ auto-approved: " + (d.summary || "").slice(0, 50)); });
   es.addEventListener("chat.steer", e => { const d = JSON.parse(e.data); push("🎯 steer: " + (d.text || "").slice(0, 60)); });
   es.addEventListener("tool.result", e => { const d = JSON.parse(e.data);
@@ -2110,8 +2132,8 @@ function connectFeed() {
   // JAG-128B finalfix: la publish del tool `improve` NON porta `session`, quindi
   // il fan-out raggiunge SOLO gli abbonati a /api/feed. La card va agganciata QUI,
   // altrimenti resta irraggiungibile (il listener della chat non la vede mai).
-  es.addEventListener("improve.proposal", e => { improveCard(JSON.parse(e.data)); });
-  es.addEventListener("improve.nudge", e => { const d = JSON.parse(e.data); who("ai", "💡 self-improvement: " + (d.hint || "")); });
+  es.addEventListener("improve.proposal", e => { const d = JSON.parse(e.data); if (!d.session || d.session === sessionId) improveCard(d); });
+  es.addEventListener("improve.nudge", e => { const d = JSON.parse(e.data); if (d.session && d.session !== sessionId) return; who("ai", "💡 self-improvement: " + (d.hint || "")); });
   es.addEventListener("agent.paused", () => push("⏸ run paused"));
   es.addEventListener("agent.aborted", () => push("⛔ run aborted"));
   es.addEventListener("agent.control", e => { const d = JSON.parse(e.data); push("🎛 " + d.action + " → " + d.status); });
