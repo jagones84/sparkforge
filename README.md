@@ -91,8 +91,8 @@ bash tests/battery.sh
 
 It runs exactly three checks:
 - `tests/v140_subagent_todos.py` — subagent spawning, per-child todo lists, depth cap, taskgraph nesting;
-- `tests/v174_session_isolation.py` — per-session independence (queue / feed / plan) + abort guard;
-- `tests/v177_session_delete_cascade.py` — deleting a session removes transcript + graph + run + edits.
+- `tests/v177_session_delete_cascade.py` — deleting a session removes transcript + graph + run + edits;
+- `tests/v183_chat_core.py` — chat loop core: a normal turn runs + persists its reply, and a stuck model's repeated failed call is executed ONCE then blocked (anti-loop, JAG-183).
 
 Everything else under `tests/legacy/` is historic acceptance evidence, run ad hoc,
 and is **not** part of the gate.

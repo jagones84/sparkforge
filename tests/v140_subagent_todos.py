@@ -6,7 +6,11 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "src"))
-os.environ["SPARKFORGE_GRAPH_DIR"] = tempfile.mkdtemp()
+import atexit  # noqa: E402
+import shutil  # noqa: E402
+_sf_tmp = tempfile.mkdtemp()
+os.environ["SPARKFORGE_GRAPH_DIR"] = _sf_tmp
+atexit.register(lambda: shutil.rmtree(_sf_tmp, ignore_errors=True))
 results = []
 
 

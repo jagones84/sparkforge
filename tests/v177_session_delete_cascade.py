@@ -14,7 +14,10 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import atexit  # noqa: E402
+import shutil  # noqa: E402
 tmp = tempfile.mkdtemp(prefix="sf-177-")
+atexit.register(lambda: shutil.rmtree(tmp, ignore_errors=True))
 os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(tmp, "cfg")
 os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
 os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")

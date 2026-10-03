@@ -23,7 +23,7 @@ export SPARKFORGE_RUNS_DIR="$TMP/runs"
 mkdir -p "$SPARKFORGE_CONFIG_DIR" "$SPARKFORGE_SESSIONS_DIR" \
          "$SPARKFORGE_GRAPH_DIR" "$SPARKFORGE_EDITS_DIR" "$SPARKFORGE_RUNS_DIR"
 
-TESTS="v140_subagent_todos v174_session_isolation v177_session_delete_cascade"
+TESTS="v140_subagent_todos v177_session_delete_cascade v183_chat_core"
 fail=0
 for t in $TESTS; do
   echo "=== $t ==="
