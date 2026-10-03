@@ -57,6 +57,17 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 
 Then open `http://127.0.0.1:8790` (or `http://<dgx-tailscale-ip>:8790` from the phone).
 
+On Windows (native, no WSL) the same core runs with Python 3.10+ on PATH:
+
+```powershell
+.\run.ps1                     # WebUI + API on http://127.0.0.1:8790
+.\run.ps1 --host 0.0.0.0      # expose on the LAN for the phone
+```
+
+Shell execution, process-tree kill and `npx` MCP launch all route through
+`osutil.py`, so no POSIX assumption leaks into the core; `deploy/sparkforge.service`
+stays a Linux-only convenience (on Windows install it as a service with `nssm`).
+
 ```bash
 python3 forge.py chat "hello, who are you?"       # one-shot chat
 python3 forge.py chat --stream                    # streaming chat in terminal

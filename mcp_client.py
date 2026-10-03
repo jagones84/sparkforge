@@ -44,6 +44,7 @@ import sys
 import threading
 import time
 
+import osutil
 import registry
 
 REPO = registry.REPO
@@ -116,9 +117,9 @@ class MCPSession:
         full_env = dict(os.environ)
         full_env.update(env or {})
         self.proc = subprocess.Popen(
-            [command] + args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, env=full_env,
-            cwd=self.config.get("cwd", REPO))
+            [osutil.resolve_script(command)] + args, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=full_env,
+            cwd=self.config.get("cwd", REPO), **osutil.popen_kwargs())
         log("%s: spawned pid=%d", self.name, self.proc.pid)
 
         def _reader():
@@ -309,11 +310,7 @@ class MCPSession:
     def close(self):
         self._stop = True
         if self.proc:
-            try:
-                self.proc.terminate()
-                self.proc.wait(timeout=5)
-            except Exception:
-                self.proc.kill()
+            osutil.kill_tree(self.proc)
         self._connected = False
 
 

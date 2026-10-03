@@ -17,6 +17,7 @@ import time
 import urllib.parse
 import urllib.request
 
+import osutil
 import registry
 import sandbox
 
@@ -464,7 +465,7 @@ def _self(args, run_id):
                  "architecture": os.path.join(REPO, "docs", "ARCHITECTURE.md")},
         "service": {"unit": "sparkforge.service", "scope": "user",
                     "unit_file": os.path.join(REPO, "deploy", "sparkforge.service"),
-                    "restart_cmd": "systemctl --user restart sparkforge.service"},
+                    "restart_cmd": osutil.service_hint()},
         "skills_dir": os.path.join(REPO, "skills"),
         "install_skill": (
             "A skill is a directory with a SKILL.md. Drop/clone it into a "
@@ -476,8 +477,8 @@ def _self(args, run_id):
             "(HTTP); tools are discovered via tools/list and exposed as "
             "<client>__<tool> in the registry. Harness-native tools go in "
             "registry.TOOL_SCHEMAS + tools.py with policy in config/tools.yaml. "
-            "Apply with POST /api/tools (reload) or `systemctl --user restart "
-            "sparkforge.service`."),
+            "Apply with POST /api/tools (reload) or restart: %s."
+        ) % osutil.service_hint(),
     }
     try:
         import skills as skills_mod
@@ -487,9 +488,12 @@ def _self(args, run_id):
     except Exception as e:  # noqa: BLE001
         info["skills"] = {"error": str(e)}
     try:
-        out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
-                     capture_output=True, text=True, timeout=4).stdout.strip()
-        info["service"]["active"] = out or "unknown"
+        if osutil.IS_POSIX:
+            out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
+                         capture_output=True, text=True, timeout=4).stdout.strip()
+            info["service"]["active"] = out or "unknown"
+        else:
+            info["service"]["active"] = "n/a (no systemd on this host)"
     except Exception:
         info["service"]["active"] = "unknown"
     return info

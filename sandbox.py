@@ -23,6 +23,7 @@ import subprocess
 import threading
 import time
 
+import osutil
 import registry
 
 REPO = registry.REPO
@@ -52,7 +53,6 @@ def _kill(entry):
     For a docker job the CLI may die while the container keeps running, so we
     also `docker kill <name>` the explicitly named container.
     """
-    import signal
     proc = entry["proc"]
     argv = entry.get("argv") or []
     if argv and os.path.basename(argv[0]) == "docker":
@@ -62,23 +62,7 @@ def _kill(entry):
                            capture_output=True, text=True)
         except Exception:  # noqa: BLE001
             pass
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    except Exception:  # noqa: BLE001
-        try:
-            proc.terminate()
-        except Exception:  # noqa: BLE001
-            pass
-    try:
-        proc.wait(timeout=5)
-    except Exception:  # noqa: BLE001
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except Exception:  # noqa: BLE001
-            try:
-                proc.kill()
-            except Exception:  # noqa: BLE001
-                pass
+    osutil.kill_tree(proc)
 
 
 def cancel(job_id):
@@ -97,7 +81,7 @@ def _run_tracked(argv, timeout=None, cwd=None, env=None, job_id=None):
     t0 = time.time()
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, cwd=cwd, env=env, start_new_session=True)
+                                text=True, cwd=cwd, env=env, **osutil.popen_kwargs())
     except FileNotFoundError as e:
         return {"exit_code": 127, "stdout": "", "stderr": "not found: %s" % e,
                 "duration_ms": 0}
@@ -295,11 +279,11 @@ def run(command, run_id=None, timeout=None, workspace=None, backend=None, job_id
     else:
         # host execution: either the operator explicitly opted out
         # (config sandbox.backend: none) or no real backend is available.
-        res = _run_tracked(["/bin/sh", "-c", command], timeout=timeout, cwd=ws,
+        res = _run_tracked(osutil.shell_argv(command), timeout=timeout, cwd=ws,
                            job_id=job_id)
         res["backend"] = "none(host)"
         res["sandboxed"] = False
-        res["warning"] = ("host execution: sandbox.backend is 'none' — runs on the DGX"
+        res["warning"] = ("host execution: sandbox.backend is 'none' — runs on the host"
                           if p.get("requested") == "none"
                           else "no sandbox backend available — ran on the host")
     res["command"] = command

@@ -24,6 +24,8 @@ import re
 import subprocess
 import time
 
+import osutil
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.environ.get("SPARKFORGE_HOOKS") or os.path.join(REPO, "config", "hooks.yaml")
 DEFAULT_TIMEOUT = 60
@@ -100,7 +102,7 @@ def run(event, tool=None, args=None, observation=None, run_id=None):
         })
         t0 = time.time()
         try:
-            p = subprocess.run(["/bin/sh", "-c", hook["command"]], capture_output=True,
+            p = subprocess.run(osutil.shell_argv(hook["command"]), capture_output=True,
                                text=True, timeout=hook["timeout_secs"], env=env, cwd=REPO)
             code, out, err = p.returncode, p.stdout, p.stderr
         except subprocess.TimeoutExpired:

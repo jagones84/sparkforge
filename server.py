@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import api_v02  # v0.2 surface: tool registry, approvals, HITL control, MCP
 import approvals
+import osutil
 import otel_tracing  # v0.4: OpenTelemetry spans + fallback local spans
 import registry
 import routing  # v0.3: role-based model selection + fallback chain
@@ -1244,13 +1245,13 @@ def self_summary():
         "config/tools.yaml; model routing: config/routing.yaml; external MCP "
         "servers: config/mcp_clients.yaml (add a stdio command or HTTP url entry, "
         "tools appear as <client>__<tool>; then reload via POST /api/tools or "
-        "restart with `systemctl --user restart sparkforge.service`, unit file "
+        "restart with %s, unit file "
         "deploy/sparkforge.service, port 8790). Skills: the `skills` tool lists and "
         "reads agent skills from skills/<category>/<name>/SKILL.md. Harness-"
         "native tools: "
         "registry.TOOL_SCHEMAS + tools.py. Full self report: GET /api/self or "
         "the `self` tool."
-    ) % (REPO, DATA_DIR)
+    ) % (REPO, DATA_DIR, osutil.service_hint())
 
 
 def self_knowledge():
@@ -1270,7 +1271,7 @@ def self_knowledge():
                  "architecture": os.path.join(REPO, "docs", "ARCHITECTURE.md")},
         "service": {"unit": "sparkforge.service", "scope": "user",
                     "unit_file": os.path.join(REPO, "deploy", "sparkforge.service"),
-                    "restart_cmd": "systemctl --user restart sparkforge.service"},
+                    "restart_cmd": osutil.service_hint()},
         "skills_dir": os.path.join(REPO, "skills"),
         "install_skill": (
             "A skill is a directory with a SKILL.md. Drop/clone it into a "
@@ -1282,8 +1283,8 @@ def self_knowledge():
             "(HTTP); tools are discovered via tools/list and exposed as "
             "<client>__<tool> in the registry. Harness-native tools go in "
             "registry.TOOL_SCHEMAS + tools.py with policy in config/tools.yaml. "
-            "Apply with POST /api/tools (reload) or `systemctl --user restart "
-            "sparkforge.service`."),
+            "Apply with POST /api/tools (reload) or restart: %s."
+        ) % osutil.service_hint(),
     }
     try:
         import skills as skills_mod
@@ -1293,9 +1294,12 @@ def self_knowledge():
     except Exception as e:  # noqa: BLE001
         info["skills"] = {"error": str(e)}
     try:
-        out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
-                     capture_output=True, text=True, timeout=4).stdout.strip()
-        info["service"]["active"] = out or "unknown"
+        if osutil.IS_POSIX:
+            out = sp.run(["systemctl", "--user", "is-active", "sparkforge.service"],
+                         capture_output=True, text=True, timeout=4).stdout.strip()
+            info["service"]["active"] = out or "unknown"
+        else:
+            info["service"]["active"] = "n/a (no systemd on this host)"
     except Exception:
         info["service"]["active"] = "unknown"
     return info
