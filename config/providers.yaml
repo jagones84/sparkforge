@@ -99,3 +99,43 @@ providers:
     models:
       - {id: deepseek-chat}
       - {id: deepseek-reasoner}
+
+  # ---- cloud DEFAULTS shipped with the repo (override in providers.local.yaml)
+  # These are the best-known hosted providers. The repo lists them + their
+  # flagship models so a fresh clone is useful out of the box; the key is only
+  # ever referenced by NAME (set it in Settings -> Keys, stored in .env).
+  - id: openai
+    name: OpenAI
+    kind: openai
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    models:
+      - {id: gpt-6-astra, context_length: 1050000}
+      - {id: gpt-5.6-sol, context_length: 1050000}
+      - {id: gpt-5.6-terra, context_length: 1050000}
+      - {id: gpt-5.6-luna, context_length: 1050000}
+
+  # Anthropic via its official OpenAI SDK compatibility layer
+  # (base_url https://api.anthropic.com/v1/, Bearer auth).
+  - id: anthropic
+    name: Anthropic (Claude)
+    kind: anthropic
+    base_url: https://api.anthropic.com/v1
+    api_key_env: ANTHROPIC_API_KEY
+    models:
+      - {id: claude-fable-5.1, context_length: 1000000}
+      - {id: claude-fable-5, context_length: 1000000}
+      - {id: claude-opus-4-8, context_length: 1000000}
+      - {id: claude-sonnet-5, context_length: 1000000}
+      - {id: claude-haiku-4-5, context_length: 200000}
+
+  # Google Gemini via its official OpenAI-compatible endpoint.
+  - id: google
+    name: Google (Gemini)
+    kind: openai
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+    models:
+      - {id: gemini-3.8-flash, context_length: 1048576}
+      - {id: gemini-3.1-pro-preview, context_length: 1048576}
+      - {id: gemini-3.1-flash-lite, context_length: 1048576}
