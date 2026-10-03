@@ -23,6 +23,7 @@ import os
 import re
 import threading
 import time
+import uuid
 
 from . import registry
 
@@ -42,6 +43,9 @@ MEMORY_FIELDS = {
     "chat.summary": "chat_summaries.md",
     "agent.note": "agent_notes.md",
     "memory.store": "user_memories.md",
+    # JAG-204: append-only tombstones that invalidate a stored memory (BAVAR:
+    # verification must also cover persistent, reusable artifacts).
+    "memory.invalidate": "memory_invalidations.md",
 }
 
 
@@ -97,6 +101,7 @@ def store(kind, content, **meta):
     score = float(meta.pop("score", 1.0))
     with _lock:
         rec = {
+            "mid": uuid.uuid4().hex[:8],
             "ts": round(time.time(), 3),
             "kind": kind,
             "content": str(content)[:8000],
@@ -116,7 +121,8 @@ def store(kind, content, **meta):
 def _render_md(rec):
     """Render a record as a multi-line markdown block."""
     lines = ["---"]
-    for key in ("ts", "kind", "session", "run_id", "tags", "model", "tool", "score"):
+    for key in ("mid", "ts", "kind", "session", "run_id", "source",
+                "expires_ts", "target", "tags", "model", "tool", "score"):
         val = rec.get(key)
         if val is not None:
             lines.append("%s: %s" % (key, val))
@@ -162,38 +168,62 @@ def _match(text, term):
 
 
 def _parse_md_file(path):
-    """Parse records from an append-only markdown file."""
+    """Parse records from an append-only markdown file.
+
+    Each record is written as::
+
+        ---
+        <front-matter key: value lines>
+        ---
+        <content>
+
+    JAG-204 fix: the previous implementation split on every `\\n---\\n`, which
+    tore the front-matter away from its own content (so `ts`, `kind`, `source`
+    were lost on read and every store surfaced as two records). Parse with a
+    line state machine instead so a record keeps its metadata AND content.
+    """
     records = []
     with open(path, "r", encoding="utf-8") as f:
-        content = f.read()
-    blocks = content.split("\n---\n")
-    for block in blocks:
-        block = block.strip()
-        if not block or block == "---":
-            continue
-        rec = {"content": ""}
-        lines = block.split("\n")
-        in_front = block.startswith("---") or block.startswith("ts:")
-        i = 0
-        if in_front:
-            for i, line in enumerate(lines):
-                if line.startswith("---"):
-                    continue
-                if ":" in line:
-                    key, _, val = line.partition(":")
-                    key = key.strip()
-                    val = val.strip()
-                    if key:
-                        rec[key] = _cast(val)
-                else:
-                    break
-            else:
-                i = len(lines)
-            rec["content"] = "\n".join(l for l in lines[i:] if l.strip()).strip()
-        else:
-            rec["content"] = block[:2000]
+        raw = f.read()
+    rec = None
+    in_front = False
+    buf = []
+
+    def flush():
+        nonlocal rec, buf
+        if rec is None:
+            return
+        rec["content"] = "\n".join(l for l in buf if l.strip()).strip()
         if rec.get("content") or rec.get("kind"):
             records.append(rec)
+        rec = None
+        buf = []
+
+    for line in raw.split("\n"):
+        if line.strip() == "---":
+            if rec is None or not in_front:
+                # opening delimiter of a new record (start, or after content)
+                flush()
+                rec = {"content": ""}
+                in_front = True
+            else:
+                # closing delimiter of the front-matter → content follows
+                in_front = False
+            continue
+        if rec is None:
+            # legacy content-only block before any front-matter
+            rec = {"content": ""}
+            in_front = False
+        if in_front:
+            if ":" in line:
+                key, _, val = line.partition(":")
+                key = key.strip()
+                if key:
+                    rec[key] = _cast(val.strip())
+                continue
+            in_front = False  # front-matter ended without a closing delimiter
+        buf.append(line)
+    flush()
     return records
 
 
@@ -432,10 +462,75 @@ def rank(records, now=None, halflife=None):
                   reverse=True)
 
 
-def governed_query(kind=None, limit=6, halflife=None, threshold=0.85):
-    """Retrieve deduped, score+decay-ranked records (governed recall)."""
+def invalid_targets():
+    """Set of memory ids (mid) invalidated by an append-only tombstone (JAG-204)."""
+    p = _path("memory.invalidate")
+    if not os.path.isfile(p):
+        return set()
+    out = set()
+    for r in _parse_md_file(p):
+        t = str(r.get("target") or "").strip()
+        if t:
+            out.add(t)
+    return out
+
+
+def is_expired(rec, now=None):
+    """True when a record carries an expires_ts in the past (JAG-204)."""
+    exp = rec.get("expires_ts")
+    if exp in (None, ""):
+        return False
+    try:
+        return float(exp) <= (now if now is not None else time.time())
+    except (TypeError, ValueError):
+        return False
+
+
+def is_valid(rec, now=None, invalid=None):
+    """A record is VALID unless expired or explicitly invalidated."""
+    if is_expired(rec, now=now):
+        return False
+    bad = invalid if invalid is not None else invalid_targets()
+    return str(rec.get("mid") or "") not in bad
+
+
+def invalidate(target, reason=""):
+    """Append a tombstone invalidating a stored memory (mid, or free text).
+
+    Append-only: the original record is never mutated; recall just stops surfacing
+    it. Returns the tombstone record.
+    """
+    return store("memory.invalidate", reason or "invalidated",
+                 target=str(target or "").strip())
+
+
+def governed_query(kind=None, limit=6, halflife=None, threshold=0.85,
+                   include_invalid=False):
+    """Retrieve deduped, score+decay-ranked records (governed recall).
+
+    JAG-204: invalidated (tombstoned) and expired records are dropped unless
+    `include_invalid`.
+    """
     recs = query(None, kind, limit=500)
+    if not include_invalid:
+        bad = invalid_targets()
+        now = time.time()
+        recs = [r for r in recs if is_valid(r, now=now, invalid=bad)]
     return dedupe(rank(recs, halflife=halflife), threshold)[:limit]
+
+
+def health():
+    """Read-only memory health: counts of expired / invalidated / no-source."""
+    recs = query(None, None, limit=100000)
+    bad = invalid_targets()
+    now = time.time()
+    expired = sum(1 for r in recs if is_expired(r, now=now))
+    invalidated = sum(1 for r in recs if str(r.get("mid") or "") in bad)
+    stores = [r for r in recs if r.get("kind") == "memory.store"]
+    no_source = sum(1 for r in stores if not r.get("source"))
+    return {"total": len(recs), "stores": len(stores), "expired": expired,
+            "invalidated": invalidated, "no_source": no_source,
+            "invalid_targets": sorted(bad)[:20]}
 
 
 def stats():

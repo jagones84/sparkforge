@@ -84,6 +84,16 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   `skills{action:"audit"}` — READ-ONLY, find duplicates (identical descriptions),
   near-duplicate names, missing description, oversized SKILL.md. Found: 1 dup group
   (mcp-builder/mcp-server-builder-guide), 20 near pairs, 20 oversized. v198 26/26.
+- **JAG-204** Verifica della memoria persistente (RDD P2, BAVAR-lite): provenance
+  (`source` + `mid`), scadenza (`ttl_secs` → `expires_ts`), invalidazione
+  (`memory{action:"invalidate"}` = tombstone append-only), `memory{action:"health"}`.
+  Recall (`governed_query`, tool `memory`, auto-inject nel prompt) scarta record
+  scaduti/invalidati salvo `include_invalid`. **Bug reale trovato e corretto**:
+  `_parse_md_file` splittava su ogni `\n---\n` e SEPARAVA il front-matter dal suo
+  contenuto → `ts/kind/source/mid` persi in lettura, ogni store contava come 2
+  record (per questo in recall si vedeva `(None, ...)`!). Riscritto come macchina a
+  stati. Nuova suite `tests/v204_memory_governance.py` (20/20, AGGIUNTA al gate).
+  Schema tool `memory` aggiornato. Commit `______`.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -95,11 +105,12 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
 - `v199_endpoint_sweep.py` (51/51), `v200_concurrent_chat.py` (7/7),
   `v202_concurrent_stream.py` (4/4). NON nel gate `battery.sh`.
 
-Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26 → **5/5 GREEN**.
+Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 20/20
+→ **6/6 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).
-- Gate ufficiale = `tests/battery.sh` (oggi: v140, v177, v183, v195).
+- Gate ufficiale = `tests/battery.sh` (oggi: v140, v177, v183, v195, v198, v204).
 - Suite "hard/bastarde" = `v195_hard.py` (da riusare per regressione SOLO se c'è
   motivo concreto). Scenari etichettati A..I con `check("Xn ...")`.
 - `tests/legacy/` = accettazione storica, NON parte del gate.
@@ -140,6 +151,8 @@ Fatto in questa sessione (tutti i punti 0-5 avviati):
 2. `tests/v198_skills_tools_awareness.py` (19/19) + `skills{action:"search"}`.
 3. Test live `tests/live/` (v199 endpoint sweep 51/51, v200 7/7, v202 4/4).
 4. Bug trovato e risolto: **JAG-201** (concorrenza stessa sessione).
+5. **RDD in corso** — P5 (audit skill, JAG-203), P2 (verifica memoria, JAG-204,
+   con bug parser reale corretto). Prossimi P1 (step auditor) e P3 (budget).
 
 ### Prossimi bug-hunt frontier (NON ancora fatti)
 - **Steer** durante un turno (`/api/chat/steer`) → il modello lo applica al confine?

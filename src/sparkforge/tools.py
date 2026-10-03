@@ -541,11 +541,13 @@ def _self(args, run_id):
 def _memory(args, run_id):
     """Agent memory (JAG-73): store a durable note, or recall/search memories.
 
-    action=store  {content, kind?}            → append-only record
-    action=recall {query, kind?, limit?}      → semantic + keyword search
-    action=recent {kind?, limit?}             → newest first
-    action=core   {}                          → read the always-visible CORE block
-    action=set_core {content}                 → rewrite the CORE block (JAG-127f)
+    action=store   {content, kind?, source?, ttl_secs?} → append-only record
+    action=recall  {query, kind?, limit?, include_invalid?} → search
+    action=recent  {kind?, limit?}             → newest first
+    action=core    {}                          → read the always-visible CORE block
+    action=set_core {content}                  → rewrite the CORE block (JAG-127f)
+    action=invalidate {target|query, reason?}  → tombstone a wrong/outdated memory (JAG-204)
+    action=health  {}                          → expired / invalidated / no-source counts
 
     Closes a real gap: the store existed and was auto-injected, but the agent had
     NO tool to deliberately remember or recall anything.
@@ -573,10 +575,48 @@ def _memory(args, run_id):
             return {"ok": False, "error": "content required for action=store",
                     "backend": "host", "sandboxed": False}
         kind = (args.get("kind") or "memory.store").strip()
-        mem.store(kind, content, session=run_id or "", source="agent")
-        return {"ok": True, "count": 1,
-                "stdout": "stored %d chars as %s" % (len(content), kind),
+        meta = {"session": run_id or "", "source": str(args.get("source") or "agent")}
+        # JAG-204: optional expiry (ttl_secs) — a memory can be time-bounded.
+        try:
+            ttl = float(args.get("ttl_secs") or args.get("ttl") or 0)
+        except (TypeError, ValueError):
+            ttl = 0.0
+        if ttl > 0:
+            meta["expires_ts"] = round(time.time() + ttl, 3)
+        rec = mem.store(kind, content, **meta)
+        return {"ok": True, "count": 1, "mid": rec.get("mid"),
+                "stdout": "stored %d chars as %s (id=%s)"
+                          % (len(content), kind, rec.get("mid")),
                 "backend": "host", "sandboxed": False}
+    if action in ("invalidate", "forget", "retract"):
+        # JAG-204: retire a memory you know is wrong/outdated (append-only tombstone).
+        target = str(args.get("target") or args.get("id") or "").strip()
+        reason = str(args.get("reason") or "").strip()
+        if not target:
+            q = (args.get("query") or "").strip()
+            if not q:
+                return {"ok": False,
+                        "error": "target or query required for action=invalidate",
+                        "backend": "host", "sandboxed": False}
+            ids = [r.get("mid") for _s, r in mem.search(q, args.get("kind"), 20, True)
+                   if r.get("mid")]
+            for i in ids:
+                mem.invalidate(i, reason=reason or ("query:" + q))
+            return {"ok": True, "count": len(ids),
+                    "stdout": "invalidated %d memory(ies): %s" % (len(ids), ", ".join(ids)),
+                    "backend": "host", "sandboxed": False}
+        mem.invalidate(target, reason=reason)
+        return {"ok": True, "count": 1, "stdout": "invalidated %s" % target,
+                "backend": "host", "sandboxed": False}
+    if action in ("health", "audit"):
+        h = mem.health()
+        return {"ok": True, "count": h["total"], "report": h,
+                "stdout": ("memory: %d records (%d stores) | %d expired | "
+                           "%d invalidated | %d no-source"
+                           % (h["total"], h["stores"], h["expired"],
+                              h["invalidated"], h["no_source"])),
+                "backend": "host", "sandboxed": False}
+    include_invalid = bool(args.get("include_invalid"))
     try:
         if action == "recent":
             hits = [(1.0, r) for r in mem.query("", args.get("kind"), limit)]
@@ -589,6 +629,10 @@ def _memory(args, run_id):
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": "memory lookup failed: %s" % e,
                 "backend": "host", "sandboxed": False}
+    if not include_invalid:
+        bad = mem.invalid_targets()
+        now = time.time()
+        hits = [(s, r) for s, r in hits if mem.is_valid(r, now=now, invalid=bad)]
     lines = ["- (%s, %.2f) %s" % (r.get("kind"), s, (r.get("content") or "")[:200])
              for s, r in hits]
     return {"ok": True, "count": len(hits), "stdout": "\n".join(lines) or "(no memories)",

@@ -131,21 +131,31 @@ TOOL_SCHEMAS = {
     },
     "memory": {
         "description": ("Your persistent memory across sessions. action=store saves "
-                        "a durable fact/preference/decision; action=recall searches "
-                        "past memories by meaning; action=recent lists the newest. "
+                        "a durable fact/preference/decision (optional ttl_secs makes "
+                        "it expire; source records provenance); action=recall searches "
+                        "past memories; action=recent lists the newest; "
+                        "action=invalidate tombstones a wrong/outdated memory (by "
+                        "target=id or query) so recall stops surfacing it; "
+                        "action=health reports expired/invalidated counts. "
                         "action=core reads / action=set_core rewrites the always-"
-                        "visible CORE block (durable facts you keep current). "
-                        "Relevant memories are ALSO auto-injected into your prompt "
-                        "each turn, so store things worth remembering later."),
+                        "visible CORE block. Relevant memories are ALSO auto-injected "
+                        "into your prompt each turn, so store things worth "
+                        "remembering later."),
         "type": "object",
         "properties": {
             "action": {"type": "string",
-                       "enum": ["store", "recall", "recent", "core", "set_core"],
+                       "enum": ["store", "recall", "recent", "core", "set_core",
+                                "invalidate", "health"],
                        "default": "recall"},
             "content": {"type": "string", "description": "text to save (action=store)"},
-            "query": {"type": "string", "description": "what to look for (action=recall)"},
+            "query": {"type": "string", "description": "what to look for (action=recall/invalidate)"},
             "kind": {"type": "string", "description": "optional category filter"},
             "limit": {"type": "integer", "default": 5},
+            "source": {"type": "string", "description": "provenance tag (action=store)"},
+            "ttl_secs": {"type": "number", "description": "optional lifetime in seconds (action=store)"},
+            "target": {"type": "string", "description": "memory id to retire (action=invalidate)"},
+            "reason": {"type": "string", "description": "why it's retired (action=invalidate)"},
+            "include_invalid": {"type": "boolean", "description": "also return expired/invalidated (action=recall)"},
         },
         "required": [],
         "subject": "action",
