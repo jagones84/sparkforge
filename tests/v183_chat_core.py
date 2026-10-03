@@ -230,5 +230,26 @@ check("F4 absolute paths are unaffected by the workspace base",
       "%s" % _abs.get("error"))
 
 
+# ---- scenario G: reload boundaries spread across a turn (JAG-192) -----------
+# Every card/inject of a multi-step turn used to be persisted with the SAME
+# `after` (the turn-start transcript length, because the turn's history is
+# flushed into sess["messages"] only at the end). A reload then stacked the
+# whole turn at the top and pushed the user prompts to the bottom. The boundary
+# must INCREASE within the turn. `node` must be a node id string, never a dict.
+_g_cards = (server.load_session("v183e") or {}).get("tool_cards", [])
+_g_inj = (server.load_session("v183e") or {}).get("injects", [])
+_a_cards = [c.get("after") for c in _g_cards]
+_a_inj = [r.get("after") for r in _g_inj]
+check("G1 every card/inject carries an int 'after'",
+      (_a_cards + _a_inj) and all(isinstance(a, int) for a in (_a_cards + _a_inj)),
+      "cards=%s inj=%s" % (_a_cards, _a_inj))
+check("G2 boundaries INCREASE across the turn (JAG-192)",
+      _a_cards == sorted(_a_cards) and _a_inj == sorted(_a_inj)
+      and len(set(_a_cards + _a_inj)) > 1, "cards=%s inj=%s" % (_a_cards, _a_inj))
+_node_types = set(type(c.get("node")).__name__ for c in _g_cards)
+check("G3 card 'node' is an id string or None, never a dict (JAG-192)",
+      _node_types <= {"str", "NoneType"}, "types=%s" % _node_types)
+
+
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)
