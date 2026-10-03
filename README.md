@@ -124,7 +124,7 @@ root `mcp_server.py`.
 
 ### Regression battery (the gate)
 
-The **only** regression gate is a single 3-test battery — deterministic, fast and
+The **only** regression gate is a single 4-test battery — deterministic, fast and
 fully isolated: it points every `SPARKFORGE_*` data dir at a throwaway temp dir, so
 it never touches the live `data/` and never litters the WebUI with sessions.
 
@@ -136,7 +136,7 @@ It runs four checks:
 - `tests/v140_subagent_todos.py` — subagent spawning, per-child todo lists, depth cap, taskgraph nesting;
 - `tests/v177_session_delete_cascade.py` — deleting a session removes transcript + graph + run + edits;
 - `tests/v183_chat_core.py` — chat loop core: a normal turn runs + persists its reply; a stuck model's repeated failed call is executed ONCE then blocked (anti-loop, JAG-183); the `subagent` action is reachable and delegates once (JAG-189); a fresh message is not hijacked by a stale plan (JAG-189); harness-action cards (`write_todos`/`update_todos`/`subagent`) are persisted so a reload rebuilds them (JAG-190); a relative `fs.read/write/edit` path resolves inside the session workspace, not the harness repo (JAG-191); card/inject `after` boundaries increase across a turn and `node` is a string id, so a reload interleaves the turn instead of stacking it (JAG-192); a new task opens a fresh plan that KEEPS the old nodes and numbers new ones monotonically, so old transcript cards never resolve to a relabelled node (JAG-194).
-- `tests/v195_hard.py` — adversarial: `fs.edit` relative in the workspace; two workspaces writing the same name concurrently stay isolated; outside-workspace ops escalate to `required`; malformed inputs never raise; new plans number nodes monotonically; 20 concurrent `add_node` keep unique ids (JAG-195).
+- `tests/v195_hard.py` — adversarial: `fs.edit` relative in the workspace; two workspaces writing the same name concurrently stay isolated; outside-workspace ops escalate to `required`; malformed inputs never raise; new plans number nodes monotonically; 20 concurrent `add_node` keep unique ids (JAG-195). It also proves the router stream honours Stop even while the upstream is **silent**, skips the blocking non-streaming fallback on abort, and makes the planner call abortable (JAG-197).
 
 Everything else under `tests/legacy/` is historic acceptance evidence, run ad hoc,
 and is **not** part of the gate.

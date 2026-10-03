@@ -17,6 +17,7 @@ import json
 import os
 import queue
 import re
+import select
 import socket
 import sqlite3
 import threading
@@ -1107,11 +1108,37 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=Non
             if ROUTER_IDLE_TIMEOUT > 0:
                 # v0.6.1 (JAG-48): mid-stream silence must not hang the run.
                 _set_read_idle(resp, ROUTER_IDLE_TIMEOUT)
-            for raw in resp:
+            # JAG-197: poll in short slices so `cancel` (the Stop button) is
+            # honoured even while the router is SILENT. Before this, cancel was
+            # only checked when a new line arrived, so during a long silent gap
+            # (model "thinking", or a busy single-slot router) Stop did nothing
+            # until ROUTER_IDLE_TIMEOUT elapsed — the turn hung and starved every
+            # later request on a shared router.
+            _poll = 0.5 if ROUTER_IDLE_TIMEOUT > 0 else None
+            try:
+                _sock = resp.fp.raw._sock
+            except Exception:  # noqa: BLE001
+                _sock = None
+            _last = time.time()
+            while True:
                 if cancel is not None and cancel():
                     # JAG-129D: Stop uccide la generazione in corso (chiusura del
                     # socket a fine blocco `with` interrompe l'inferenza lato router).
                     break
+                if _sock is not None:
+                    try:
+                        _r, _, _ = select.select([_sock], [], [], _poll)
+                    except Exception:  # noqa: BLE001
+                        _r = [True]
+                    if not _r:
+                        if ROUTER_IDLE_TIMEOUT > 0 and \
+                                (time.time() - _last) >= ROUTER_IDLE_TIMEOUT:
+                            raise socket.timeout("router idle")
+                        continue
+                raw = resp.readline()
+                if not raw:
+                    break
+                _last = time.time()
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
                     continue
@@ -1144,6 +1171,11 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=Non
                         answer.append(clean)
                         on_delta("answer", clean)
     except Exception:
+        # JAG-197: an abort must never enter the blocking non-streaming fallback.
+        # That fallback re-issues the WHOLE generation, ignores Stop, and can hold
+        # the run — and a single-slot router — hostage for the full timeout.
+        if cancel is not None and cancel():
+            return "".join(answer), "".join(think)
         if answer or think:
             return "".join(answer), "".join(think)
         # non-streaming fallback
@@ -1703,15 +1735,18 @@ def extract_actions(text):
     return _iter_json_objects(text or "")
 
 
-def start_run_graph(run_id, goal, session_id=None, model=None, on_event=None):
+def start_run_graph(run_id, goal, session_id=None, model=None, on_event=None,
+                    cancel=None):
     """v0.6 — first action of a run: model-generated write_todos → live graph.
 
     The graph is bound to run_id + session_id and every node lands on the feed as
-    a `graph.node.added` event the moment the model emits it.
+    a `graph.node.added` event the moment the model emits it. `cancel` (JAG-197)
+    makes the planner call abortable.
     """
     try:
         return taskgraph.generate_from_model(run_id, goal, session_id=session_id,
-                                             model=model, on_event=on_event)
+                                             model=model, on_event=on_event,
+                                             cancel=cancel)
     except Exception as e:  # noqa: BLE001 — graph must never break the run
         publish("graph.error", run=run_id, error=str(e))
         return taskgraph.ensure(run_id, session_id, goal), []
@@ -3679,10 +3714,15 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
                 # Skipped for one-liners (greetings/chit-chat) where a task list
                 # would be noise.
                 _g = taskgraph.load(gkey)
-                if (not _g or not taskgraph.plan_nodes(_g)) and (autonomous or
-                                                                 len(str(message).split()) >= 4):
+                # JAG-197: never spawn a planner model call for an ABORTED turn —
+                # it ignores Stop and pins the session in _ACTIVE_CHAT (the turn
+                # looked hung). The planner call is also made abortable.
+                if (not _g or not taskgraph.plan_nodes(_g)) and \
+                        not _is_aborted(sess["id"]) and \
+                        (autonomous or len(str(message).split()) >= 4):
                     start_run_graph(gkey, message, gkey, routing.pick("planner"),
-                                    on_event=_emit)
+                                    on_event=_emit,
+                                    cancel=(lambda: _is_aborted(sess["id"])))
                 # JAG-63: do NOT finalize the task list at the end of every
                 # message — that forced every open node to 'done' and is exactly
                 # why the list could never persist. Nodes close only with real

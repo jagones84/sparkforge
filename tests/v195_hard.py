@@ -187,5 +187,114 @@ check("G5 _missing does NOT drop a re-used label from an old plan",
       len(taskgraph._missing(gg, [{"label": "old A"}])) == 1, "")
 
 
+# ---- H: _router_stream honours cancel while the router is SILENT (JAG-197) --
+# A silent upstream used to block the read with no cancel check, so Stop did
+# nothing until ROUTER_IDLE_TIMEOUT elapsed (turn hung, router starved).
+import socket as _socket  # noqa: E402
+import time as _time  # noqa: E402
+
+_real_open = _srv._open_with_retry
+_real_idle = _srv.ROUTER_IDLE_TIMEOUT
+
+
+class _SilentResp:
+    """select() sees no data; readline() must therefore never be reached."""
+
+    def __init__(self, sock):
+        self._sock = sock
+
+        class _Fp:
+            raw = self
+            _sock = sock
+
+            def settimeout(self, _t):
+                return None
+
+        self.fp = _Fp()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def readline(self):
+        raise AssertionError("readline called while the stream is silent")
+
+
+_sock_stream, _sock_peer = _socket.socketpair()  # peer never writes -> silent
+_srv._open_with_retry = lambda req, timeout: _SilentResp(_sock_stream)
+_srv.ROUTER_IDLE_TIMEOUT = 30.0
+_cancel = {"flag": False}
+_timer = threading.Timer(1.0, lambda: _cancel.__setitem__("flag", True))
+_t0 = _time.time()
+_timer.start()
+try:
+    _srv._router_stream([{"role": "user", "content": "x"}], "m",
+                        lambda ch, t: None, timeout=30,
+                        cancel=lambda: _cancel["flag"])
+    _elapsed = _time.time() - _t0
+finally:
+    _timer.cancel()
+    _srv._open_with_retry = _real_open
+    _srv.ROUTER_IDLE_TIMEOUT = _real_idle
+    _sock_stream.close()
+    _sock_peer.close()
+check("H1 cancel breaks a SILENT router stream fast (<5s; idle budget 30s)",
+      _elapsed < 5.0, "elapsed=%.2fs" % _elapsed)
+
+
+# H2: an abort must NOT enter the blocking non-streaming fallback -----------------
+_calls = {"n": 0}
+
+
+def _open_dies(req, timeout):
+    _calls["n"] += 1
+    raise RuntimeError("router down")
+
+
+_srv._open_with_retry = _open_dies
+try:
+    _srv._router_stream([{"role": "user", "content": "x"}], "m",
+                        lambda ch, t: None, timeout=5, cancel=lambda: True)
+finally:
+    _srv._open_with_retry = _real_open
+check("H2 abort does NOT enter the blocking non-streaming fallback",
+      _calls["n"] == 1, "open_calls=%d" % _calls["n"])
+
+
+# ---- I: the planner model call is abortable (JAG-197) ----------------------
+# Stop during planning used to be ignored: the planner ran _router_stream with no
+# cancel, so the turn hung and pinned the session in _ACTIVE_CHAT.
+_pcalls = {"n": 0, "cancel": None}
+
+
+def _fake_router(msgs, model, on_delta, timeout=300, usage=None, guard=None,
+                 cancel=None):
+    _pcalls["n"] += 1
+    _pcalls["cancel"] = cancel
+    return "", ""
+
+
+_real_rs = _srv._router_stream
+_srv._router_stream = _fake_router
+try:
+    taskgraph.ensure("v195-abort-plan", goal="write an essay")
+    _g2, _added = taskgraph.generate_from_model("v195-abort-plan", "write an essay",
+                                                cancel=lambda: True)
+    _after = taskgraph.load("v195-abort-plan") or {}
+    check("I1 aborting during planning adds NO nodes",
+          _added == [] and not taskgraph.plan_nodes(_after), "added=%s" % _added)
+    check("I2 the planner call receives a cancel callback",
+          callable(_pcalls["cancel"]), "cancel=%r" % (_pcalls["cancel"],))
+    _n_before = _pcalls["n"]
+    taskgraph.generate_from_model("v195-abort-plan", "write an essay",
+                                  cancel=lambda: False)
+    check("I3 a non-aborted planner call still runs (cancel plumbed)",
+          _pcalls["n"] == _n_before + 1, "calls=%d" % _pcalls["n"])
+finally:
+    _srv._router_stream = _real_rs
+
+
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)

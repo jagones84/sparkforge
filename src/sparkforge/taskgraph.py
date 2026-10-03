@@ -611,12 +611,17 @@ def _missing(graph, todos):
     return out
 
 
-def generate_from_model(run_id, goal, session_id=None, model=None, on_event=None):
+def generate_from_model(run_id, goal, session_id=None, model=None, on_event=None,
+                        cancel=None):
     """First action of the run: ask the model for a `write_todos` call.
 
     Streams the reply and adds each node to the graph as soon as its line is
     complete, publishing `graph.node.added` live. Returns (graph, added_nodes).
     If the graph already has nodes the first action already ran → no-op.
+
+    `cancel` (JAG-197) makes the planner model call abortable: without it a Stop
+    during planning was ignored and the turn hung (the session stayed pinned in
+    _ACTIVE_CHAT) until the router timeout.
     """
     from . import server as srv
     graph = ensure(run_id, session_id=session_id, goal=goal)
@@ -642,7 +647,10 @@ def generate_from_model(run_id, goal, session_id=None, model=None, on_event=None
         except Exception:  # noqa: BLE001
             pass
 
-    answer, _think = srv._router_stream(msgs, m, on_delta)
+    answer, _think = srv._router_stream(msgs, m, on_delta, cancel=cancel)
+    if cancel is not None and cancel():
+        # JAG-197: the run was aborted mid-planning — add nothing.
+        return graph, []
     if not stream.got:  # no deltas (non-streaming path) → consume the answer once
         stream.feed(answer)
     stream.flush()
