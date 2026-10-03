@@ -101,7 +101,7 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   archivia solo se la suite esterna è verde (il `check.py` locale non basta più).
   Spec `docs/specs/2026-10-04-heldout-verifier-gate-design.md`, piano `docs/plans/`.
   Suite `tests/v205_heldout_gate.py` (13/13) nel gate → battery **7/7 GREEN**.
-  Opt-out esplicito `SPARKFORGE_REQUIRE_HELDOUT=0` solo per dev. Commit `______`.
+  Opt-out esplicito `SPARKFORGE_REQUIRE_HELDOUT=0` solo per dev. Commit `5d265b9`.
   *Nota:* `tests/legacy/v148_selfevolve2.py` era GIA' stale (apre `api_v02.py` nella
   root, ora in `src/sparkforge/`) — pre-esistente, non nel gate.
 
