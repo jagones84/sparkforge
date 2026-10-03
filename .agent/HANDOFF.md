@@ -123,13 +123,26 @@ Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 19/19 → **5/5 GREEN**
 
 ## 3. PROSSIMO PASSO IMMEDIATO
 
-Dopo aver scritto questo handoff:
-1. Ricerca web (max 4 fonti per query) su: (a) skills loading/trigger in Claude
-   Code / Cursor / OpenHands / SWE-agent; (b) MCP tool discovery; (c) problemi
-   harness (long-horizon divergence, stall, loops).
-2. Scrivere un doc compatto in `docs/research/` con i findings + confronto.
-3. Test consapevolezza skills/tools (`tests/v198_awareness.py` o simile).
-4. Bug hunt frontier.
+Fatto in questa sessione (tutti i punti 0-5 avviati):
+1. Ricerca web harness/skills/MCP/failure-modes → doc in `docs/research/`.
+2. `tests/v198_skills_tools_awareness.py` (19/19) + `skills{action:"search"}`.
+3. Test live `tests/live/` (v199 endpoint sweep 51/51, v200 7/7, v202 4/4).
+4. Bug trovato e risolto: **JAG-201** (concorrenza stessa sessione).
+
+### Prossimi bug-hunt frontier (NON ancora fatti)
+- **Steer** durante un turno (`/api/chat/steer`) → il modello lo applica al confine?
+- **Abort** durante un turno AGENTICO con tool (non solo risposta semplice).
+- **DELETE sessione mentre un turno gira** → worker orfano? (noto: `DELETE` non
+  abortisce un turno attivo).
+- **Ricarica (reload) fidelity** dopo un turno reale con tool-cards/inject.
+- **Compaction** (`/api/context/compact`) → preserva task list + reply?
+- **`/api/agent/run`** concorrente + `/api/agent/control` abort.
+- Confronto con benchmark ufficiali (SWE-Bench-style) sugli endpoint, ma corti.
+
+### Backlog RDD (da `docs/research/...our-niche.md`)
+- Schemi MCP differiti sopra ~50 tool.
+- Step auditor read-only (LongHorizon Manage-Execute-Audit).
+- Metrica goal-drift (GD_actions/GD_inaction) nei runmetrics.
 
 ---
 
