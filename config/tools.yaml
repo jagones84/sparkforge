@@ -47,6 +47,15 @@ verifier:
   timeout_secs: 120         # timeout del check
   paths: []                 # se non vuoto, verifica solo i path che contengono uno di questi
 
+# ---- best-of-N + rank (JAG-132) ---------------------------------------------
+# Test-time compute: per uno step non banale campiona N candidati e sceglie il
+# migliore con il ranker deterministico (prm.rank_text), invece del primo.
+# n: 1 = disattivato (comportamento attuale, nessun overhead).
+bestofn:
+  enabled: false
+  n: 1
+  min_score: 0.0            # se il migliore resta sotto questa soglia -> nessuna scelta
+
 # ---- tool registry -----------------------------------------------------------
 tools:
 

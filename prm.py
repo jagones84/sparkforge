@@ -88,3 +88,81 @@ def feedback_text(issues):
         return ""
     return ("PROCESS FEEDBACK (inefficiencies): "
             + "; ".join("- %s" % i["label"] for i in issues))
+
+
+# ------------------------------------------------------------------ ranking --
+# JAG-132: deterministic ranker for best-of-N. Scores a CANDIDATE reply (text),
+# not a trajectory: used to pick the best of N samples without a model call.
+
+_ACTION_KEYS = ("action", "tool", "goal", "todos", "tasks")
+_ANNOUNCE = ("procedo", "i'll", "i will", "let me", "carico", "now i", "adesso ",
+             "sto per", "i'm going to", "let's ")
+
+
+def _extract_json_obj(text):
+    """Best-effort: the first balanced {...} object in `text`, or None."""
+    if not text:
+        return None
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth, in_str, esc = 0, False, False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    obj = json.loads(text[start:i + 1])
+                except ValueError:
+                    return None
+                return obj if isinstance(obj, dict) else None
+    return None
+
+
+def rank_text(text):
+    """Deterministic quality score in [0,1] for a candidate reply.
+
+    Rewards a valid harness action / informative concrete prose; penalises
+    malformed JSON and announcement-only replies (which look like work but are
+    not). No model call — cheap, so it can rank N candidates in a loop.
+    """
+    t = (text or "").strip()
+    if not t:
+        return 0.0
+    score = 0.5
+    obj = _extract_json_obj(t)
+    # a truncated JSON tool-call has no closing brace, so detect intent too
+    looks_json = t.startswith(("{", "[")) or '"action"' in t or '"tool"' in t
+    if obj is not None and any(k in obj for k in _ACTION_KEYS):
+        score += 0.4                      # a real, parseable harness action
+    elif looks_json:
+        score -= 0.4                      # emitted JSON that did not parse
+    low = t.lower()
+    if not (obj is not None and any(k in obj for k in _ACTION_KEYS)):
+        if any(a in low for a in _ANNOUNCE) and len(t) < 240:
+            score -= 0.3                  # announced work without doing it
+    for marker in ("```", "python3", "pytest", "git ", "def ", "curl ", "npm "):
+        if marker in low:
+            score += 0.1
+            break
+    score += min(len(t) / 4000.0, 0.2)    # prefer informative, substantive replies
+    return round(max(0.0, min(1.0, score)), 3)
+
+
+def rank(candidates):
+    """Rank a list of candidate replies: [(text, score)] sorted best-first."""
+    items = [(x, rank_text(x)) for x in (candidates or [])]
+    return sorted(items, key=lambda kv: kv[1], reverse=True)

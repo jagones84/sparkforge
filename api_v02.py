@@ -673,6 +673,7 @@ def handle(handler, method, path, qs, body):
                                      "policy": registry.load_config().get("approvals") or {},
                                      "runtime": registry.load_config().get("runtime") or {},
                                      "verifier": registry.load_config().get("verifier") or {},
+                                     "bestofn": registry.load_config().get("bestofn") or {},
                                      "approvals": approvals.stats()})
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
@@ -1090,6 +1091,20 @@ def update_policy(body):
         registry.load_config(reload=True)
         _publish("tools.update", verifier=dict(v))
         return {"ok": True, "tools": registry.catalog(), "verifier": dict(v)}
+    # JAG-132: best-of-N + rank (enabled / n / min_score)
+    if isinstance(body.get("bestofn"), dict):
+        b = cfg.setdefault("bestofn", {})
+        src = body["bestofn"]
+        if "enabled" in src:
+            b["enabled"] = bool(src["enabled"])
+        if src.get("n") is not None:
+            b["n"] = max(1, min(int(src["n"]), 16))
+        if src.get("min_score") is not None:
+            b["min_score"] = float(src["min_score"])
+        registry.save_config(cfg)
+        registry.load_config(reload=True)
+        _publish("tools.update", bestofn=dict(b))
+        return {"ok": True, "tools": registry.catalog(), "bestofn": dict(b)}
     name = body.get("tool") or body.get("name")
     if not name:
         return {"error": "tool required", "tools": registry.catalog()}

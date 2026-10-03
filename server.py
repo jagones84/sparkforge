@@ -1949,6 +1949,31 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             final_answer, think = (answer or "⏹ Interrotto dall'utente."), think
             _kg_stop_reason = "user_stop"
             break
+        # JAG-132: best-of-N adattivo. Solo quando il primo campione NON e' usabile
+        # (JSON di tool-call malformato) si spendono altri campioni e si sceglie il
+        # migliore col ranker deterministico (prm.rank_text). n=1 -> zero overhead.
+        try:
+            import bestofn as _bn
+            _bN = _bn.n_of()
+        except Exception:  # noqa: BLE001
+            _bN = 1
+        if _bN > 1 and _looks_like_json_action(answer):
+            _cands = [answer]
+            for _ in range(_bN - 1):
+                try:
+                    _a2, _t2, _m2 = stream_with_fallback(
+                        msgs, model, "chat", lambda ch, t: None,
+                        usage=chat_usage, cancel=_abort_now)
+                except Exception:  # noqa: BLE001
+                    break
+                _cands.append(_a2)
+                if (_a2 or "").strip() and not _looks_like_json_action(_a2):
+                    break  # a usable candidate already exists: stop spending compute
+            _best, _scores = _bn.choose(_cands)
+            if _best is not None and _best != answer:
+                on_event("bestofn.chosen", session=sess["id"], n=len(_cands),
+                         scores=[round(s, 3) for _, s in _scores])
+                answer = _best
         act = extract_json(answer)
         if isinstance(act, dict) and act.get("action") == "write_todos":
             n = _apply_chat_todos(sess, act, on_event)

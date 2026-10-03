@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
     "approvals": {"timeout_secs": 300},
     "runtime": {},
     "verifier": {},
+    "bestofn": {},
     "tools": {},
 }
 
@@ -218,7 +219,7 @@ def _merge_into(cfg, data):
     """Deep-merge a raw config dict into `cfg` (tools merge per-tool, key by key)."""
     if not isinstance(data, dict):
         return
-    for key in ("sandbox", "approvals", "runtime", "verifier"):
+    for key in ("sandbox", "approvals", "runtime", "verifier", "bestofn"):
         if isinstance(data.get(key), dict):
             cfg[key].update(data[key])
     for tname, tentry in (data.get("tools") or {}).items():
@@ -298,7 +299,7 @@ def _diff_overlay(cfg, base_data):
             tools_diff[tname] = d
     if tools_diff:
         out["tools"] = tools_diff
-    for key in ("sandbox", "approvals", "runtime", "verifier"):
+    for key in ("sandbox", "approvals", "runtime", "verifier", "bestofn"):
         e = eff.get(key) or {}
         d = {k: v for k, v in (cfg.get(key) or {}).items() if e.get(k) != v}
         if d:
