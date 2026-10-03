@@ -117,7 +117,8 @@ def ensure(key, session_id=None, goal=None):
         g = load(key)
         if g is None:
             g = {"key": key, "run_id": key, "session_id": session_id, "goal": goal,
-                 "nodes": [], "created": round(time.time(), 3),
+                 "nodes": [], "plan": 0,
+                 "created": round(time.time(), 3),
                  "updated": round(time.time(), 3), "generated": False}
             save(g)
         else:
@@ -127,6 +128,9 @@ def ensure(key, session_id=None, goal=None):
                 changed = True
             if not g.get("run_id"):
                 g["run_id"] = key
+                changed = True
+            if "plan" not in g:
+                g["plan"] = 0
                 changed = True
             if session_id and g.get("session_id") != session_id:
                 g["session_id"] = session_id
@@ -154,15 +158,46 @@ def reset(key):
     return {"reset": True, "key": key, "archived": os.path.basename(archived)}
 
 
+def begin_plan(graph):
+    """JAG-194: start a NEW task plan on the SAME session graph (no hard reset).
+
+    A finished task used to `reset` the graph (file archived → node ids restarted
+    at n1). The transcript's old cards still carried those ids, so after a reload
+    they resolved to the NEW nodes (wrong labels) or nested under the wrong step.
+    Instead we KEEP every node — ids stay unique for the whole session — and bump
+    `plan`; the model prompt + the panel focus on the current plan while the
+    transcript keeps its history.
+    """
+    with GRAPH_LOCK:
+        graph["plan"] = int(graph.get("plan", 0)) + 1
+        graph["generated"] = False
+        save(graph)
+        return graph["plan"]
+
+
+def plan_nodes(graph):
+    """Nodes of the CURRENT plan (all nodes when none is tagged / plan 0)."""
+    if not graph:
+        return []
+    cur = graph.get("plan", 0)
+    return [n for n in graph.get("nodes", []) if n.get("plan", 0) == cur]
+
+
 def render_todos(graph, limit=12):
-    """Compact text block of the persistent task list, for prompt injection."""
+    """Compact text block of the persistent task list, for prompt injection.
+
+    JAG-194: only the CURRENT plan's nodes are shown — old, finished plans stay in
+    the graph (so the transcript keeps resolving their ids) but must not be
+    re-fed to the model as if they were still to do.
+    """
     if not graph or not graph.get("nodes"):
         return ""
-    c = counts(graph)
-    open_n = c.get("todo", 0) + c.get("doing", 0) + c.get("blocked", 0)
+    nodes = plan_nodes(graph) or graph.get("nodes", [])
+    open_n = sum(1 for n in nodes
+                 if n.get("status") in ("todo", "doing", "blocked"))
     lines = ["TASK LIST (persistent — this is YOUR todo list; it survives "
-             "compaction and restarts; %d open / %d total):" % (open_n, len(graph["nodes"]))]
-    for n in graph["nodes"][:limit]:
+             "compaction and restarts; %d open / %d total):" % (open_n, len(nodes))]
+    for n in nodes[:limit]:
         mark = {"todo": "[ ]", "doing": "[>]", "done": "[x]",
                 "blocked": "[!]", "cancelled": "[-]"}.get(n.get("status"), "[ ]")
         indent = "    " if n.get("parent") else "  "
@@ -250,6 +285,7 @@ def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None
         raise ValueError("evidence required for a node in status 'done'")
     node = {"id": node_id or _next_id(graph), "label": label, "status": status,
             "deps": deps, "parent": str(parent) if parent else None, "evidence": ev,
+            "plan": graph.get("plan", 0),
             "source": source, "child_run_id": child_run_id,
             "created": round(time.time(), 3), "updated": round(time.time(), 3)}
     with GRAPH_LOCK:

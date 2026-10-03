@@ -2530,8 +2530,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             _g = taskgraph.load(sess["id"]) or {}
         except Exception:  # noqa: BLE001
             return None
+        # JAG-194: only the CURRENT plan — an abandoned open node from an old plan
+        # must not capture a card/reply that belongs to the new task.
         for _st in ("doing", "todo", "blocked"):
-            for _n in _g.get("nodes", []):
+            for _n in taskgraph.plan_nodes(_g):
                 if _n.get("status") == _st:
                     return _n.get("id")
         return None
@@ -3651,7 +3653,12 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
                 gkey = sess["id"]
                 _existing = taskgraph.load(gkey)
                 if _existing and taskgraph.all_done(_existing):
-                    taskgraph.reset(gkey)  # previous task finished → new task
+                    # JAG-194: a finished task starts a NEW plan. We bump `plan`
+                    # instead of hard-resetting the graph: keeping the old nodes
+                    # (with their unique ids) is what lets the transcript's old
+                    # cards resolve to the right node on reload instead of a
+                    # relabelled/reused id.
+                    taskgraph.begin_plan(_existing)
                 chat_once(sess, message, target, on_delta, trace=trace, on_event=_emit,
                           autonomous=autonomous)
                 # JAG-76: guarantee a plan. The model normally authors the list
@@ -4430,6 +4437,10 @@ class Handler(BaseHTTPRequestHandler):
                 # `/api/chat/stream`), so every client that binds the panel to the
                 # session finds it. Keying it by the ephemeral trace id made the
                 # two chat paths disagree and the panel look empty.
+                # JAG-194: a finished task opens a NEW plan (keep the old nodes).
+                _ex = taskgraph.load(sess["id"])
+                if _ex and taskgraph.all_done(_ex):
+                    taskgraph.begin_plan(_ex)
                 start_run_graph(sess["id"], message, sess["id"], routing.pick("planner"))
                 reply, model = chat_once(sess, message, body.get("model"), trace=trace,
                                          autonomous=(body.get("mode") or qs.get("mode")) == "goal")

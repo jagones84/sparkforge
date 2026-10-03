@@ -251,5 +251,35 @@ check("G3 card 'node' is an id string or None, never a dict (JAG-192)",
       _node_types <= {"str", "NoneType"}, "types=%s" % _node_types)
 
 
+# ---- scenario H: a new task keeps the old plan's nodes + fresh ids (JAG-194) --
+# A finished task used to hard-`reset` the graph (nodes deleted, ids restarted at
+# n1), so the transcript's old cards resolved to the NEW nodes (wrong labels).
+# A new plan must bump `plan`, KEEP the old nodes, and number new ones
+# monotonically; render_todos must show only the current plan.
+from sparkforge import taskgraph as _tg  # noqa: E402
+_gk = "v183h"
+_g = _tg.ensure(_gk)
+_a = _tg.add_node(_g, "old step one", status="done", evidence="did it")
+_b = _tg.add_node(_g, "old step two", status="done", evidence="did it")
+check("H1 old plan nodes tagged plan 0",
+      _a.get("plan") == 0 and _b.get("plan") == 0,
+      "a=%s b=%s" % (_a.get("plan"), _b.get("plan")))
+check("H2 all_done on the finished plan", _tg.all_done(_g) is True)
+_plan = _tg.begin_plan(_g)
+_g = _tg.load(_gk)
+_c = _tg.add_node(_g, "new step", status="todo")
+check("H3 new plan KEEPS the old nodes (no hard reset)",
+      len(_g.get("nodes", [])) == 3, "nodes=%d" % len(_g.get("nodes", [])))
+check("H4 the new node gets a FRESH id (old ids not reused)",
+      _c["id"] == "n3", "id=%s" % _c["id"])
+check("H5 the new node is tagged with the new plan",
+      _c.get("plan") == _plan and _plan == 1,
+      "plan=%s node_plan=%s" % (_plan, _c.get("plan")))
+_rt = _tg.render_todos(_g)
+check("H6 render_todos shows ONLY the current plan",
+      "new step" in _rt and "old step one" not in _rt,
+      _rt.splitlines()[0] if _rt else "")
+
+
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)

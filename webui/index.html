@@ -457,6 +457,11 @@
     font-family: monospace; font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: 10px;
     border: 1px solid var(--line); background: #0b0f18; color: var(--txt); }
   /* JAG-153: assistant replies are rendered markdown (sanitized) + HTML artifact preview */
+  /* JAG-193: reset `white-space: pre-wrap` (inherited from .bubble) on the markdown
+   * bubble. marked emits a newline between block tags (`</p>\n<ol>\n<li>…`); with
+   * pre-wrap those literal newlines rendered as blank lines, so every reply looked
+   * triple-spaced. Plain user bubbles keep pre-wrap; only the md bubble collapses. */
+  .bubble.md-content { white-space: normal; line-height: 1.45; }
   .bubble.md-content p { margin: 0 0 4px; }
   .bubble.md-content > :last-child { margin-bottom: 0; }
   .bubble.md-content h1, .bubble.md-content h2, .bubble.md-content h3 { margin: 7px 0 3px; line-height: 1.25; }
@@ -1498,6 +1503,9 @@ async function loadHistory() {
   try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
   const nodes = (g && g.nodes) || [];
   if (nodes.length) graph = g;
+  // JAG-194: include every plan's nodes in byId so the transcript still resolves
+  // cards that referenced an older plan's ids; the ACTIVE node is current-plan only.
+  const _pnodes = planNodes(g);
   const byId = {}; nodes.forEach(n => { byId[n.id] = n; });
   const drawn = {};
   const ensureNode = (nid) => {
@@ -1560,7 +1568,8 @@ async function loadHistory() {
   // referenced (drawn by ensureNode above) plus the currently ACTIVE step are kept;
   // dumping every unreferenced node turned the chat into a wall of empty bars. The
   // full plan (including steps never touched) lives in the Plan panel.
-  const _activeNode = nodes.find(n => n.status === "doing" || n.status === "blocked");
+  const _src = _pnodes.length ? _pnodes : nodes;
+  const _activeNode = _src.find(n => n.status === "doing" || n.status === "blocked");
   if (_activeNode && !drawn[_activeNode.id]) { chatNodeAdd(_activeNode); drawn[_activeNode.id] = 1; }
   // JAG-190: a refresh must never HIDE the turn inside a collapsed step. A node
   // can be created by a REPLAYED feed event carrying a stale 'todo' status and
@@ -1574,7 +1583,7 @@ async function loadHistory() {
   });
   if (_activeNode && _chatNodes[_activeNode.id]) _chatNodes[_activeNode.id].open = true;
   // JAG-168: if a 'doing' node exists the turn may still be streaming — nest there
-  const _doing = nodes.find(n => n.status === "doing");
+  const _doing = _src.find(n => n.status === "doing");
   if (_doing && _chatNodes[_doing.id]) _activeScope = _chatNodes[_doing.id].querySelector(".tc-kids");
   linkifyAll();
   // JAG-127: baseline the edit journal so the next turn reports only its own diff.
@@ -1723,6 +1732,12 @@ function applyGraphEvent(d) {
   graph.node_count = graph.nodes.length; graph.counts = countNodes(graph.nodes);
   renderGraph();
 }
+function planNodes(g) {
+  // JAG-194: nodes of the CURRENT plan (graph.plan); untagged nodes belong to
+  // plan 0. Keeping every plan's nodes lets the transcript resolve old card ids.
+  const cur = (g && g.plan != null) ? g.plan : 0;
+  return ((g && g.nodes) || []).filter(n => (n.plan == null ? 0 : n.plan) === cur);
+}
 function renderGraph() {
   const box = $("tasks"); box.innerHTML = ""; $("taskDetail").innerHTML = "";
   const _jid = curJob ? ("J" + curJob + " · ") : "";
@@ -1731,14 +1746,18 @@ function renderGraph() {
     $("graphHead").textContent = _jid + "run graph: —"; $("taskCount").textContent = "";
     return;
   }
-  const c = graph.counts || countNodes(graph.nodes); graph.counts = c;
+  // JAG-194: the graph keeps EVERY plan's nodes (so the transcript can resolve
+  // old card ids on reload); the panel shows only the CURRENT plan.
+  const _pn = planNodes(graph);
+  const _nodes = _pn.length ? _pn : (graph.nodes || []);
+  const c = countNodes(_nodes);
   $("graphHead").textContent = _jid + "run " + (graph.run_id || "").slice(0, 8) + " · " +
-    (graph.node_count || 0) + " nodes · " + (c.done || 0) + " done" +
+    _nodes.length + " nodes · " + (c.done || 0) + " done" +
     (graph.goal ? " · " + graph.goal.slice(0, 40) : "");
-  $("taskCount").textContent = (c.done || 0) + "/" + (graph.node_count || 0);
-  box.innerHTML = taskTree(graph.nodes);
+  $("taskCount").textContent = (c.done || 0) + "/" + _nodes.length;
+  box.innerHTML = taskTree(_nodes);
   box.querySelectorAll(".task").forEach(el => {
-    const n = (graph.nodes || []).find(x => String(x.id) === el.dataset.id);
+    const n = _nodes.find(x => String(x.id) === el.dataset.id);
     el.onclick = () => n && showNodeDetail(n);
     if (n && n.id === graphFresh) el.classList.add("fresh");
   });
