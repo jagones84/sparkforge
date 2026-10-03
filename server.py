@@ -392,6 +392,76 @@ def _tool_event(tool, ok, args=None, output="", **extra):
     return ev
 
 
+# JAG-161: the repo-level .env (gitignored) is the canonical place to SET a key
+# from the WebUI. It is already in providers' default env_files, so a value
+# written here is picked up by providers and MCP `${VAR}` references.
+ENV_FILE = os.path.join(REPO, ".env")
+
+# Env vars the harness knows about even before a provider or MCP client
+# references them, so the Keys panel can offer to set them.
+KNOWN_ENV_KEYS = {
+    "GITHUB_TOKEN": "tool:github",
+}
+
+
+def _env_file_upsert(name, value):
+    """Write/update `NAME=VALUE` in the repo .env, preserving every other line.
+
+    An empty `value` removes the line. The file is (re)created 0600 and is
+    gitignored, so secrets never reach the repository.
+    """
+    lines = []
+    if os.path.isfile(ENV_FILE):
+        with open(ENV_FILE, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    prefix = name + "="
+    out, found = [], False
+    for ln in lines:
+        if ln.strip().startswith(prefix):
+            found = True
+            if value:
+                out.append("%s=%s" % (name, value))
+            continue
+        out.append(ln)
+    if value and not found:
+        out.append("%s=%s" % (name, value))
+    with open(ENV_FILE, "w", encoding="utf-8") as f:
+        f.write("\n".join(out).strip("\n") + "\n")
+    try:
+        os.chmod(ENV_FILE, 0o600)
+    except Exception:  # noqa: BLE001 — best effort on exotic filesystems
+        pass
+
+
+def set_key(name, value):
+    """POST /api/keys — set (or clear) an env var, persisted to the repo .env.
+
+    Returns the refreshed keys_status() so the UI re-renders in one round-trip.
+    """
+    import re as _re
+    name = (name or "").strip()
+    if not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        return {"error": "invalid variable name"}
+    value = "" if value is None else str(value)
+    try:
+        _env_file_upsert(name, value)
+    except Exception as e:  # noqa: BLE001
+        return {"error": "cannot write %s: %s" % (ENV_FILE, e)}
+    if value:
+        os.environ[name] = value
+    else:
+        os.environ.pop(name, None)
+    try:
+        import providers
+        providers.load_env(reload=True)
+    except Exception:  # noqa: BLE001
+        pass
+    out = keys_status()
+    out["ok"] = True
+    out["env_file"] = ENV_FILE
+    return out
+
+
 def keys_status():
     """JAG-113: which env-var NAMES the harness needs and whether they are set.
 
@@ -420,6 +490,18 @@ def keys_status():
                     _bump(env, "mcp:%s" % name)
     except Exception:  # noqa: BLE001
         pass
+    try:
+        # JAG-161: any NAME already present in the repo .env is a known key too,
+        # so a value the user sets here shows up (and can be cleared) again.
+        if os.path.isfile(ENV_FILE):
+            for ln in open(ENV_FILE, encoding="utf-8"):
+                ln = ln.strip()
+                if ln and not ln.startswith("#") and "=" in ln:
+                    _bump(ln.split("=", 1)[0].strip(), "env:.env")
+    except Exception:  # noqa: BLE001
+        pass
+    for env, where in KNOWN_ENV_KEYS.items():
+        rows.setdefault(env, {"env": env, "where": [], "set": False})["where"].append(where)
     out = []
     for env in sorted(rows):
         r = rows[env]
@@ -427,7 +509,9 @@ def keys_status():
         r["set"] = bool(os.environ.get(env))
         out.append(r)
     return {"keys": out, "env_files": [".env", "~/.hermes/.env"],
-            "note": "I valori vivono in .env / ~/.hermes/.env (gitignorati), mai nel repo."}
+            "env_file": ENV_FILE,
+            "note": "Values are never in the repo: set them here and they are written "
+                    "to the gitignored .env. Providers and MCP reference a key by NAME only."}
 
 
 # --- JAG-51 session contract: no request without a persisted answer ---------

@@ -90,6 +90,19 @@ check("H5 loaders split: harness vs tools",
 check("H6 archify-based card restyle",
       ".hcard-hd" in html and ".hcard-hd .dot" in html and "--hc:" in html)
 
+# ---- K: keys settable + official GitHub MCP (JAG-161) ----
+srv2 = read("server.py")
+api2 = read("api_v02.py")
+gitignore = read(".gitignore")
+check("K1 Keys panel can SET a value", "function setKey" in html and 'api("POST", "/api/keys"' in html)
+check("K2 backend setter + route",
+      "def set_key" in srv2 and "_env_file_upsert" in srv2 and 'path == "/api/keys"' in api2)
+check("K3 GITHUB_TOKEN is a known key", '"GITHUB_TOKEN"' in srv2 and "KNOWN_ENV_KEYS" in srv2)
+check("K4 repo .env is gitignored", "\n.env\n" in gitignore or gitignore.startswith(".env"))
+check("K5 GitHub preset is the official remote server",
+      "https://api.githubcopilot.com/mcp/" in html and "${GITHUB_TOKEN}" in html
+      and "@modelcontextprotocol/server-github" not in html)
+
 # ---- L: live (optional) ----
 base = os.environ.get("SPARKFORGE_URL", "")
 tok = os.environ.get("SPARKFORGE_TOKEN", "")

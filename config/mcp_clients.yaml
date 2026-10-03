@@ -7,6 +7,7 @@
 # (Settings -> MCP -> "Edit mcp.json"), which writes the gitignored
 # config/mcp_clients.local.json in format {"mcpServers": {...}}.
 env_files:
+  - .env
   - ~/.hermes/.env
 
 clients: {}

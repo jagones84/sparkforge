@@ -997,6 +997,10 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200 if res.get("ok") else 400, res)
         if path == "/api/providers/reload":
             return _r(handler, 200, provider_reload())
+        if path == "/api/keys":
+            # JAG-161: set/clear an env var and persist it to the gitignored .env.
+            res = _srv().set_key(body.get("name"), body.get("value"))
+            return _r(handler, 200 if res.get("ok") else 400, res)
         if path == "/api/routing":
             _lazy('routing')
             return _r(handler, 200, _ROUTING.update(body))

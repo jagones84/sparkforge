@@ -603,17 +603,22 @@
         <div class="card">
           <div class="remaining" id="keysSummary">loading…</div>
           <div id="keysList" style="margin-top:8px"></div>
-          <div class="remaining" style="margin-top:8px">Values are NOT in the repo: put them in <code>.env</code> or <code>~/.hermes/.env</code> (gitignored). Providers and MCP reference the key by NAME only.</div>
+          <div class="remaining" id="keysFile" style="margin-top:8px">Values are never in the repo: set them here and they are written to the gitignored <code>.env</code>. Providers and MCP reference a key by NAME only.</div>
+        </div>
+        <h2>GitHub access</h2>
+        <div class="card">
+          <div class="remaining" style="margin-bottom:6px">The agent uses GitHub through the official <b>GitHub MCP server</b> (remote <code>https://api.githubcopilot.com/mcp/</code>). Create a fine-grained Personal Access Token (scopes: <code>repo</code>, <code>read:org</code>, optionally <code>workflow</code>), set it as <code>GITHUB_TOKEN</code> above, then add the server from <b>Settings → MCP → catalog</b>.</div>
+          <button class="ghost" onclick="openSettings('mcp')">open MCP settings</button>
         </div>
         <h2>API token</h2>
         <div class="card">
           <div style="display:flex;gap:6px;align-items:center">
             <input id="token-input" class="inp" type="password" placeholder="SPARKFORGE_TOKEN" style="flex:1;padding:6px 10px;font-size:12px">
-            <button class="ghost" id="tokenEye" onclick="revealToken()" title="mostra/nascondi">👁</button>
-            <button class="ghost" onclick="copyToken()" title="copia">⧉ copia</button>
+            <button class="ghost" id="tokenEye" onclick="revealToken()" title="show/hide">👁</button>
+            <button class="ghost" onclick="copyToken()" title="copy">⧉ copy</button>
             <button class="ghost" onclick="saveToken()">save</button>
           </div>
-          <div class="remaining" style="margin-top:6px">Salvato in <code>localStorage</code> (key <code>sf_token</code>). Mascherato di default; <b>👁</b> per vederlo, <b>⧉</b> per copiarlo.</div>
+          <div class="remaining" style="margin-top:6px">Stored in <code>localStorage</code> (key <code>sf_token</code>). Masked by default; <b>👁</b> to reveal, <b>⧉</b> to copy.</div>
         </div>
       </div>
       <section data-insp="approvals" class="insp-open">
@@ -1976,10 +1981,10 @@ const MCP_CATALOG = [
     args: ["-y", "@modelcontextprotocol/server-filesystem"],
     desc: "Read/write files in local folders",
     needs: "append the folder path to the args" },
-  { name: "github", transport: "stdio", command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-github"],
-    desc: "GitHub issues, PRs, repos and code",
-    needs: "paste GITHUB_TOKEN in the env field" },
+  { name: "github", transport: "http", url: "https://api.githubcopilot.com/mcp/",
+    headers: { Authorization: "Bearer ${GITHUB_TOKEN}" },
+    desc: "Official GitHub MCP server — issues, PRs, repos, Actions, code search",
+    needs: "set GITHUB_TOKEN in Settings > Keys first" },
   { name: "memory", transport: "stdio", command: "npx",
     args: ["-y", "@modelcontextprotocol/server-memory"],
     desc: "Persistent knowledge-graph memory (entities + relations)" },
@@ -2019,6 +2024,8 @@ function mcpPresetSnippet(p) {
   const s = (p.transport === "http")
     ? { url: p.url || "" }
     : { command: p.command || "", args: p.args || [] };
+  // JAG-161: remote presets (e.g. GitHub) carry auth headers with ${VAR} refs.
+  if (p.transport === "http" && p.headers) s.headers = p.headers;
   const obj = { mcpServers: {} }; obj.mcpServers[p.name] = s;
   return JSON.stringify(obj, null, 2);
 }
@@ -2409,18 +2416,25 @@ async function saveProvider() {
   $("provResult").textContent = r.error ? ("error: " + r.error) : ("saved: " + r.id);
   if (!r.error) loadProviders();
 }
-/* ---- keys (JAG-113): which env NAMES are needed and if they are set ---- */
+/* ---- keys (JAG-113/161): which env NAMES are needed, if set, and SET them ---- */
 async function loadKeys() {
   try {
     const d = await api("GET", "/api/keys");
     const rows = d.keys || [];
-    $("keysSummary").textContent = rows.length + " required keys · " +
+    $("keysSummary").textContent = rows.length + " keys · " +
       rows.filter(k => k.set).length + " set";
+    if (d.env_file && $("keysFile")) {
+      $("keysFile").innerHTML = "Values are never in the repo: they are written to " +
+        "<code>" + esc(d.env_file) + "</code> (gitignored). Providers and MCP reference a key by NAME only.";
+    }
     const box = $("keysList"); box.innerHTML = "";
+    if (!rows.length) { box.innerHTML = '<div class="remaining">no keys known</div>'; return; }
     rows.forEach(k => {
       const row = document.createElement("div");
       row.className = "card";
-      row.style.cssText = "padding:6px 8px;margin-bottom:6px;display:flex;gap:8px;align-items:center";
+      row.style.cssText = "padding:6px 8px;margin-bottom:6px";
+      const head = document.createElement("div");
+      head.style.cssText = "display:flex;gap:8px;align-items:center";
       const dot = document.createElement("span"); dot.textContent = k.set ? "🟢" : "🟠";
       const info = document.createElement("div"); info.style.cssText = "flex:1;min-width:0";
       const t = document.createElement("div"); t.style.fontWeight = "600"; t.textContent = k.env;
@@ -2429,11 +2443,35 @@ async function loadKeys() {
       info.append(t, sub);
       const st = document.createElement("span"); st.className = "remaining";
       st.textContent = k.set ? "set" : "missing";
-      row.append(dot, info, st);
+      head.append(dot, info, st);
+      const edit = document.createElement("div");
+      edit.style.cssText = "display:flex;gap:6px;align-items:center;margin-top:6px";
+      const inp = document.createElement("input");
+      inp.type = "password"; inp.className = "inp"; inp.placeholder = "new value…";
+      inp.style.cssText = "flex:1;padding:6px 10px;font-size:12px";
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") setKey(k.env, inp.value, saveBtn); });
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "ghost"; saveBtn.textContent = "set";
+      saveBtn.onclick = () => setKey(k.env, inp.value, saveBtn);
+      edit.append(inp, saveBtn);
+      if (k.set) {
+        const clr = document.createElement("button");
+        clr.className = "ghost"; clr.textContent = "clear";
+        clr.onclick = () => setKey(k.env, "", clr);
+        edit.append(clr);
+      }
+      row.append(head, edit);
       box.appendChild(row);
     });
-    if (!rows.length) box.innerHTML = '<div class="remaining">no required keys</div>';
   } catch (e) { $("keysSummary").textContent = "error: " + e; }
+}
+async function setKey(name, value, btn) {
+  const prev = btn.textContent; btn.textContent = "…";
+  try {
+    const r = await api("POST", "/api/keys", { name: name, value: value });
+    if (r.error) { btn.textContent = "err"; setTimeout(() => { btn.textContent = prev; }, 1200); return; }
+    loadKeys();
+  } catch (e) { btn.textContent = "err"; setTimeout(() => { btn.textContent = prev; }, 1200); }
 }
 /* ---- rules + workspace (JAG-114/115): global / project + per-session folder ---- */
 let _rulePathGlobal = null, _rulePathProject = null;
