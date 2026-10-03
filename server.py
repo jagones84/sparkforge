@@ -1629,7 +1629,11 @@ def graph_post(run_id, body):
 CHAT_TOOL_MAX_STEPS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_STEPS", "8"))
 # JAG-84: hard cap on TOTAL loop iterations (bookkeeping + retries included), so
 # that making plan/todo actions "free" can never spin the loop forever.
-CHAT_TOOL_MAX_ITERS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_ITERS", "16"))
+# JAG-164: the iters cap must NOT preempt the continuation loop — with the tool
+# budget now refilled per keepgoing round (<= keepgoing_max rounds, default 8)
+# the real governors are keepgoing.decide + the wall-clock budget; this is only a
+# runaway backstop.
+CHAT_TOOL_MAX_ITERS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_ITERS", "64"))
 # JAG-88 (harness layer L2 — context budgeting): observations above this many
 # chars are offloaded to a file instead of being flooded into the context (and
 # instead of the old silent 4000-char truncation that LOST the rest).
@@ -2149,8 +2153,52 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             _diff_level = _diff.estimate(_diff_signals(message, [], 0))["level"]
         except Exception:  # noqa: BLE001
             _diff_level = None
-    while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
+    while iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
+        # JAG-164: the tool budget is PER keepgoing round, not per turn. Before
+        # this the turn hard-stopped the moment `work_steps` hit `max_steps`
+        # (8 real tool calls) — the loop exited, the forced-final path produced a
+        # prose answer and the persistent todos stayed stuck in 'doing' (session
+        # 66c66e3c702d: 8 shells, answer "…scaffold incompleto", n2 never closed).
+        # Now, when the budget is spent with OPEN steps, the continuation loop
+        # decides: refill the budget and push the model to close every step with
+        # evidence, or stop for a typed reason (budget/no_progress/blocked).
+        if tool_ctx and work_steps >= max_steps:
+            _g = taskgraph.load(sess["id"]) or {}
+            _nodes = _g.get("nodes", [])
+            _open = [n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES]
+            _cur = _kg.state_hash(_nodes)
+            _kg_stale = (_kg_stale + 1) if (_kg_prev is not None and _cur == _kg_prev) else 0
+            _kg_override = None
+            if _diff is not None and _kg_base:
+                try:
+                    _kg_override = {"keepgoing_max": _diff.rounds_for(
+                        _kg_base, _diff_signals(message, used_tools, _kg_stale))}
+                except Exception:  # noqa: BLE001
+                    _kg_override = None
+            _dec = _kg.decide(open_nodes=len(_open), rounds=_kg_rounds, stale=_kg_stale,
+                              started=_kg_started, aborted=_is_aborted(sess["id"]),
+                              blocked=any(n.get("status") == "blocked" for n in _nodes),
+                              steer=has_steer(sess["id"]), override=_kg_override)
+            if not _dec["continue"]:
+                _kg_stop_reason = _dec["reason"]
+                on_event("plan.stopped", session=sess["id"], reason=_dec["reason"],
+                         open=len(_open), total=len(_nodes), rounds=_kg_rounds,
+                         difficulty=_diff_level, duration_s=round(time.time() - _kg_started, 1))
+                break
+            _kg_rounds += 1
+            _kg_prev = _cur
+            work_steps = 0  # grant another round of tool calls
+            on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
+                     open=len(_open), total=len(_nodes), difficulty=_diff_level)
+            msgs.append({"role": "user", "content": (
+                "Ti restano %d passo/i APERTI nella task list: NON fermarti. Per OGNI passo "
+                "aperto esegui l'azione con una tool call e poi marcalo 'done' con "
+                "update_todos + l'evidenza concreta (comando eseguito ed esito). Non "
+                "consegnare una risposta finale finche' l'ultimo passo non e' 'done' "
+                "(o ripianifica se non serve piu'). Lista attuale:\n%s"
+                % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))))})
+            continue
         # JAG-127b: inject any steering message typed while this turn was running.
         for _s in drain_steer(sess["id"]):
             msgs.append({"role": "user", "content":
