@@ -2138,6 +2138,11 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     # measured by the context indicator, so the number cannot drift from reality.
     tool_ctx = _tool_context()
     msgs, ctx_stats = assemble_turn(sess, message, tool_ctx, model, autonomous)
+    # JAG-172: everything appended to `msgs` from this index on is THIS turn's
+    # agentic history (tool calls, observations, nudges). It is persisted at the
+    # end of the turn so the model retains its own work across turns and the ctx
+    # meter reflects the real prompt (see the block before `append_message`).
+    _turn_base = len(msgs)
     if ctx_stats:
         # JAG-78: `on_event` (not `publish`), so the chat STREAM carries the live
         # prompt size and the app's ctx meter updates during the turn.
@@ -2634,6 +2639,23 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     "o lascia che continui." % (_done, len(_nodes))) if _nodes else "Fatto.")
         meta = {"model": model, "synthesised": True,
                 "reason": "model emitted JSON instead of a prose reply"}
+    # JAG-172: PERSIST the agentic history of this turn (tool calls, observations,
+    # nudges) into the transcript. Before, only the final assistant reply was
+    # stored, so every tool observation was discarded at the turn boundary: the
+    # model lost its own work between turns and the ctx meter measured a prompt
+    # that never grew (session test: 15 msgs / 5 KB vs 161 tool cards → a
+    # genuinely full context read as 2%). Marked `internal` so the UI keeps
+    # rendering these from tool_cards/injects (no duplicate bubbles) while
+    # `context_engine` still counts them and `_completion_body` filters the
+    # marker out before the provider call.
+    try:
+        _extra = [dict(_m, internal=True) for _m in msgs[_turn_base:]
+                  if isinstance(_m, dict) and _m.get("role") in ("user", "assistant")]
+        if _extra:
+            sess.setdefault("messages", []).extend(_extra)
+            save_session(sess)
+    except Exception:  # noqa: BLE001 — persistence must never break a turn
+        pass
     reply = append_message(sess, "assistant", content, reasoning=think.strip() or None,
                            meta=meta)
     try:

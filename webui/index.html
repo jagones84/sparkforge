@@ -1490,6 +1490,10 @@ async function loadHistory() {
   };
   (s.messages || []).forEach((m, i) => {
     drawAt(i);
+    // JAG-172: harness-internal history (tool calls / observations / nudges) is
+    // kept in the transcript for the MODEL, but the UI already renders it from
+    // tool_cards/injects — skip it here so a reload adds no duplicate bubbles.
+    if (m.internal) return;
     if (m.role === "user") { who("user", m.content); return; }
     // v1.6.3 (JAG-55): some models inline their chain-of-thought in `content`
     // as a trailing "think: …" tail. The reply must stay the primary text.
