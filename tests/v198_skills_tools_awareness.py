@@ -58,7 +58,10 @@ if sk:
     nm = sk[0]["name"]
     check("B3 prompt names installed skills", nm in sp, nm)
     check("B4 skills list carries name + description", "\u2014" in skills.skills_context(), "")
-check("B5 skills are capped (bounded context)", len(skills.skills_context(max_chars=200)) <= 260, "")
+check("B5 skills index is bounded (not a dump)", len(skills.skills_context(max_chars=200)) <= 320,
+      "len=%d" % len(skills.skills_context(max_chars=200)))
+check("B6 a truncated index points to search",
+      "search" in skills.skills_context(max_chars=200), "")
 
 # ---- C: the model is told to SCAN and LOAD a skill ----
 check("C1 policy tells the model to SCAN the list", "SCAN" in sp, "")
@@ -83,6 +86,16 @@ check("F4 the `skills` tool exposes action=search",
 bad = tools.execute("skills", {"action": "search"})
 check("F5 search without a query fails gracefully",
       isinstance(bad, dict) and bad.get("ok") is False, str(bad)[:80])
+
+# ---- G: prompt budget — no truncated dump, no disabled-tools wall (JAG-202) ----
+check("G1 composed system prompt is bounded (<17k chars)", len(sp) < 17000, "chars=%d" % len(sp))
+_idx = skills.skills_context(max_chars=2600)
+check("G2 the always-on skills index is bounded", len(_idx) <= 2760, "len=%d" % len(_idx))
+check("G3 the disabled-tools wall is compact",
+      bool([l for l in sp.splitlines() if "present but DISABLED" in l])
+      and len([l for l in sp.splitlines() if "present but DISABLED" in l][0]) < 400,
+      "footer_len=%s" % (len([l for l in sp.splitlines() if "present but DISABLED" in l][0])
+                         if [l for l in sp.splitlines() if "present but DISABLED" in l] else -1))
 
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)

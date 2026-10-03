@@ -76,14 +76,22 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   del worker. Test `tests/live/v202_concurrent_stream.py` (4/4). Commit `a08857d` +
   follow-up.
 
-### Test LIVE (richiedono il server up) — cartella `tests/live/`
-- `v199_endpoint_sweep.py` — batte tutti gli endpoint cheap: nessun 5xx, auth 401,
-  path ignoto 404, round-trip sessione (create/history/delete). 51/51.
-- `v200_concurrent_chat.py` — 2 turni concorrenti sulla stessa sessione: no hang,
-  no 5xx, entrambi persistiti. 7/7.
-- NON sono nel gate `battery.sh` (che è deterministico/isolato).
+- **JAG-202** Prompt budget: skills index (179) troncato 8000→2600 char + hint a
+  `search`; muro tool DISABLED ~900→183 char. Prompt composto 22035→16142 char
+  (~5.5k→4.0k token). Doc `docs/research/2026-10-04-system-prompt-review.md` +
+  `...-harness-rdd-agenda.md`. v198 23/23. (commit pendente)
 
-Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 19/19 → **5/5 GREEN**.
+### Memoria generica (Hindsight MCP)
+- Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
+  Hindsight (`retain`, bank `cccc-shared`): scritture atomiche con temp unico,
+  cancellazione cooperativa, read-modify-write nel lock, fallback che rispetta
+  cancel, handler HTTP graceful, progressive disclosure delle capability.
+
+### Test LIVE (richiedono il server up) — cartella `tests/live/`
+- `v199_endpoint_sweep.py` (51/51), `v200_concurrent_chat.py` (7/7),
+  `v202_concurrent_stream.py` (4/4). NON nel gate `battery.sh`.
+
+Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 23/23 → **5/5 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).

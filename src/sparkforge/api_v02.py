@@ -308,8 +308,12 @@ def tool_context():
         lines.append("  - %-9s(%s) approval=%s :: %s"
                      % (t["name"], props, t["approval"], t["description"]))
     if disabled:
-        lines.append("(present but DISABLED / not callable: %s — only the user can "
-                     "enable one in config/tools.yaml)" % ", ".join(disabled))
+        # JAG-202: keep this to ONE short line. Listing every disabled tool name
+        # was a ~900-char wall that drowned the callable tools and pushed the model
+        # toward an approval-gated gateway tool (the JAG-80 failure).
+        lines.append("(%d tool(s) present but DISABLED / not callable — e.g. %s … ; "
+                     "the user can enable one in config/tools.yaml)"
+                     % (len(disabled), ", ".join(disabled[:3])))
     return "\n".join(lines)
 
 

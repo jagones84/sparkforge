@@ -266,8 +266,10 @@ def skills_context(max_chars=2200):
     cats = {}
     for s in skills:
         cats.setdefault(s["category"], []).append(s)
-    lines = ["Skills (the `skills` tool loads one: "
-             '{"action":"read","name":"<name>"} \u2192 follow its instructions):']
+    lines = ["Skills: %d installed. The `skills` tool: "
+             '{"action":"read","name":"<name>"} loads one and you FOLLOW its '
+             'instructions; {"action":"search","query":"..."} finds one by keyword; '
+             '{"action":"list"} shows all. Index:"' % len(skills)]
     for cat in sorted(cats):
         lines.append("- %s:" % cat)
         for s in sorted(cats[cat], key=lambda x: x["name"]):
@@ -276,7 +278,10 @@ def skills_context(max_chars=2200):
                 d = d[:77].rstrip() + "\u2026"
             lines.append(("    %s \u2014 %s" % (s["name"], d)) if d else ("    %s" % s["name"]))
     out = "\n".join(lines)
-    return out if len(out) <= max_chars else out[:max_chars] + "\n…[truncated]"
+    if len(out) <= max_chars:
+        return out
+    return out[:max_chars] + \
+        '\n…[index truncated — find the rest with {"action":"search","query":"..."}]'
 
 
 _SKILL_STOP = {

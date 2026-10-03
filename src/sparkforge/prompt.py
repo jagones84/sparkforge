@@ -164,9 +164,12 @@ def _provider_rules(sess, ws, ctx):
 def _provider_skills(sess, ws, ctx):
     try:
         from . import skills
-        # JAG-163: name + one-line description, budgeted so a large library is
-        # still capped instead of flooding the prompt.
-        return skills.skills_context(max_chars=8000)
+        # JAG-202: a SHORT orienting index (name + one-line description), not a
+        # full dump. With 179 skills the old 8000-char block was truncated anyway
+        # (~2/3 of the library invisible) and burned ~2k tokens of prompt for a
+        # list the model cannot fully use. The `skills` tool now SEARCHES
+        # (action:search) and lists on demand, so the always-on index stays small.
+        return skills.skills_context(max_chars=2600)
     except Exception:  # noqa: BLE001
         return ""
 
