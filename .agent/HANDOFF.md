@@ -93,7 +93,7 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   contenuto → `ts/kind/source/mid` persi in lettura, ogni store contava come 2
   record (per questo in recall si vedeva `(None, ...)`!). Riscritto come macchina a
   stati. Nuova suite `tests/v204_memory_governance.py` (20/20, AGGIUNTA al gate).
-  Schema tool `memory` aggiornato. Commit `______`.
+  Schema tool `memory` aggiornato. Commit `2d7d1e1`.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
