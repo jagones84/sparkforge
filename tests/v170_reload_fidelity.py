@@ -62,7 +62,8 @@ checks = {
     "per-card CoT render": "function renderThink(text)" in html,
     "chronological lazy node": "const ensureNode = (nid) =>" in html,
     "card think rendered": "if (v.think) renderThink(v.think);" in html,
-    "unreferenced nodes still shown": "if (!drawn[n.id]) { chatNodeAdd(n);" in html,
+    "active node still shown (JAG-176: no wall of empty bars)":
+        'const _activeNode = nodes.find(n => n.status === "doing" || n.status === "blocked");' in html,
     "stable indentation": "if (n && n.parent && n.parent !== id) return _nodeDepth" in html,
 }
 bad = [k for k, ok in checks.items() if not ok]

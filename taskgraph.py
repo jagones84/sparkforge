@@ -370,6 +370,50 @@ def apply_write_todos(graph, todos, source="model:write_todos", index_map=None, 
     return added
 
 
+def _norm_label(s):
+    return " ".join(str(s or "").lower().split())
+
+
+def supersede_open(graph, keep_labels):
+    """JAG-177: a re-plan REPLACES the plan — cancel every OPEN node whose label is
+    not in `keep_labels`. `done`/`cancelled` history is never touched, so nothing is
+    lost. This is what stops re-planning from ACCUMULATING a wall of obsolete,
+    overlapping steps (session `test`: 27 nodes from 3 re-plans). Returns the ids
+    that were cancelled."""
+    keep = {_norm_label(x) for x in (keep_labels or [])}
+    cancelled = []
+    for n in list(graph.get("nodes", [])):
+        if n.get("status") not in OPEN_STATUSES:
+            continue
+        if keep and _norm_label(n.get("label")) in keep:
+            continue
+        try:
+            cancelled.append(update_node(graph, n["id"], status="cancelled",
+                                         source="harness:supersede")["id"])
+        except (KeyError, ValueError):
+            continue
+    return cancelled
+
+
+def enforce_single_doing(graph, keep_id=None):
+    """JAG-177: at most ONE node may be `doing` (the standard rule). Demote the
+    extras to `todo`. Returns the ids that were demoted."""
+    doing = [n for n in graph.get("nodes", []) if n.get("status") == "doing"]
+    if len(doing) <= 1:
+        return []
+    keep = keep_id or max(doing, key=lambda n: n.get("updated") or 0)["id"]
+    demoted = []
+    for n in doing:
+        if n["id"] == keep:
+            continue
+        try:
+            demoted.append(update_node(graph, n["id"], status="todo",
+                                       source="harness:single-doing")["id"])
+        except (KeyError, ValueError):
+            continue
+    return demoted
+
+
 def finalize(graph, evidence, only_open=True):
     """At run end, close every open node with evidence (acceptance: all done)."""
     closed = []

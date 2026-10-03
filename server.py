@@ -1876,6 +1876,23 @@ def _apply_chat_todos(sess, act, on_event):
         todo_args = {"todos": todos if isinstance(todos, list) else []}
         on_event("tool.call", session=sess["id"], tool="write_todos", args=todo_args,
                  inline=True)
+        # JAG-177: a new plan REPLACES the previous OPEN plan — cancel the open
+        # steps the model did NOT keep, so re-planning never accumulates a wall of
+        # obsolete, overlapping steps (session `test`: 27 nodes from 3 re-plans).
+        # `done`/`cancelled` history is preserved.
+        _labels = []
+        for _t in (todos or []):
+            _l = _t if isinstance(_t, str) else (_t.get("label") or _t.get("title")
+                                                 or _t.get("task"))
+            if _l:
+                _labels.append(_l)
+        if _labels:
+            for _cid in taskgraph.supersede_open(graph, _labels):
+                _n = taskgraph.find(graph, node_id=_cid)
+                if _n:
+                    on_event("graph.node.updated", session=sess["id"], node=_n,
+                             index=graph["nodes"].index(_n),
+                             total=len(graph["nodes"]), changes=["status"])
         base = len(graph.get("nodes", []))
         added = taskgraph.apply_write_todos(
             graph, taskgraph._missing(graph, todos or []))
@@ -1962,6 +1979,13 @@ def _apply_chat_todo_updates(sess, act, on_event):
             on_event("graph.node.updated", session=sess["id"], node=node,
                      index=graph["nodes"].index(node), total=len(graph["nodes"]),
                      changes=["status"])
+        # JAG-177: at most ONE step may be 'doing' — demote the extras to 'todo'.
+        for _did in taskgraph.enforce_single_doing(graph):
+            _dn = taskgraph.find(graph, node_id=_did)
+            if _dn:
+                on_event("graph.node.updated", session=sess["id"], node=_dn,
+                         index=graph["nodes"].index(_dn),
+                         total=len(graph["nodes"]), changes=["status"])
         on_event("tool.result", session=sess["id"], tool="update_todos", ok=True,
                  exit_code=0, backend="harness", args={"steps": steps},
                  output="\n".join("- [%s] %s" % (n.get("status", "open"), n.get("label", ""))

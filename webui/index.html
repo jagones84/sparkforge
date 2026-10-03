@@ -1539,8 +1539,12 @@ async function loadHistory() {
   });
   drawAt(nMsgs);
   _activeScope = null;
-  // any todo node never referenced by content still appears (nothing is lost)
-  nodes.forEach(n => { if (!drawn[n.id]) { chatNodeAdd(n); drawn[n.id] = 1; } });
+  // JAG-176: the chat shows what HAPPENED. Only the nodes the transcript already
+  // referenced (drawn by ensureNode above) plus the currently ACTIVE step are kept;
+  // dumping every unreferenced node turned the chat into a wall of empty bars. The
+  // full plan (including steps never touched) lives in the Plan panel.
+  const _activeNode = nodes.find(n => n.status === "doing" || n.status === "blocked");
+  if (_activeNode && !drawn[_activeNode.id]) { chatNodeAdd(_activeNode); drawn[_activeNode.id] = 1; }
   // JAG-168: if a 'doing' node exists the turn may still be streaming — nest there
   const _doing = nodes.find(n => n.status === "doing");
   if (_doing && _chatNodes[_doing.id]) _activeScope = _chatNodes[_doing.id].querySelector(".tc-kids");
