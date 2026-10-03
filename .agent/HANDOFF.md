@@ -64,7 +64,21 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
 - **JAG-198** Ricerca skill (progressive discovery): `skills.search_skills()` +
   `skills{action:"search"}` + policy aggiornata + `tests/v198_skills_tools_awareness.py`
   (19/19). Doc ricerca `docs/research/2026-10-04-harness-frontier-and-our-niche.md`.
-  README: tagline + sezione "Cosa ci distingue". (commit pendente)
+  README: tagline + sezione "Cosa ci distingue". Commit `71a0920`.
+- **JAG-201** Due chat concorrenti sulla STESSA sessione facevano crashare il
+  server: `_write_json` usava un `.tmp` fisso → `os.replace` del secondo thread
+  falliva (`FileNotFoundError`) → eccezione non gestita in `do_POST` → connessione
+  chiusa senza risposta → turno perso. Fix: nome temp unico per write + **lock per
+  sessione** (`_turn_lock`, un turno alla volta) + reload della sessione DENTRO il
+  lock (niente lost update). Test live `tests/live/v200_concurrent_chat.py` (7/7).
+  Commit (pendente).
+
+### Test LIVE (richiedono il server up) — cartella `tests/live/`
+- `v199_endpoint_sweep.py` — batte tutti gli endpoint cheap: nessun 5xx, auth 401,
+  path ignoto 404, round-trip sessione (create/history/delete). 51/51.
+- `v200_concurrent_chat.py` — 2 turni concorrenti sulla stessa sessione: no hang,
+  no 5xx, entrambi persistiti. 7/7.
+- NON sono nel gate `battery.sh` (che è deterministico/isolato).
 
 Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 19/19 → **5/5 GREEN**.
 

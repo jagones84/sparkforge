@@ -157,6 +157,12 @@ It runs four checks:
 Everything else under `tests/legacy/` is historic acceptance evidence, run ad hoc,
 and is **not** part of the gate.
 
+**Live tests** (need the running server, deliberately NOT in the deterministic gate)
+live in `tests/live/`: `v199_endpoint_sweep.py` (every cheap endpoint → no 5xx, auth
+401, unknown path 404, session create/history/delete round-trip) and
+`v200_concurrent_chat.py` (two turns on ONE session at once → no crash, no lost
+update, JAG-201).
+
 > **Live/smart testing:** the battery is necessary but not sufficient — the real
 > bugs (truncated output, unreachable subagent, reload losing the chat) only showed
 > up by driving the running WebUI. See [`docs/TESTING-PLAYBOOK.md`](docs/TESTING-PLAYBOOK.md)

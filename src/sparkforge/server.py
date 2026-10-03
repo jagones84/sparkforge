@@ -124,6 +124,22 @@ _sse_queues = set()  # each: queue.Queue of str chunks
 _ACTIVE_CHAT = {}    # sid -> {"ev0": feed id at turn start, "ts": time}
 _ACTIVE_CHAT_LOCK = threading.Lock()
 
+# JAG-201: one chat TURN at a time per session. Two overlapping turns on the same
+# session used to race the transcript: read-modify-write on two independent copies
+# (lost update) plus the shared ".tmp" collision (unhandled crash → dropped turn).
+_TURN_LOCKS = {}
+_TURN_LOCKS_GUARD = threading.Lock()
+
+
+def _turn_lock(sid):
+    """Return a re-entrant lock serialising turns for `sid` (created on demand)."""
+    with _TURN_LOCKS_GUARD:
+        lk = _TURN_LOCKS.get(sid)
+        if lk is None:
+            lk = threading.RLock()
+            _TURN_LOCKS[sid] = lk
+        return lk
+
 
 def publish(kind, **data):
     """Record an event in the SQLite store + memory cache, fan out to SSE.
@@ -184,10 +200,22 @@ def _read_json(path, default):
 
 
 def _write_json(path, obj):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, path)
+    # JAG-201: a UNIQUE temp name per write. A fixed "<path>.tmp" collides when
+    # two threads write the same file at once: the first os.replace() renames the
+    # tmp away, so the second fails with FileNotFoundError — which used to escape
+    # do_POST and drop the whole request (connection closed, turn lost).
+    tmp = "%s.%s.tmp" % (path, uuid.uuid4().hex)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _store_path(name):
@@ -3665,6 +3693,8 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
         publish("chat.delta", session=sess["id"], channel=channel, text=text)
 
     def worker():
+        # JAG-201: serialise turns on this session (see _turn_lock).
+        _turn_lock(sess["id"]).acquire()
         target = model
 
         def _emit(kind, **d):
@@ -3754,6 +3784,7 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
             # JAG-181: the turn is over — no longer "attachable".
             with _ACTIVE_CHAT_LOCK:
                 _ACTIVE_CHAT.pop(sess["id"], None)
+            _turn_lock(sess["id"]).release()  # JAG-201: allow the next turn
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
@@ -4475,45 +4506,51 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session"))
-            # JAG-157: explicit model wins, else the session's own model.
-            sess = prepare_session_for_turn(sess, body.get("model") or sess.get("model"))  # JAG-70: auto-compact @75%
-            mark = session_mark(sess)  # JAG-51: boundary of this request
-            append_message(sess, "user", message)
-            publish("chat.user", session=sess["id"], text=message)
-            trace = None
-            try:
-                trace = RunTrace("chat", goal=message[:120], model=body.get("model"))
-                trace.span("chat.once", session=sess["id"])
-                # v0.6 first action: model-generated write_todos → per-run graph.
-                # JAG-76: key the graph by the SESSION (same key as
-                # `/api/chat/stream`), so every client that binds the panel to the
-                # session finds it. Keying it by the ephemeral trace id made the
-                # two chat paths disagree and the panel look empty.
-                # JAG-194: a finished task opens a NEW plan (keep the old nodes).
-                _ex = taskgraph.load(sess["id"])
-                if _ex and taskgraph.all_done(_ex):
-                    taskgraph.begin_plan(_ex)
-                start_run_graph(sess["id"], message, sess["id"], routing.pick("planner"))
-                reply, model = chat_once(sess, message, body.get("model"), trace=trace,
-                                         autonomous=(body.get("mode") or qs.get("mode")) == "goal")
-            except Exception as e:  # noqa: BLE001
-                # JAG-51: persist an explicit assistant error turn *before* the
-                # 502 — the user message must never stay orphaned.
-                ensure_reply_persisted(sess, mark, error=e, model=body.get("model"))
-                publish("chat.error", session=sess["id"], error=str(e))
-                if trace:
-                    trace.finish("error")
-                return self._send(502, {"error": "router call failed: %s" % e,
-                                        "session": sess["id"],
-                                        "run_id": getattr(trace, "id", None),
-                                        "stored_error": True})
-            finish_run_graph(sess["id"], sess["id"], message)
-            trace.model = model
-            trace.finish("done")
-            return self._send(200, {"session": sess["id"], "model": model, "run_id": trace.id,
-                                    "reply": reply["content"], "reasoning": reply.get("reasoning"),
-                                    "messages": len(sess["messages"]),
-                                    "error": bool(reply.get("error"))})
+            # JAG-201: one turn at a time per session; RELOAD + prepare INSIDE the
+            # lock so a concurrent turn's save is never overwritten (lost update).
+            with _turn_lock(sess["id"]):
+                _fresh = load_session(sess["id"])
+                if _fresh:
+                    sess = _fresh
+                # JAG-157: explicit model wins, else the session's own model.
+                sess = prepare_session_for_turn(sess, body.get("model") or sess.get("model"))  # JAG-70: auto-compact @75%
+                mark = session_mark(sess)  # JAG-51: boundary of this request
+                append_message(sess, "user", message)
+                publish("chat.user", session=sess["id"], text=message)
+                trace = None
+                try:
+                    trace = RunTrace("chat", goal=message[:120], model=body.get("model"))
+                    trace.span("chat.once", session=sess["id"])
+                    # v0.6 first action: model-generated write_todos → per-run graph.
+                    # JAG-76: key the graph by the SESSION (same key as
+                    # `/api/chat/stream`), so every client that binds the panel to the
+                    # session finds it. Keying it by the ephemeral trace id made the
+                    # two chat paths disagree and the panel look empty.
+                    # JAG-194: a finished task opens a NEW plan (keep the old nodes).
+                    _ex = taskgraph.load(sess["id"])
+                    if _ex and taskgraph.all_done(_ex):
+                        taskgraph.begin_plan(_ex)
+                    start_run_graph(sess["id"], message, sess["id"], routing.pick("planner"))
+                    reply, model = chat_once(sess, message, body.get("model"), trace=trace,
+                                             autonomous=(body.get("mode") or qs.get("mode")) == "goal")
+                except Exception as e:  # noqa: BLE001
+                    # JAG-51: persist an explicit assistant error turn *before* the
+                    # 502 — the user message must never stay orphaned.
+                    ensure_reply_persisted(sess, mark, error=e, model=body.get("model"))
+                    publish("chat.error", session=sess["id"], error=str(e))
+                    if trace:
+                        trace.finish("error")
+                    return self._send(502, {"error": "router call failed: %s" % e,
+                                            "session": sess["id"],
+                                            "run_id": getattr(trace, "id", None),
+                                            "stored_error": True})
+                finish_run_graph(sess["id"], sess["id"], message)
+                trace.model = model
+                trace.finish("done")
+                return self._send(200, {"session": sess["id"], "model": model, "run_id": trace.id,
+                                        "reply": reply["content"], "reasoning": reply.get("reasoning"),
+                                        "messages": len(sess["messages"]),
+                                        "error": bool(reply.get("error"))})
         if path == "/api/chat/steer":
             # JAG-127b: drop a steering message into a RUNNING turn's loop (see
             # push_steer/drain_steer). No new turn, no new SSE.
