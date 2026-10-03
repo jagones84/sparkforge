@@ -283,16 +283,21 @@ def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None
         ev = list(evidence) if isinstance(evidence, list) else [_evidence_entry(evidence)]
     if status == "done" and not ev:
         raise ValueError("evidence required for a node in status 'done'")
-    node = {"id": node_id or _next_id(graph), "label": label, "status": status,
-            "deps": deps, "parent": str(parent) if parent else None, "evidence": ev,
-            "plan": graph.get("plan", 0),
-            "source": source, "child_run_id": child_run_id,
-            "created": round(time.time(), 3), "updated": round(time.time(), 3)}
+    # JAG-195: assign the id INSIDE the lock. `_next_id` scans the current nodes,
+    # so computing it before the lock let concurrent add_node calls read the same
+    # "next" id and append duplicates (20 threads -> only 3 unique ids).
     with GRAPH_LOCK:
+        node = {"id": node_id or _next_id(graph), "label": label, "status": status,
+                "deps": deps, "parent": str(parent) if parent else None, "evidence": ev,
+                "plan": graph.get("plan", 0),
+                "source": source, "child_run_id": child_run_id,
+                "created": round(time.time(), 3), "updated": round(time.time(), 3)}
         graph["nodes"].append(node)
         save(graph)
+        _index = len(graph["nodes"]) - 1
+        _total = len(graph["nodes"])
     _publish("graph.node.added", run=graph["run_id"], session=graph.get("session_id"),
-             node=node, index=len(graph["nodes"]) - 1, total=len(graph["nodes"]))
+             node=node, index=_index, total=_total)
     return node
 
 
