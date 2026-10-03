@@ -1766,6 +1766,9 @@ CHAT_TOOL_MAX_ITERS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_ITERS", "64"))
 # chars are offloaded to a file instead of being flooded into the context (and
 # instead of the old silent 4000-char truncation that LOST the rest).
 CHAT_TOOL_OBS_LIMIT = int(os.environ.get("SPARKFORGE_TOOL_OBS_LIMIT", "6000"))
+# JAG-189: how long the chat loop waits for a delegated subagent before giving up
+# (the child runs its own bounded agent loop; a chat turn must not hang forever).
+SUBAGENT_WAIT = int(os.environ.get("SPARKFORGE_SUBAGENT_WAIT", "180"))
 # JAG-181: the chat loop feeds the FULL tool output to the harness budgeter
 # (_offload_observation), which writes it to a file and shows the model a head+tail
 # preview. If the tool layer truncated first (tools.observation default 1600) the
@@ -1793,6 +1796,11 @@ CHAT_TOOL_PROMPT = (
     '{"action":"replan_todos","note":"<why>"} and then IMMEDIATELY resume the plan. '
     "Never drift: after any update, return to the list and continue with the next "
     "step. "
+    "To delegate a self-contained subtask to ONE child agent — it gets an isolated "
+    "transcript and its own task list, then reports back its summary — emit ONLY "
+    '{"action":"subagent","goal":"<the subtask>","max_steps":4}. Use it for a '
+    "distinct subtask that can run on its own (e.g. reading and summarising a big "
+    "file); do not delegate the whole task. One delegate per subtask. "
     "Tool registry (allowlist):\n"
 )
 
@@ -2149,6 +2157,63 @@ def _apply_chat_replan(sess, act, on_event):
         return 0
 
 
+def _apply_chat_subagent(sess, act, on_event):
+    """Harness action `subagent` (JAG-189): delegate ONE subtask to a child run.
+
+    The chat loop spawns a subagent (isolated transcript, its own task list, the
+    same tools/approvals/sandbox), WAITS for it, and feeds its summary back as
+    the next observation. Mirrors the HTTP `/api/subagent/spawn` endpoint and the
+    MCP `sparkforge_subagent` tool, so the model can actually delegate: before
+    JAG-189 the action existed but was nowhere in the model's menu, so a request
+    to "delegate to a subagent" looped forever.
+    """
+    try:
+        from . import subagent as _sub
+        _act = act if isinstance(act, dict) else {}
+        _args = _act.get("args") if isinstance(_act.get("args"), dict) else {}
+        goal = str(_act.get("goal") or _args.get("goal")
+                   or _act.get("detail") or "").strip()
+        if not goal:
+            on_event("tool.result", session=sess["id"], tool="subagent", ok=False,
+                     backend="harness", exit_code=1, summary="subagent: goal required")
+            return "subagent error: goal required"
+        try:
+            max_steps = int(_act.get("max_steps", _args.get("max_steps", 4)))
+        except (TypeError, ValueError):
+            max_steps = 4
+        model = _act.get("model") or _args.get("model") or None
+        on_event("tool.call", session=sess["id"], tool="subagent",
+                 args={"goal": goal, "max_steps": max_steps, "model": model},
+                 inline=True)
+        spawned = _sub.spawn(goal, parent_run_id=sess["id"], max_steps=max_steps,
+                             model=model, depth=_sub.depth_of(sess["id"]) + 1) or {}
+        sid = spawned.get("subagent_id")
+        if not sid:
+            err = spawned.get("error") or "spawn failed"
+            on_event("tool.result", session=sess["id"], tool="subagent", ok=False,
+                     backend="harness", exit_code=1, summary="subagent: " + str(err))
+            return "subagent error: %s" % err
+        res = _sub.collect(sid, timeout=SUBAGENT_WAIT) or {}
+        summary = str(res.get("summary") or "").strip()
+        ok = bool(res.get("ok"))
+        out = summary or json.dumps(res, ensure_ascii=False, default=str)[:1500]
+        on_event("tool.result", session=sess["id"], tool="subagent", ok=ok,
+                 exit_code=0 if ok else 1, backend="subagent",
+                 args={"goal": goal, "max_steps": max_steps, "subagent_id": sid},
+                 output=out[:4000],
+                 summary="subagent %s: %s" % (sid, "done" if ok else "error"))
+        return ("Subagent %s finished (goal: %s).\nResult:\n%s"
+                % (sid, goal[:120], out[:4000]))
+    except Exception as e:  # noqa: BLE001 — delegation must never break chat
+        try:
+            on_event("tool.result", session=sess["id"], tool="subagent", ok=False,
+                     backend="harness", exit_code=1, stderr=str(e)[:200],
+                     summary="subagent: errore")
+        except Exception:  # noqa: BLE001
+            pass
+        return "subagent error: %s" % e
+
+
 # JAG-93: post-turn reflection -> one append-only lesson in the memory store
 # (self-improvement). A reflection must never break a turn: everything here is
 # guarded and bounded, and a per-session cooldown keeps short bursts from
@@ -2365,6 +2430,19 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     _last_failed_hash = None  # JAG-183: last FAILED (tool,args) -> verbatim re-run blocked
     _last_failed_err = ""
     _blocked_repeat = 0
+    # JAG-189: a NEW user message must be able to supersede a stale plan. When
+    # the turn OPENS with steps still open from an earlier request, do NOT force
+    # the keepgoing loop back onto them — the model may simply answer the user.
+    # The moment it re-engages the plan (write_todos/update_todos/replan_todos)
+    # the flag clears and normal keepgoing resumes. Without this a fresh
+    # instruction ("no todo list needed") was hijacked by the old list (session
+    # a7d2794d8f88: "continuo da solo — 2/3 passi aperti" after a plain answer).
+    try:
+        _open0 = [n for n in (taskgraph.load(sess["id"]) or {}).get("nodes", [])
+                  if n.get("status") in taskgraph.OPEN_STATUSES]
+    except Exception:  # noqa: BLE001
+        _open0 = []
+    _user_pivot = bool(_open0)
     _kg_started = time.time()
     _kg_last_tool = None
     _last_tool_ok = None
@@ -2466,6 +2544,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                               started=_kg_started, aborted=_is_aborted(sess["id"]),
                               blocked=any(n.get("status") == "blocked" for n in _nodes),
                               steer=has_steer(sess["id"]), override=_kg_override)
+            if _user_pivot and _dec.get("continue"):
+                # JAG-189: a fresh user message superseded the stale plan — do not
+                # force the loop back onto it.
+                _dec = {"continue": False, "reason": "user_pivot"}
             if not _dec["continue"]:
                 _kg_stop_reason = _dec["reason"]
                 on_event("plan.stopped", session=sess["id"], reason=_dec["reason"],
@@ -2549,6 +2631,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 answer = _best
         act = extract_json(answer)
         if isinstance(act, dict) and act.get("action") == "write_todos":
+            _user_pivot = False   # JAG-189: the model re-engaged the plan
             n = _apply_chat_todos(sess, act, on_event)
             msgs.append({"role": "assistant", "content": answer})
             _inject(
@@ -2560,6 +2643,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         if isinstance(act, dict) and act.get("action") in ("update_todos", "replan_todos"):
             # JAG-75: the model advances its own plan mid-run (in_progress → done
             # with evidence), or briefly re-plans. Then it must resume the plan.
+            _user_pivot = False   # JAG-189: the model re-engaged the plan
             if act["action"] == "update_todos":
                 _apply_chat_todo_updates(sess, act, on_event)
                 nudge = ("Noted. Continue strictly: mark the next step 'doing' before "
@@ -2571,6 +2655,20 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          "left off; do not re-plan again unless something really changed.")
             msgs.append({"role": "assistant", "content": answer})
             _inject(nudge, "nudge")
+            continue
+        if isinstance(act, dict) and act.get("action") == "subagent":
+            # JAG-189: synchronous delegation — spawn ONE child run, wait for it,
+            # feed its summary back. Counts as a real work step (it is real work).
+            work_steps += 1
+            used_tools.append("subagent")
+            _th = str(act.get("thought") or "").strip()
+            if _th:
+                _think_buf["t"] += _th + "\n"
+                on_delta("think", _th + "\n")
+            obs = _apply_chat_subagent(sess, act, on_event)
+            msgs.append({"role": "assistant", "content": answer})
+            _inject(obs + "\n\nContinue: call the next tool, or report the result.",
+                    "observation")
             continue
         tc = _chat_tool_call(act, api_v02) if tool_ctx else None
         if tc:
@@ -2738,6 +2836,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                               started=_kg_started, aborted=_is_aborted(sess["id"]),
                               blocked=any(n.get("status") == "blocked" for n in _nodes),
                               steer=has_steer(sess["id"]), override=_kg_override)
+            if _user_pivot and _dec.get("continue"):
+                # JAG-189: a fresh user message superseded the stale plan — the
+                # model answered directly, so do not force it back onto the list.
+                _dec = {"continue": False, "reason": "user_pivot"}
             # JAG-171: with autocontinue OFF the harness does not insist — the
             # first stop with OPEN todos goes straight to the human gate.
             if _open and not bool((_kg.cfg(_kg_override) or {}).get("autocontinue", True)):
@@ -2767,7 +2869,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                      duration_s=round(time.time() - _kg_started, 1))
             # JAG-171: HUMAN IN THE LOOP — never end on prose with open todos; ask
             # the operator how to proceed (continue / close / replan / stop).
-            if _open:
+            # JAG-189: but NOT on a user_pivot stop — the user is actively
+            # chatting, so the reply is theirs; the paused plan needs no gate.
+            if _open and _dec["reason"] != "user_pivot":
                 _hitl = {"reason": _dec["reason"],
                          "open": [{"id": n.get("id"), "label": n.get("label", "")}
                                   for n in _open[:8]]}
@@ -2949,16 +3053,18 @@ def generate_plan(goal, model=None):
 
 
 AGENT_ACTIONS = ("write_todos", "plan_step", "complete_plan_step", "add_task",
-                 "complete_task", "note", "finish")
+                 "complete_task", "subagent", "note", "finish")
 
 AGENT_PROMPT = (
     "You are the agent loop of the SparkForge harness. Given the goal and the "
     "current harness state, decide ONE next action. Respond with ONLY a JSON "
     'object: {"thought": "<brief reasoning>", "action": "write_todos|'
-    'plan_step|complete_plan_step|add_task|complete_task|note|finish", '
+    'plan_step|complete_plan_step|add_task|complete_task|subagent|note|finish", '
     '"todos": [{"label": "...", "deps": []}] (for write_todos), '
     '"title": "<for plan_step/add_task>", "id": "<for '
     'complete_plan_step/complete_task>", "detail": "<optional>", '
+    '"goal": "<the subtask>" and "max_steps": 4 (for subagent — delegate ONE '
+    'self-contained subtask to a child run and get its summary back), '
     '"summary": "<required for finish>"}.'
 )
 
@@ -4164,10 +4270,13 @@ class Handler(BaseHTTPRequestHandler):
                 t = get_run_trace(parts[2])
                 return self._send(200, t) if t else self._send(404, {"error": "run not found"})
             if len(parts) == 4 and parts[3] == "graph":
-                # v0.6: the run's task graph (linked to run_id + session_id)
+                # v0.6: the run's task graph (linked to run_id + session_id).
+                # JAG-189: a run with no graph YET is not an error — return an
+                # empty graph (200) so the UI poll stops logging spurious 404s.
                 g = taskgraph.load(parts[2])
-                return self._send(200, taskgraph.public(g)) if g else \
-                    self._send(404, {"error": "graph not found for run"})
+                return self._send(200, taskgraph.public(g) or {
+                    "run_id": parts[2], "session_id": None, "nodes": [],
+                    "counts": {}, "status": "empty", "node_count": 0})
             return self._send(404, {"error": "not found"})
         if path == "/api/runs":
             return self._send(200, {"runs": runs_summary(int(qs.get("limit", 50)))})
@@ -4177,8 +4286,11 @@ class Handler(BaseHTTPRequestHandler):
             # instead of the orphaned global plan.json.
             sess_id = path[len("/api/sessions/"):-len("/graph")].strip("/")
             g = taskgraph.load(sess_id)
-            return self._send(200, taskgraph.public(g)) if g else \
-                self._send(404, {"error": "no graph for session"})
+            # JAG-189: no graph yet (fresh session, or a deleted one) is not an
+            # error — return an empty graph (200) so the UI poll doesn't log 404s.
+            return self._send(200, taskgraph.public(g) or {
+                "session_id": sess_id, "run_id": sess_id, "nodes": [],
+                "counts": {}, "status": "empty", "node_count": 0})
         if path == "/api/eval/tasks":
             return self._send(200, eval_list_tasks())
         if path == "/api/voice/status":

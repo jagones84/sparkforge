@@ -11,6 +11,10 @@ network, isolated temp data dir). Two scenarios on two sessions:
   B) a STUCK model: it re-issues the EXACT same FAILED call five times. The harness
      must execute it ONCE, then BLOCK the verbatim re-runs with a directive.
      Before JAG-183 it executed it every time and the model resigned.
+  C) DELEGATION (JAG-189): the model emits {"action":"subagent",...} -> exactly ONE
+     child run is spawned, its summary is fed back, and the turn concludes.
+  D) STALE PLAN (JAG-189): a turn that OPENS with an open task list from an earlier
+     request and answers in plain prose must NOT be force-continued onto that list.
 
 Run:  python3 tests/v183_chat_core.py
 """
@@ -119,6 +123,64 @@ ev_b, ex_b = run_turn("v183b", script_bad, gated_bad)
 check("B1 failed call executed only ONCE", ex_b == 1, "execs=%d" % ex_b)
 check("B2 verbatim re-runs BLOCKED (JAG-183)", len(blocked(ev_b)) >= 1,
       "blocked=%d" % len(blocked(ev_b)))
+
+
+# ---- scenario C: delegation to ONE subagent (JAG-189) ----------------------
+from sparkforge import subagent as subagent_mod  # noqa: E402
+
+def script_sub(n):
+    return ('{"action":"subagent","goal":"summarize server.py","max_steps":2}'
+            if n == 0 else "delegato e riassunto: fatto.")
+
+_spawns = {"n": 0}
+_orig_spawn = subagent_mod.spawn
+_orig_collect = subagent_mod.collect
+
+def _fake_spawn(goal, **kw):
+    _spawns["n"] += 1
+    return {"subagent_id": "sub_test", "run_id": "sub_test", "goal": goal}
+
+def _fake_collect(sid, timeout=None):
+    return {"ok": True, "status": "done", "steps": 2, "subagent_id": sid,
+            "summary": "server.py = HTTP+SSE loop", "trace": []}
+
+subagent_mod.spawn = _fake_spawn
+subagent_mod.collect = _fake_collect
+try:
+    ev_c, _ = run_turn("v183c", script_sub, gated_ok)
+finally:
+    subagent_mod.spawn = _orig_spawn
+    subagent_mod.collect = _orig_collect
+check("C1 subagent spawned exactly once", _spawns["n"] == 1, "spawns=%d" % _spawns["n"])
+check("C2 subagent result fed back to the model",
+      any(k == "harness.inject" and "server.py = HTTP+SSE loop" in (d.get("text") or "")
+          for k, d in ev_c),
+      "injects=%d" % len([1 for k, _ in ev_c if k == "harness.inject"]))
+check("C3 subagent tool card emitted",
+      any(k == "tool.call" and d.get("tool") == "subagent" for k, d in ev_c))
+_cs = (server.load_session("v183c") or {}).get("messages", [{}])[-1]
+check("C4 reply persisted after delegation",
+      _cs.get("role") == "assistant" and "fatto" in (_cs.get("content") or ""),
+      "%r" % (_cs.get("content") or "")[:40])
+
+
+# ---- scenario D: a fresh user message is not hijacked by a stale plan ------
+_gd = server.taskgraph.ensure("v183d", session_id="v183d")
+server.taskgraph.add_node(_gd, "old step from an earlier request")
+
+def script_plain(n):
+    return "risposta diretta all'utente, nessun tool."
+
+ev_d, _ = run_turn("v183d", script_plain, gated_ok)
+_cont = [d for k, d in ev_d if k == "harness.inject"
+         and "still has" in (d.get("text") or "")]
+check("D1 stale plan does NOT force a continuation (JAG-189)", not _cont,
+      "continue_injects=%d" % len(_cont))
+_ds = (server.load_session("v183d") or {}).get("messages", [{}])[-1]
+check("D2 the direct answer is persisted",
+      _ds.get("role") == "assistant" and "risposta diretta" in (_ds.get("content") or ""),
+      "%r" % (_ds.get("content") or "")[:40])
+
 
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)

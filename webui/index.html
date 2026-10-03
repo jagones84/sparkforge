@@ -1482,6 +1482,13 @@ async function loadHistory() {
   if (!sessionId) return;
   _stick = true;  // JAG-116: opening a session always lands at the latest message
   const s = await api("GET", "/api/history?session=" + encodeURIComponent(sessionId));
+  if (s && s.error) {
+    // JAG-189: the active session no longer exists (deleted elsewhere): drop it
+    // instead of re-polling a dead id every cycle (spurious 404s in the console).
+    sessionId = null; localStorage.removeItem("sf_session");
+    $("log").innerHTML = ""; _resetChatTree(); graph = null;
+    return;
+  }
   curJob = (s && s.job) || null;   // JAG-169: JX used by the todo ids on screen
   // JAG-170: rebuild the transcript in CHRONOLOGICAL order. Todo nodes are NOT
   // dumped up front: each is created the FIRST time something references it and
