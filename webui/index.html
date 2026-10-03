@@ -335,6 +335,26 @@
   a.filelink:hover, a.weblink:hover, a.imglink:hover { color: var(--txt); }
   a.weblink { color: var(--info); }
   a.imglink { color: var(--acc2); }
+  /* JAG-150: movable, non-blocking settings window */
+  #settingsWin { position: fixed; z-index: 60; width: min(760px, 94vw); height: min(620px, 86vh);
+    background: #0f1320; border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column;
+    box-shadow: 0 24px 70px rgba(0,0,0,.55); overflow: hidden; }
+  #settingsWin[hidden] { display: none; }
+  #settingsWin .sw-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-bottom: 1px solid var(--line); cursor: move; user-select: none; }
+  #settingsWin .sw-head .grip { color: var(--dim); }
+  #settingsWin .sw-head .sw-title { font-weight: 600; }
+  #settingsWin .sw-head .sp { flex: 1; }
+  #settingsWin .sw-body { flex: 1; min-height: 0; display: flex; }
+  #settingsWin .sw-nav { flex: 0 0 190px; border-right: 1px solid var(--line); overflow-y: auto; padding: 8px; }
+  #settingsWin .sw-nav button { display: block; width: 100%; text-align: left; background: transparent;
+    border: 1px solid transparent; color: var(--dim); border-radius: 8px; padding: 7px 10px; margin-bottom: 3px;
+    font-size: 12px; cursor: pointer; }
+  #settingsWin .sw-nav button.active { color: var(--txt); border-color: var(--accent); background: rgba(139,123,240,.14); }
+  #settingsWin .sw-main { flex: 1; min-width: 0; overflow-y: auto; padding: 14px; }
+  #settingsWin .sw-cat[hidden] { display: none; }
+  #settingsWin .sw-resize { position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
+    cursor: nwse-resize; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -351,6 +371,7 @@
   <span class="feed-dot off" id="feedDot" title="loopback feed"></span>
   <button class="ghost" id="toggle-left" title="show/hide sessions">▤</button>
   <button class="ghost" id="toggle-right" title="show/hide panels">▥</button>
+  <button class="ghost" id="settingsBtn" title="impostazioni" onclick="openSettings()">⚙</button>
   <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
 </header>
 <main id="app">
@@ -648,6 +669,18 @@
   </aside>
 </main>
 <div class="backdrop" id="backdrop" onclick="closeAside()"></div>
+<div id="settingsWin" hidden>
+  <div class="sw-head">
+    <span class="grip">⠿</span><span class="sw-title">⚙ Impostazioni</span><span class="sp"></span>
+    <button class="ghost" id="swMin" title="minimizza">🗕</button>
+    <button class="ghost" onclick="closeSettings()" title="chiudi (Esc)">✕</button>
+  </div>
+  <div class="sw-body">
+    <nav class="sw-nav" id="swNav"></nav>
+    <div class="sw-main" id="swMain"></div>
+  </div>
+  <div class="sw-resize">⤢</div>
+</div>
 <div id="palette" hidden>
   <div class="card" style="width:min(560px,92vw)">
     <input id="palette-input" class="inp" placeholder="go to session / panel / action…" style="width:100%;padding:10px 14px">
@@ -2294,6 +2327,78 @@ function skillsAutocomplete() {
   box.hidden = false;
 }
 
+/* JAG-150: movable settings window (non-blocking). */
+const SETTINGS_CATS = [
+  ["general", "General"], ["models", "Models"], ["providers", "Providers"],
+  ["keys", "Keys & Token"], ["mcp", "MCP"], ["skills", "Skills"],
+  ["rules", "Rules"], ["tools", "Tools & policy"],
+];
+function settingsWin() { return $("settingsWin"); }
+function settingsCategory(name) {
+  document.querySelectorAll("#swNav button").forEach(b => b.classList.toggle("active", b.dataset.cat === name));
+  document.querySelectorAll("#swMain .sw-cat").forEach(c => { c.hidden = c.dataset.cat !== name; });
+  localStorage.setItem("sf_settings_cat", name);
+  if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); if (typeof renderMcpCatalog === "function") renderMcpCatalog(); }
+  else if (name === "skills") { loadSkills(); }
+  else if (name === "rules") { loadRules(); }
+  else if (name === "tools") {
+    loadRuntime(); loadVerifier(); loadBestofn(); loadDifficulty(); loadSelfevolve();
+    api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), { error: String(e) }));
+  }
+  else if (name === "models") { if (typeof loadRouting === "function") loadRouting(); }
+  else if (name === "keys") { $("token-input").value = TOKEN || ""; loadKeys(); }
+  else if (name === "general") {
+    api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), { error: String(e) }));
+  }
+}
+function buildSettingsWin() {
+  if (document.querySelector("#swNav button")) return;
+  $("swNav").innerHTML = SETTINGS_CATS.map(([k, label]) =>
+    `<button data-cat="${k}" onclick="settingsCategory('${k}')">${label}</button>`).join("");
+  const pos = JSON.parse(localStorage.getItem("sf_settings_pos") || "null");
+  const w = settingsWin();
+  if (pos) {
+    w.style.left = pos.x + "px"; w.style.top = pos.y + "px";
+    if (pos.w) w.style.width = pos.w + "px";
+    if (pos.h) w.style.height = pos.h + "px";
+  } else { w.style.left = Math.max(20, (innerWidth - 760) / 2) + "px"; w.style.top = "70px"; }
+  dragify(w.querySelector(".sw-head"), w, "sf_settings_pos");
+  resizify(w.querySelector(".sw-resize"), w, "sf_settings_pos");
+}
+function openSettings(cat) {
+  buildSettingsWin(); settingsWin().hidden = false;
+  settingsCategory(cat || localStorage.getItem("sf_settings_cat") || "general");
+}
+function closeSettings() { settingsWin().hidden = true; }
+function dragify(handle, box, key) {
+  handle.addEventListener("mousedown", e => {
+    if (e.target.closest("button")) return;
+    const sx = e.clientX, sy = e.clientY, ox = box.offsetLeft, oy = box.offsetTop;
+    const mv = ev => {
+      box.style.left = Math.max(0, ox + ev.clientX - sx) + "px";
+      box.style.top = Math.max(0, oy + ev.clientY - sy) + "px";
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up);
+      localStorage.setItem(key, JSON.stringify({ x: box.offsetLeft, y: box.offsetTop, w: box.offsetWidth, h: box.offsetHeight }));
+    };
+    document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up); e.preventDefault();
+  });
+}
+function resizify(handle, box, key) {
+  handle.addEventListener("mousedown", e => {
+    const sx = e.clientX, sy = e.clientY, ow = box.offsetWidth, oh = box.offsetHeight;
+    const mv = ev => {
+      box.style.width = Math.max(420, ow + ev.clientX - sx) + "px";
+      box.style.height = Math.max(320, oh + ev.clientY - sy) + "px";
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up);
+      localStorage.setItem(key, JSON.stringify({ x: box.offsetLeft, y: box.offsetTop, w: box.offsetWidth, h: box.offsetHeight }));
+    };
+    document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up); e.preventDefault();
+  });
+}
 function openPanel(name) {
   document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
   document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
@@ -2672,6 +2777,7 @@ $("session-search").addEventListener("input", loadSessions);
     _qm.onchange = () => localStorage.setItem("sf_qmode", _qm.value); } }
 $("hide-empty").addEventListener("change", loadSessions);
 addEventListener("keydown", e => {
+  if (e.key === "Escape" && settingsWin() && !settingsWin().hidden) { closeSettings(); return; }
   if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); openPalette(); }
   if (e.key === "Escape") { closePalette(); closeNewSess(); closeDirPicker(); closeSkillView(); closeImage(); }
 });
