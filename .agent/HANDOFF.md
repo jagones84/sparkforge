@@ -119,7 +119,7 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   3. `registry.resolve_path` sollevava su null byte (`embedded null byte`) → rifiuto
      esplicito, niente 5xx.
   Inoltre `battery.sh` ora usa `PYTHONPYCACHEPREFIX` su temp: un `__pycache__` stale
-  (SMB) aveva fatto fallire v204 "per finta". Commit `______`. Battery **9/9 GREEN**.
+  (SMB) aveva fatto fallire v204 "per finta". Commit `9310d01`. Battery **9/9 GREEN**.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
