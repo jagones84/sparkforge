@@ -96,14 +96,15 @@
   .agentline b { color: var(--acc); }
 
   /* sessions */
-  .sess { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
-    border: 1px solid transparent; margin-bottom: 4px; cursor: pointer; font-size: 12.5px; }
+  .sess { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px;
+    border: 1px solid transparent; margin-bottom: 4px; cursor: pointer; }
   .sess:hover { background: rgba(108,140,255,.08); }
   .sess.active { border-color: rgba(108,140,255,.45); background: rgba(108,140,255,.1); }
-  .sess .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sess .n { color: var(--dim); font-size: 10px; flex-shrink: 0; }
-  .sess .ws { font-size: 11px; flex-shrink: 0; opacity: .8; }
-  .sess .del { color: var(--err); font-size: 13px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: .6; }
+  .sess .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sess .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
+  .sess .n { color: var(--dim); font-size: 10px; letter-spacing: .02em; }
+  .sess .ws { font-size: 12px; flex-shrink: 0; opacity: .85; }
+  .sess .del { color: var(--err); font-size: 13px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: .55; }
   .sess .del:hover { opacity: 1; background: rgba(248,113,113,.12); }
 
   /* context meter */
@@ -401,7 +402,8 @@
   <div class="resizer" id="resize-right" title="drag to resize"></div>
   <aside id="rail" data-col="context">
     <nav id="rail-tabs">
-      <button data-panel="graph" class="active" onclick="openPanel('graph')">Graph</button>
+      <button data-panel="graph" class="active" onclick="openPanel('graph')">Plan</button>
+      <button data-panel="context" onclick="openPanel('context')">Context</button>
       <button data-panel="config" onclick="openPanel('config')">Config</button>
       <button data-panel="settings" onclick="openPanel('settings')">Settings</button>
       <button data-panel="approvals" onclick="openPanel('approvals')">Approvals</button>
@@ -432,6 +434,8 @@
           <div id="taskDetail" class="remaining" style="margin-top:8px"></div>
           <div id="remaining" class="remaining" style="margin-top:8px"></div>
         </div>
+      </section>
+      <section data-section="context" hidden>
         <h2>Context</h2>
         <div class="card">
           <div class="ctxbig"><span id="ctxPct" class="ctxpct">–</span><span id="ctxState" class="ctxstate">–</span></div>
@@ -539,7 +543,12 @@
           <div class="remaining" id="mcpSummary">loading…</div>
           <div id="mcpList" style="margin-top:8px"></div>
         </div>
-        <h2>Add / edit</h2>
+        <h2>Catalog · add in one click</h2>
+        <div class="card">
+          <div class="remaining" style="margin-bottom:6px">Known, ready-to-use servers. <b>＋ add</b> installs immediately; <b>＋ prefill</b> fills the form below (complete path/token, then press <b>save</b>).</div>
+          <div id="mcpCatalog"></div>
+        </div>
+        <h2>Add manually</h2>
         <div class="card">
           <input id="mcpName" class="inp" placeholder="name (e.g. filesystem)" style="width:100%;padding:6px 10px;font-size:12px">
           <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
@@ -552,6 +561,7 @@
           <div id="mcpStdio" style="margin-top:6px">
             <input id="mcpCommand" class="inp" placeholder="command (e.g. npx)" style="width:100%;padding:6px 10px;font-size:12px">
             <input id="mcpArgs" class="inp" placeholder="space-separated args (e.g. -y @modelcontextprotocol/server-filesystem /home/jagones)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+            <textarea id="mcpEnv" class="inp" placeholder="optional env, one per line: GITHUB_TOKEN=xxx" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px;min-height:48px;font-family:monospace"></textarea>
           </div>
           <div id="mcpHttp" style="margin-top:6px;display:none">
             <input id="mcpUrl" class="inp" placeholder="url (e.g. http://127.0.0.1:8791/mcp)" style="width:100%;padding:6px 10px;font-size:12px">
@@ -563,7 +573,7 @@
             <button class="ghost" onclick="reloadMcp()">reload all</button>
           </div>
           <div id="mcpResult" class="remaining" style="margin-top:6px"></div>
-          <div class="remaining" style="margin-top:6px">saved in config/mcp_clients.local.yaml (outside the repo · no committed secrets)</div>
+          <div class="remaining" style="margin-top:6px">Saved automatically to <code>config/mcp_clients.local.yaml</code> (outside the repo · no committed secrets). You can also edit them by hand in that file if you prefer.</div>
         </div>
       </section>
       <section data-section="skills" hidden>
@@ -591,9 +601,9 @@
           </div>
           <div id="fileTree" style="margin-top:8px"><div class="remaining">open a session, then ↻</div></div>
         </div>
-        <h2>Editor <span class="remaining">dock a destra</span></h2>
+        <h2>Editor</h2>
         <div class="card">
-          <div class="remaining">Clicca un file nell'albero: si apre nel <b>dock a destra</b> (CodeMirror, tab multiple, anteprima markdown/immagini/diagrammi).</div>
+          <div class="remaining">Clicca un file nell'albero: si apre nell'<b>editor</b> accanto alla chat (CodeMirror, tab multiple, anteprima markdown/immagini/diagrammi).</div>
           <button class="ghost" onclick="window.SparkEditor&&window.SparkEditor.toggle()" style="margin-top:8px" title="apri/chiudi il dock">🗔 apri editor</button>
           <div class="remaining" id="fileMsg" style="margin-top:6px"></div>
         </div>
@@ -947,7 +957,7 @@ async function loadSessions() {
     d.className = "sess" + (s.id === sessionId ? " active" : "");
     const age = s.age ? (" · " + s.age) : "";
     const fol = s.workspace ? `<span class="ws" title="workspace: ${s.workspace}">📁</span>` : "";
-    d.innerHTML = `${fol}<span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span><span class="del" title="delete">✕</span>`;
+    d.innerHTML = `${fol}<span class="col"><span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span></span><span class="del" title="delete">✕</span>`;
     d.onclick = e => {
       if (e.target.classList.contains("del")) return;
       sessionId = s.id; localStorage.setItem("sf_session", sessionId);
@@ -1747,10 +1757,88 @@ function renderProviders(el, d) {
 }
 
 /* ---- JAG-108: user-managed external MCP servers (engine = server /api/mcp/*) ---- */
+/* JAG-150: catalog of known servers = the "marketplace" other harnesses ship.
+   Entries without `needs` install in one click; the others prefill the form so
+   the user only fills the missing path/token. */
+const MCP_CATALOG = [
+  { name: "filesystem", transport: "stdio", command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem"],
+    desc: "Read/write files in local folders",
+    needs: "append the folder path to the args" },
+  { name: "github", transport: "stdio", command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-github"],
+    desc: "GitHub issues, PRs, repos and code",
+    needs: "paste GITHUB_TOKEN in the env field" },
+  { name: "memory", transport: "stdio", command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-memory"],
+    desc: "Persistent knowledge-graph memory (entities + relations)" },
+  { name: "sequential-thinking", transport: "stdio", command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    desc: "Dynamic step-by-step reasoning" },
+  { name: "context7", transport: "stdio", command: "npx",
+    args: ["-y", "@upstash/context7-mcp"],
+    desc: "Up-to-date library and framework documentation" },
+  { name: "playwright", transport: "stdio", command: "npx",
+    args: ["-y", "@playwright/mcp@latest"],
+    desc: "Browser automation (Playwright)" },
+  { name: "everything", transport: "stdio", command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-everything"],
+    desc: "Demo server exposing every MCP primitive" },
+];
+function renderMcpCatalog() {
+  const box = $("mcpCatalog"); if (!box) return;
+  box.innerHTML = "";
+  MCP_CATALOG.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.className = "card";
+    row.style.cssText = "padding:6px 8px;margin-bottom:6px;display:flex;gap:8px;align-items:center";
+    const info = document.createElement("div"); info.style.cssText = "flex:1;min-width:0";
+    const t = document.createElement("div"); t.style.fontWeight = "600"; t.textContent = p.name;
+    const s = document.createElement("div"); s.className = "remaining"; s.style.wordBreak = "break-all";
+    s.textContent = p.desc + (p.needs ? (" · requires: " + p.needs) : "");
+    info.append(t, s);
+    const b = document.createElement("button"); b.className = "ghost";
+    b.textContent = p.needs ? "＋ prefill" : "＋ add";
+    b.onclick = () => (p.needs ? mcpPrefill(i) : mcpAddPreset(i));
+    row.append(info, b);
+    box.appendChild(row);
+  });
+}
+function mcpFillPreset(p) {
+  $("mcpName").value = p.name;
+  $("mcpEnabled").checked = true;
+  $("mcpTransport").value = p.transport;
+  mcpTransportChanged();
+  if (p.transport === "stdio") {
+    $("mcpCommand").value = p.command || "";
+    $("mcpArgs").value = (p.args || []).join(" ");
+    $("mcpEnv").value = "";
+  } else { $("mcpUrl").value = p.url || ""; }
+}
+function mcpPrefill(i) {
+  const p = MCP_CATALOG[i];
+  mcpFillPreset(p);
+  $("mcpResult").textContent = "prefilled · " + (p.needs || "") + " · then press save";
+  (p.name === "github" ? $("mcpEnv") : $("mcpArgs")).focus();
+}
+async function mcpAddPreset(i) {
+  const p = MCP_CATALOG[i];
+  mcpFillPreset(p);
+  $("mcpResult").textContent = "installing " + p.name + "…";
+  await saveMcpClient();
+}
 function mcpTransportChanged() {
   const t = $("mcpTransport").value;
   $("mcpStdio").style.display = t === "stdio" ? "" : "none";
   $("mcpHttp").style.display = t === "http" ? "" : "none";
+}
+function mcpEnvFromForm() {
+  const out = {};
+  ($("mcpEnv").value || "").split(/\n+/).forEach(l => {
+    const i = l.indexOf("=");
+    if (i > 0) out[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+  });
+  return out;
 }
 function mcpSpecFromForm() {
   const spec = { name: $("mcpName").value.trim(), enabled: $("mcpEnabled").checked };
@@ -1758,6 +1846,8 @@ function mcpSpecFromForm() {
     spec.command = $("mcpCommand").value.trim();
     const a = $("mcpArgs").value.trim();
     spec.args = a ? a.split(/\s+/) : [];
+    const env = mcpEnvFromForm();
+    if (Object.keys(env).length) spec.env = env;
   } else {
     spec.url = $("mcpUrl").value.trim();
     const h = $("mcpHeaders").value.trim();
@@ -1770,7 +1860,7 @@ async function loadMcpClients() {
     const d = await api("GET", "/api/mcp/clients");
     const cs = d.clients || {};
     const names = Object.keys(cs);
-    $("mcpSummary").textContent = names.length + " configurati · " + (d.external_tools || 0) + " tool esterni";
+    $("mcpSummary").textContent = names.length + " configured · " + (d.external_tools || 0) + " external tools";
     const box = $("mcpList"); box.innerHTML = "";
     if (!names.length) {
       const e = document.createElement("div"); e.className = "remaining";
@@ -1811,6 +1901,7 @@ async function editMcp(name) {
       $("mcpTransport").value = "stdio";
       $("mcpCommand").value = c.command || "";
       $("mcpArgs").value = (c.args || []).join(" ");
+      $("mcpEnv").value = c.env ? Object.keys(c.env).map(k => k + "=" + c.env[k]).join("\n") : "";
     }
     mcpTransportChanged();
   } catch (e) { /* ignore */ }
@@ -2207,8 +2298,9 @@ function openPanel(name) {
   document.querySelectorAll("#rail-tabs button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
   document.querySelectorAll("#panel-body > section").forEach(s => { s.hidden = (s.dataset.section !== name); });
   if (name === "graph") { loadPlan(); loadGraph(); loadCtx(); }
+  else if (name === "context") { loadCtx(); }
   else if (name === "approvals") { loadApprovals(); }
-  else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); }
+  else if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); renderMcpCatalog(); }
   else if (name === "skills") { loadSkills(); }
   else if (name === "rules") { loadRules(); }
   else if (name === "files") { loadFiles(); loadEdits(); }
