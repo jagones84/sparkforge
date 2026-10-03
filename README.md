@@ -1,6 +1,6 @@
 # SparkForge
 
-**A frontier-style agent harness for the DGX Spark — chat, plan, tasks, agent loop, WebUI, CLI, and a mobile command API, all backed by the local llama.cpp router.**
+**A local-first agent harness: bounded context with tool-output offload, a deterministic PRM / best-of-N ranker, a verifier gate (apply-only-if-green), and an LLM-authored in-chat task graph — chat, plan, tasks, agent loop, WebUI, CLI and a mobile command API, all backed by the local llama.cpp router. Powers the SparkPulse Android client.**
 
 © 2025-2026 Giovanni J. Agones ([jagones84](https://github.com/jagones84)) · licensed under AGPL-3.0 (see [LICENSE](LICENSE)).
 
@@ -38,6 +38,21 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 💬 **Chat UI leggibile (v0.7.1, JAG-55)** — la **risposta** è il testo principale del messaggio (il reasoning resta nel drawer CoT, mai al posto della reply); **copia** con un tap per messaggio (⧉) e transcript selezionabile; **tool call inline** nella chat come mini-card 🔧→✅/⛔ con esito (`tool.call`/`tool.result` sullo stream, coerenti con i nodi del task graph); indicatore **contesto onesto**: con `session` reale mostra token/budget/messaggi veri, senza sessione `/api/context` risponde `available:false` e la UI mostra **n/d** invece del finto 6000/0
 - ⌨️ **CLI** (`forge.py`) — chat, agent runs, plan/task control from the terminal
 - 📱 **Mobile-ready API** — bind to `0.0.0.0` and command the DGX from the phone over Tailscale, same as SparkPulse
+
+## 🏆 Cosa ci distingue (vs harness di frontiera 2026)
+
+Confronto con Claude Code / Codex / OpenHands / SWE-agent e con la ricerca 2026 —
+dettagli e fonti in [`docs/research/2026-10-04-harness-frontier-and-our-niche.md`](docs/research/2026-10-04-harness-frontier-and-our-niche.md):
+
+- 🎯 **PRM / best-of-N deterministico** + stimatore di difficoltà "compute-optimal" (N e budget del loop dosati dal compito) — la frontiera usa un solo campione o si affida al modello.
+- ✅ **Verifier gate (apply-only-if-green)**: test/lint/diff PRIMA di applicare.
+- ✂️ **Contesto vincolato**: tool-output offload + budget = `n_ctx` reale + auto-compact al 75%.
+- 🧩 **Task graph LLM inline con `done` gated dall'evidenza** (non un planner separato che blocca).
+- 📡 **Feed SSE loopback** per mobile + WebUI single-file.
+- 📦 **Stdlib-only, zero dipendenze**; stesso codice su DGX e Windows (`osutil`).
+- 🪞 **`self` tool + prompt section registry** ("capability dalla prompt").
+- 🔄 **MCP bidirezionale** (client + server mode).
+- 🧬 **Meta self-improvement + ACP + swarm/blackboard** (sperimentale).
 
 ## ✨ Sperimentale — frontier features
 
@@ -124,7 +139,7 @@ root `mcp_server.py`.
 
 ### Regression battery (the gate)
 
-The **only** regression gate is a single 4-test battery — deterministic, fast and
+The **only** regression gate is a single 5-test battery — deterministic, fast and
 fully isolated: it points every `SPARKFORGE_*` data dir at a throwaway temp dir, so
 it never touches the live `data/` and never litters the WebUI with sessions.
 
@@ -137,6 +152,7 @@ It runs four checks:
 - `tests/v177_session_delete_cascade.py` — deleting a session removes transcript + graph + run + edits;
 - `tests/v183_chat_core.py` — chat loop core: a normal turn runs + persists its reply; a stuck model's repeated failed call is executed ONCE then blocked (anti-loop, JAG-183); the `subagent` action is reachable and delegates once (JAG-189); a fresh message is not hijacked by a stale plan (JAG-189); harness-action cards (`write_todos`/`update_todos`/`subagent`) are persisted so a reload rebuilds them (JAG-190); a relative `fs.read/write/edit` path resolves inside the session workspace, not the harness repo (JAG-191); card/inject `after` boundaries increase across a turn and `node` is a string id, so a reload interleaves the turn instead of stacking it (JAG-192); a new task opens a fresh plan that KEEPS the old nodes and numbers new ones monotonically, so old transcript cards never resolve to a relabelled node (JAG-194).
 - `tests/v195_hard.py` — adversarial: `fs.edit` relative in the workspace; two workspaces writing the same name concurrently stay isolated; outside-workspace ops escalate to `required`; malformed inputs never raise; new plans number nodes monotonically; 20 concurrent `add_node` keep unique ids (JAG-195). It also proves the router stream honours Stop even while the upstream is **silent**, skips the blocking non-streaming fallback on abort, and makes the planner call abortable (JAG-197).
+- `tests/v198_skills_tools_awareness.py` — the system prompt actually tells the model it HAS tools (registry block) and skills (name + one-line description, body on demand via `skills`), that it must SCAN/LOAD a matching skill, that capability questions are answered from the prompt/`self`, how MCP tools are named, and that skills are keyword-**searchable** (`skills{action:"search"}`, progressive discovery, JAG-198).
 
 Everything else under `tests/legacy/` is historic acceptance evidence, run ad hoc,
 and is **not** part of the gate.

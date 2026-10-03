@@ -1535,7 +1535,8 @@ SKILLS_POLICY = (
     "code-review), LOAD it with the `skills` tool "
     '({\"action\":\"read\",\"name\":\"<name>\"}) and FOLLOW its instructions '
     "step by step instead of improvising. Use {\"action\":\"list\"} for the "
-    "full list with descriptions."
+    "full list with descriptions; if the list is long or truncated, SEARCH it "
+    'with {"action":"search","query":"..."} and read the best match.'
 )
 
 

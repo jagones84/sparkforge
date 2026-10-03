@@ -418,7 +418,7 @@ def _web(args, run_id):
 
 
 def _skills(args, run_id):
-    """Skills registry: list available skills or read one SKILL.md."""
+    """Skills registry: list, SEARCH, or read one SKILL.md."""
     from . import skills as skills_mod
     action = str(args.get("action", "list"))
     if action == "read":
@@ -431,6 +431,25 @@ def _skills(args, run_id):
         content = got.pop("content")
         return {"ok": True, "exit_code": 0, "stdout": content, "stderr": "",
                 "skill": got, "backend": "host", "sandboxed": False}
+    if action in ("search", "find"):
+        # JAG-198: progressive discovery — find the ONE relevant skill by keyword
+        # without loading the whole (large) library into context.
+        q = str(args.get("query") or args.get("q") or "").strip()
+        if not q:
+            return {"ok": False, "error": "query required for action=search",
+                    "stdout": "", "stderr": ""}
+        try:
+            limit = int(args.get("limit") or 10)
+        except (TypeError, ValueError):
+            limit = 10
+        hits = skills_mod.search_skills(q, limit=limit)
+        body = "\n".join("  %s :: %s" % (h["name"], (h["description"] or h["title"] or "")[:120])
+                         for h in hits) or "  (no match — try action=list)"
+        stdout = ("%d skill(s) matching %r (read one with action=read):\n%s"
+                  % (len(hits), q, body))
+        return {"ok": True, "exit_code": 0, "stdout": stdout, "stderr": "",
+                "count": len(hits), "matches": [h["name"] for h in hits],
+                "backend": "host", "sandboxed": False}
     skills = skills_mod.list_skills()
     lines = []
     cats = {}

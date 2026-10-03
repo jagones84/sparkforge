@@ -277,3 +277,37 @@ def skills_context(max_chars=2200):
             lines.append(("    %s \u2014 %s" % (s["name"], d)) if d else ("    %s" % s["name"]))
     out = "\n".join(lines)
     return out if len(out) <= max_chars else out[:max_chars] + "\n…[truncated]"
+
+
+_SKILL_STOP = {
+    "the", "and", "for", "with", "you", "are", "not", "this", "that", "error",
+    "failed", "unknown", "command", "tool", "run", "get", "set", "use", "using",
+    "how", "can", "help", "skill", "skills", "want", "need", "make", "does",
+}
+
+
+def search_skills(query, limit=10):
+    """Rank installed skills against `query` (JAG-198).
+
+    Progressive discovery (Claude Code / ScaleMCP pattern): the model can find
+    the ONE relevant skill without loading the whole library into context. A hit
+    in the name/title weighs 3x a hit in the description. Returns a list of
+    {name, category, title, description, score}, best first.
+    """
+    words = set(re.findall(r"[a-z]{3,}", str(query or "").lower())) - _SKILL_STOP
+    if not words:
+        return []
+    scored = []
+    for s in list_skills():
+        strong = (str(s.get("name") or "") + " " + str(s.get("title") or "")).lower()
+        weak = str(s.get("description") or "").lower()
+        score = sum(3 for w in words if w in strong) + sum(1 for w in words if w in weak)
+        if score:
+            scored.append((score, s))
+    scored.sort(key=lambda x: (-x[0], x[1]["name"]))
+    out = []
+    for score, s in scored[:max(1, int(limit))]:
+        out.append({"name": s["name"], "category": s["category"],
+                    "title": s.get("title"), "description": s.get("description"),
+                    "score": score})
+    return out
