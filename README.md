@@ -20,17 +20,17 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - ✨ **UX harness moderna (v0.5)** — mobile tab bar (chat/sessions/tasks/context/feed), live CoT drawer, todo breakdown of every request onto the task board, token budget meter with one-tap compaction, session switch/create/delete, `self` tool for agent self-knowledge
 - 🧩 **LLM task graph (v0.6)** — every run's first action is a model-generated `write_todos` call that builds a **live, interactive graph of that run** (nodes, deps, evidence; `graph.node.*` over SSE; evidence required for `done`)
 - ⏹️ **Streams that actually end (v0.6.1)** — the chat/agent SSE terminates right after its terminal `done` and releases the socket, so the app leaves `busy` and the next message is never blocked; keep-alive stays a `/api/feed`-only tail
-- 🧾 **No request without an answer (v0.6.2)** — every request persists one `user` + one `assistant` turn (reply **or** explicit error turn), so a session never ends on an orphan user message; verified by `tests/v062_session_persistence.py`
-- 🔌 **Real MCP clients (v0.7)** — `config/mcp_clients.yaml` connects the agent to real MCP servers (e.g. `pmcp` on `:3344`, bearer auth via `${VAR}` headers + env_files); their tools appear as `<client>__<tool>` in the registry and the agent loop calls them through the approval gate, with the MCP output as observation; verified by `tests/v07_mcp_fsedit.py`
+- 🧾 **No request without an answer (v0.6.2)** — every request persists one `user` + one `assistant` turn (reply **or** explicit error turn), so a session never ends on an orphan user message; verified by `tests/legacy/v062_session_persistence.py`
+- 🔌 **Real MCP clients (v0.7)** — `config/mcp_clients.yaml` connects the agent to real MCP servers (e.g. `pmcp` on `:3344`, bearer auth via `${VAR}` headers + env_files); their tools appear as `<client>__<tool>` in the registry and the agent loop calls them through the approval gate, with the MCP output as observation; verified by `tests/legacy/v07_mcp_fsedit.py`
 - ✂️ **`fs.edit` (v0.7)** — surgical search/replace file edit (single or `replace_all`, refuses missing/ambiguous matches) instead of rewriting whole files with `fs.write`
-- 🧠 **Skills (v0.7.1, JAG-56)** — `skills/` holds the agent skill registry: one `SKILL.md` per skill under `skills/<category>/<name>/` (symlinked into the user skill distribution, e.g. `skills/ops -> ../../skills-autodist-skill/ops`); the `skills` tool (`{"action":"list"}` / `{"action":"read","name":"..."}`) lists and loads them, `self` reports the installed skills + how to add more; verified by `tests/v071_skills_pmcp.py`
-- 🗃️ **Real agent memory (v0.7.6, JAG-73)** — the `memory` tool (`action=store|recall|recent`) lets the agent deliberately remember durable facts and recall them; relevant memories are also auto-injected each turn, and the system prompt now carries an explicit **memory policy** (what it is + when to store/recall); verified by `tests/v076_memory_tool.py`
-- ⏱️ **Act, don't announce (v0.7.7, JAG-74)** — if the model only *promises* an action ("Carico…"/"I'll…") without calling a tool, the turn nudges it once to actually run it (or conclude); the announcement is never persisted; verified by `tests/v077_act_not_announce.py`
+- 🧠 **Skills (v0.7.1, JAG-56)** — `skills/` holds the agent skill registry: one `SKILL.md` per skill under `skills/<category>/<name>/` (symlinked into the user skill distribution, e.g. `skills/ops -> ../../skills-autodist-skill/ops`); the `skills` tool (`{"action":"list"}` / `{"action":"read","name":"..."}`) lists and loads them, `self` reports the installed skills + how to add more; verified by `tests/legacy/v071_skills_pmcp.py`
+- 🗃️ **Real agent memory (v0.7.6, JAG-73)** — the `memory` tool (`action=store|recall|recent`) lets the agent deliberately remember durable facts and recall them; relevant memories are also auto-injected each turn, and the system prompt now carries an explicit **memory policy** (what it is + when to store/recall); verified by `tests/legacy/v076_memory_tool.py`
+- ⏱️ **Act, don't announce (v0.7.7, JAG-74)** — if the model only *promises* an action ("Carico…"/"I'll…") without calling a tool, the turn nudges it once to actually run it (or conclude); the announcement is never persisted; verified by `tests/legacy/v077_act_not_announce.py`
 - 🔌 **MCP sessions self-heal (v0.7.7, JAG-74)** — a streamable-HTTP MCP session that expires server-side ("Session not found") is re-initialized and the call replayed, so `pmcp` tools keep working without a restart
-- 🪝 **Deterministic hooks (v0.7.3, JAG-69)** — `hooks.py` + `config/hooks.yaml` (empty by default): shell scripts on `PreToolUse` (exit 2 **blocks** the call, Claude Code contract), `PostToolUse` (observation in `$SPARKFORGE_OBSERVATION`) and `Stop`; no model in the loop, every hook emits `hook.run`; `GET /api/hooks`; verified by `tests/v073_hooks.py`
+- 🪝 **Deterministic hooks (v0.7.3, JAG-69)** — `hooks.py` + `config/hooks.yaml` (empty by default): shell scripts on `PreToolUse` (exit 2 **blocks** the call, Claude Code contract), `PostToolUse` (observation in `$SPARKFORGE_OBSERVATION`) and `Stop`; no model in the loop, every hook emits `hook.run`; `GET /api/hooks`; verified by `tests/legacy/v073_hooks.py`
 - ⏹️ **Stop a running tool (v0.7.2, JAG-68)** — `sandbox.run` uses Popen with a process group, so `POST /api/tools/cancel {run_id}` SIGTERM→SIGKILLs the actual job (and `docker kill`s a container); `GET /api/tools/running` lists live jobs; the app's STOP kills the job, not just the socket
 - 🧩 **Model-authored task list (JAG-65)** — the todo list is written **inline** by the model on its own first turn (harness action `write_todos`), never by a separate blocking planner call; session-keyed, persistent, re-injected every turn, and the reasoning streams live during tool steps
-- 🔄 **The model drives the graph itself (v0.7.8, JAG-75)** — after authoring the plan the model advances it mid-run: `update_todos` marks a step `doing` → `done` **with evidence**, and `replan_todos` briefly re-plans (only new steps are generated) then resumes the plan; every change streams `graph.node.updated` to the app; verified by `tests/v078_taskgraph_selfupdate.py`
+- 🔄 **The model drives the graph itself (v0.7.8, JAG-75)** — after authoring the plan the model advances it mid-run: `update_todos` marks a step `doing` → `done` **with evidence**, and `replan_todos` briefly re-plans (only new steps are generated) then resumes the plan; every change streams `graph.node.updated` to the app; verified by `tests/legacy/v078_taskgraph_selfupdate.py`
 - 📏 **Real context budget (JAG-66)** — the compaction budget is derived from the model's actual window (`meta.n_ctx`, e.g. 258048 for the 256k models) minus a reply reserve, instead of a fixed 6000
 - 🔀 **Providers & model picker (v0.7.5, JAG-71)** — `config/providers.yaml` + `providers.py` catalogue llama.cpp (DGX **and** Windows), vLLM, **OpenRouter** (GLM-flash / DeepSeek-flash families) and the **original DeepSeek** API; a model reference is `<provider>:<model>` (bare id resolves local-first); keys come from a gitignored `.env`/`~/.hermes/.env`, never the repo; `GET /api/providers` feeds the phone picker and `&model=` routes any chat/agent/context request
 - 📈 **Honest `ctx x / max` (JAG-70/72)** — `x` is the REAL prompt (system prompt + compacted transcript + message) measured with the same assembler, model-aware budget and memory the turn actually uses; `max` is the model's real window (local `n_ctx`, remote from live OpenRouter metadata, no guess); auto-compaction fires at **75%**
@@ -79,6 +79,24 @@ python3 forge.py models                           # router model roster/status
 
 > 📖 **Full CLI reference** — every command, every endpoint, examples: **[CLI.md](docs/CLI.md)**.
 
+### Regression battery (the gate)
+
+The **only** regression gate is a single 3-test battery — deterministic, fast and
+fully isolated: it points every `SPARKFORGE_*` data dir at a throwaway temp dir, so
+it never touches the live `data/` and never litters the WebUI with sessions.
+
+```bash
+bash tests/battery.sh
+```
+
+It runs exactly three checks:
+- `tests/v140_subagent_todos.py` — subagent spawning, per-child todo lists, depth cap, taskgraph nesting;
+- `tests/v174_session_isolation.py` — per-session independence (queue / feed / plan) + abort guard;
+- `tests/v177_session_delete_cascade.py` — deleting a session removes transcript + graph + run + edits.
+
+Everything else under `tests/legacy/` is historic acceptance evidence, run ad hoc,
+and is **not** part of the gate.
+
 ### v0.2 — tools, sandbox, approvals, MCP
 
 ```bash
@@ -90,7 +108,7 @@ python3 forge.py approvals approve <id>                   # decide a pending act
 python3 forge.py runs ls                                  # agent runs + HITL status
 python3 forge.py control abort run_ab12cd34               # pause | resume | abort a live run
 python3 forge.py mcp                                      # open an MCP session and list tools
-python3 tests/v02_acceptance.py                           # end-to-end evidence (8 checks)
+python3 tests/legacy/v02_acceptance.py                           # end-to-end evidence (8 checks)
 ```
 
 Agent runs accept a **script** for deterministic, reproducible runs:
@@ -115,7 +133,7 @@ Register SparkForge as an MCP server (stdio):
 ### v0.3 — checkpoints, context engineering, multi-model routing
 
 ```bash
-python3 tests/v03_acceptance.py                # end-to-end evidence (7 checks, live service)
+python3 tests/legacy/v03_acceptance.py                # end-to-end evidence (7 checks, live service)
 # checkpoints: snapshot plan+tasks+transcript, idempotent, rollback-able
 curl -sX POST localhost:8790/api/checkpoints -d '{"label":"before risky run","idempotency_key":"run-42"}'
 curl -s localhost:8790/api/checkpoints         # list
@@ -133,7 +151,7 @@ curl -s localhost:8790/api/routing
 ### v0.4 — ops, tracing, voice, eval
 
 ```bash
-python3 tests/v04_acceptance.py                # end-to-end evidence (17 checks, live service)
+python3 tests/legacy/v04_acceptance.py                # end-to-end evidence (17 checks, live service)
 curl -s http://127.0.0.1:8790/api/eval/tasks   # gold task set
 curl -sX POST http://127.0.0.1:8790/api/eval/run -d '{"task_id":"plan-hello"}'  # score a run
 curl -s http://127.0.0.1:8790/api/runs/<id>/trace   # OTel spans + token/cost per run
@@ -156,7 +174,7 @@ journalctl --user -u sparkforge.service -f
 ### v0.5.1 — chat/LLM server hardening
 
 ```bash
-python3 tests/v051_acceptance.py               # end-to-end evidence (9 checks)
+python3 tests/legacy/v051_acceptance.py               # end-to-end evidence (9 checks)
 curl -s localhost:8790/api/selfcheck           # version, model, router, token, LLM latency
 curl -sX POST localhost:8790/api/model/ensure -d '{}'          # warm the chat model
 curl -sN localhost:8790/api/chat/stream -d '{"message":"ciao"}'  # POST alias of the GET SSE stream
@@ -173,7 +191,7 @@ curl -sN localhost:8790/api/chat/stream -d '{"message":"ciao"}'  # POST alias of
 ### v0.6 — LLM task graph (live, bound to the run, interactive)
 
 ```bash
-python3 tests/v06_taskgraph.py                       # end-to-end evidence (15 checks)
+python3 tests/legacy/v06_taskgraph.py                       # end-to-end evidence (15 checks)
 curl -sN localhost:8790/api/chat/stream -d '{"message":"analizza il README in 3 step"}'  # live graph over SSE
 curl -s  localhost:8790/api/runs/<run_id>/graph      # persisted graph of that run
 curl -sX POST localhost:8790/api/runs/<run_id>/graph/nodes \
@@ -204,7 +222,7 @@ curl -sX POST localhost:8790/api/runs/<run_id>/graph/nodes \
 ### v0.6.1 — chat SSE closes after `done`
 
 ```bash
-python3 tests/v061_stream_close.py --live     # end-to-end evidence (8 checks, mock + live)
+python3 tests/legacy/v061_stream_close.py --live     # end-to-end evidence (8 checks, mock + live)
 ```
 
 - **Terminal `done` ends the stream.** `GET|POST /api/chat/stream` (and
@@ -221,8 +239,8 @@ python3 tests/v061_stream_close.py --live     # end-to-end evidence (8 checks, m
 ### v0.6.2 — no request without an answer (session persistence)
 
 ```bash
-python3 tests/v062_session_persistence.py       # end-to-end evidence (mock router)
-python3 tests/v062_session_persistence.py --live  # also against the live service
+python3 tests/legacy/v062_session_persistence.py       # end-to-end evidence (mock router)
+python3 tests/legacy/v062_session_persistence.py --live  # also against the live service
 ```
 
 - **The invariant.** Every request on a session persists **exactly one `user`
@@ -321,9 +339,9 @@ Optional auth: start with `--token <t>` and send `Authorization: Bearer <t>`.
 2. **Per-action approval gate.** `registry.classify(tool, args)` returns `auto | required | denied | disabled`. Read-only patterns (e.g. `^ls`, `^git status`, `fs.read`) are auto-approved *and still recorded*; anything else creates a `pending` approval that pauses the run until a human decides.
 3. **Hard denies.** Regexes like `rm -rf /`, `mkfs`, `dd if=/dev/zero`, `shutdown` and `git push` are blocked even with an approval.
 4. **Real sandbox.** `shell` runs on a fresh per-run scratch dir in `docker --network none --read-only --cap-drop ALL --user 65534` (falls back to `bwrap`/`nsjail`, and refuses to silently degrade to the host). Verified: network egress fails inside the container.
-5. **Observable.** Every decision and tool result is a feed event and lands in the run trace; `tests/v02_acceptance.py` proves each claim with command + output + numbers.
+5. **Observable.** Every decision and tool result is a feed event and lands in the run trace; `tests/legacy/v02_acceptance.py` proves each claim with command + output + numbers.
 
-**Verification.** `tests/v02_acceptance.py` passes **8/8** against a running instance
+**Verification.** `tests/legacy/v02_acceptance.py` passes **8/8** against a running instance
 (`./run.sh`; report in `data/v02-acceptance.json`), and the two v0.2 acceptance criteria
 were reproduced by hand — an agent run executing a real sandboxed shell command with a
 recorded approval whose output is the observation, and a Paperclip-style MCP session that
