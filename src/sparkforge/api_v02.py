@@ -219,7 +219,8 @@ def tool_action(st, tool, args, on_event, workspace=None):
     return toolmod.observation(res), meta
 
 
-def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None, workspace=None):
+def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None, workspace=None,
+               obs_max=1600):
     """One-shot gated tool call used by POST /api/tools/call and the chat loop.
 
     `timeout` (JAG-80) caps how long a `required` tool waits for a human decision.
@@ -266,7 +267,7 @@ def gated_call(tool, args, run_id=None, wait=True, by="api", timeout=None, works
              exit_code=res.get("exit_code"), backend=res.get("backend"),
              sandboxed=res.get("sandboxed"), stdout=(res.get("stdout") or "")[:2000])
     return {"status": "executed", "approval": rec, "result": res,
-            "observation": toolmod.observation(res)}
+            "observation": toolmod.observation(res, max_chars=obs_max)}
 
 
 # ------------------------------------------------------------- agent loop ---

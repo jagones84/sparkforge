@@ -116,6 +116,12 @@ _feed_lock = threading.Lock()
 _feed = deque(maxlen=MAX_FEED_EVENTS)
 _feed_seq = 0
 _sse_queues = set()  # each: queue.Queue of str chunks
+# JAG-181: per-session registry of chat turns that are STILL running. The worker
+# thread is independent of the HTTP request, so a page refresh/session switch does
+# NOT stop the turn — it only drops the browser's SSE channel. This lets the WebUI
+# re-attach (see /api/chat/attach) and resume following the live turn.
+_ACTIVE_CHAT = {}    # sid -> {"ev0": feed id at turn start, "ts": time}
+_ACTIVE_CHAT_LOCK = threading.Lock()
 
 
 def publish(kind, **data):
@@ -1760,6 +1766,13 @@ CHAT_TOOL_MAX_ITERS = int(os.environ.get("SPARKFORGE_CHAT_TOOL_ITERS", "64"))
 # chars are offloaded to a file instead of being flooded into the context (and
 # instead of the old silent 4000-char truncation that LOST the rest).
 CHAT_TOOL_OBS_LIMIT = int(os.environ.get("SPARKFORGE_TOOL_OBS_LIMIT", "6000"))
+# JAG-181: the chat loop feeds the FULL tool output to the harness budgeter
+# (_offload_observation), which writes it to a file and shows the model a head+tail
+# preview. If the tool layer truncated first (tools.observation default 1600) the
+# tail was lost forever and the model saw a dead "...[truncated N chars]" marker.
+# So the chat path renders observations up to this ceiling, then the harness offload
+# bounds the model context while NOTHING is discarded (the file keeps it all).
+CHAT_OBS_FULL = int(os.environ.get("SPARKFORGE_OFFLOAD_MAX", "200000"))
 CHAT_TOOL_PROMPT = (
     "\n\n## Tools\nYou are a tool-using agent, not a plain chatbot: you chat with "
     "the user AND you can act. When a request needs a tool (run a command, read or "
@@ -2558,7 +2571,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 # the full 300s and the mobile SSE died = "si blocca".
                 res = api_v02.gated_call(tool, args, run_id=sess["id"],
                                          timeout=CHAT_APPROVAL_WAIT,
-                                         workspace=_chat_workspace(sess))
+                                         workspace=_chat_workspace(sess),
+                                         obs_max=CHAT_OBS_FULL)
                 status = res.get("status")
                 obs = res.get("observation") or res.get("error") or res.get("status") or ""
                 if status in ("pending", "expired"):
@@ -3378,6 +3392,10 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
     q = queue.Queue()
     done = {"flag": False}
     since = mark if mark is not None else max(0, session_mark(sess) - 1)
+    # JAG-181: register this turn as ACTIVE for its session, capturing the feed id
+    # at turn start, so a re-attaching client can replay the whole turn.
+    with _ACTIVE_CHAT_LOCK:
+        _ACTIVE_CHAT[sess["id"]] = {"ev0": _feed_seq, "ts": time.time()}
 
     def on_delta(channel, text):
         q.put("event: chat.delta\ndata: %s\n\n" % json.dumps(
@@ -3461,6 +3479,9 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
         finally:
             done["flag"] = True
             q.put(None)
+            # JAG-181: the turn is over — no longer "attachable".
+            with _ACTIVE_CHAT_LOCK:
+                _ACTIVE_CHAT.pop(sess["id"], None)
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
@@ -3474,6 +3495,63 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
         # While the worker is alive it owns the persistence — never double-write.
         if not t.is_alive():
             ensure_reply_persisted(sess, since, error="stream ended without a reply")
+
+
+_ATTACH_KINDS = ("chat.run", "chat.delta", "chat.done")
+
+
+def _attach_frame(ev, terminal=False):
+    kind = "done" if (terminal or ev.get("kind") == "chat.done") else ev.get("kind")
+    return "id: %d\nevent: %s\ndata: %s\n\n" % (
+        ev["id"], kind, json.dumps(ev, ensure_ascii=False))
+
+
+def chat_attach_gen(sid, since=0):
+    """JAG-181: re-attach a refreshed / reopened WebUI to a chat turn that is still
+    RUNNING for `sid`.
+
+    A page refresh or a session switch loses the browser's SSE channel but never
+    stops the server-side worker. This generator replays the turn's streaming
+    events (chat.delta text) from the durable event log and then tails new ones
+    until the turn ends, so the reload resumes exactly where it left off instead of
+    looking "interrupted". Only the streaming/render events are replayed: tool
+    cards, todo tree and injects are already rebuilt by loadHistory, so replaying
+    them would duplicate.
+    """
+    with _ACTIVE_CHAT_LOCK:
+        info = _ACTIVE_CHAT.get(sid)
+    if not info:
+        yield "event: done\ndata: {}\n\n"   # turn already finished: nothing to follow
+        return
+    last = since or info.get("ev0", 0)
+    for ev in events_since(last):
+        if ev.get("session") != sid or ev.get("kind") not in _ATTACH_KINDS:
+            continue
+        last = ev["id"]
+        if ev.get("kind") == "chat.done":
+            yield _attach_frame(ev, terminal=True)
+            return
+        yield _attach_frame(ev)
+    idle = 0
+    while True:
+        with _ACTIVE_CHAT_LOCK:
+            if sid not in _ACTIVE_CHAT:
+                break
+        time.sleep(0.4)
+        emitted = False
+        for ev in events_since(last):
+            if ev.get("session") != sid or ev.get("kind") not in _ATTACH_KINDS:
+                continue
+            last = ev["id"]; emitted = True
+            if ev.get("kind") == "chat.done":
+                yield _attach_frame(ev, terminal=True)
+                return
+            yield _attach_frame(ev)
+        if not emitted:
+            idle += 1
+            if idle % 15 == 0:
+                yield ": ping\n\n"
+    yield "event: done\ndata: {}\n\n"
 
 
 def agent_stream_gen(goal, max_steps, model, workspace=None):
@@ -4000,6 +4078,21 @@ class Handler(BaseHTTPRequestHandler):
             if ensure_job(sess):   # JAG-169: backfill a stable JX on first read
                 save_session(sess)
             return self._send(200, sess)
+        if path == "/api/chat/live":
+            # JAG-181: which sessions currently have a chat turn running (for the
+            # WebUI to re-attach after a refresh / session switch).
+            with _ACTIVE_CHAT_LOCK:
+                return self._send(200, {"active": list(_ACTIVE_CHAT.keys())})
+        if path == "/api/chat/attach":
+            # JAG-181: resume following a still-running turn for `session`.
+            sid = qs.get("session")
+            if not sid:
+                return self._send(400, {"error": "session required"})
+            try:
+                since = int(qs.get("since", "0") or 0)
+            except ValueError:
+                since = 0
+            return sse_response(self, chat_attach_gen(sid, since))
         if path == "/api/chat/stream":
             # SSE chat. Session contract: see the Handler docstring (JAG-51).
             sid = qs.get("session")

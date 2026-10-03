@@ -1377,6 +1377,7 @@ function selectSession(s) {
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
   loadSessions(); loadHistory(); loadCtx(); loadRules(); loadPlan();
   modelLabel(); closeAside();
+  attachIfRunning(sessionId);   // JAG-181: resume following a still-running turn
   // JAG-127: the open panel must follow the session switch — its folder
   // changed, so a stale workspace/tree would be shown otherwise.
   const filesSec = document.querySelector('#inspector section[data-insp="files"]');
@@ -1679,8 +1680,11 @@ function applyGraphEvent(d) {
   // another session's node into the log currently on screen.
   if (d.session && d.session !== sessionId) return;
   // JAG-166: keep the in-chat tree in sync FIRST, independent of the panel state.
-  const _known = ((graph && graph.nodes) || []).some(n => n.id === d.node.id);
-  if (_known) chatNodeUpdate(d.node); else chatNodeAdd(d.node);
+  // Decide add-vs-update from the RENDERED map (_chatNodes), not from `graph`:
+  // during a live turn `graph` is null/stale, so a status change (todo->doing)
+  // was treated as a fresh add, chatNodeAdd early-returned, and the "doing"
+  // active scope was never set — that is why nesting only appeared after reload.
+  if (_chatNodes[d.node.id]) chatNodeUpdate(d.node); else chatNodeAdd(d.node);
   if (!curRunId || curRunId !== d.run) { setRun(d.run); return; }
   if (!graph) { loadGraph(); return; }
   graphFresh = d.node.id;
@@ -2036,6 +2040,45 @@ function setRunning(sid, on) {
   if (on) runningSessions[sid] = true; else delete runningSessions[sid];
   const row = document.querySelector('.sess[data-sid="' + sid + '"]');
   if (row) row.classList.toggle("running", !!on);
+}
+/* JAG-181: after a page refresh or a session switch the browser loses the SSE
+   channel of a chat turn that is STILL running server-side (the worker is not
+   tied to the request). This re-attaches to it: the stream replays the turn's
+   chat.delta text and then resumes live until `done`, so a reload no longer looks
+   like an interrupted run. It renders ONLY the streaming text — tool cards / todo
+   tree / injects are rebuilt by loadHistory, so replaying them would duplicate. */
+function attachTurn(sid) {
+  if (!sid || turnSSE[sid]) return;
+  const es = new EventSource("/api/chat/attach?session=" + encodeURIComponent(sid) + (authQS() ? "&" + authQS() : ""));
+  turnSSE[sid] = es; setRunning(sid, true);
+  const live = () => sessionId === sid;
+  const end = (reload) => {
+    try { es.close(); } catch (e) {}
+    if (turnSSE[sid] === es) delete turnSSE[sid];
+    setRunning(sid, false);
+    if (live() && reload) {
+      endStream();
+      $("log").innerHTML = ""; _resetChatTree();
+      loadHistory(); loadPlan(); loadGraph(); loadCtx(); refreshEdits(); linkifyAll();
+    }
+  };
+  es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); if (live()) setRun(d.run_id); });
+  es.addEventListener("chat.delta", e => {
+    const d = JSON.parse(e.data);
+    if (!live()) return;
+    if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); }
+    else { appendAnswer(d.text); }
+    scroll();
+  });
+  es.addEventListener("done", () => end(true));
+  es.addEventListener("error", () => { end(false); setTimeout(() => attachIfRunning(sid), 1500); });
+}
+async function attachIfRunning(sid) {
+  if (!sid || turnSSE[sid]) return;
+  try {
+    const out = await api("GET", "/api/chat/live");
+    if ((out.active || []).includes(sid)) attachTurn(sid);
+  } catch (e) {}
 }
 function stopRun() {
   // JAG-168: a chat turn is stopped SERVER-side for the session on screen; the
@@ -3630,6 +3673,7 @@ $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
   loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadHistory(); connectFeed(); loadSkills();
+  attachIfRunning(sessionId);   // JAG-181: a refresh must not lose a running turn
 });
 setInterval(loadStatus, 5000);
 setInterval(loadApprovals, 4000);
