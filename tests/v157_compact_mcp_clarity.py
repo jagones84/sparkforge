@@ -38,7 +38,8 @@ check("C2 compact not in the topbar", "compactBtn" not in top)
 check("C3 compact handler unchanged", '$("compactBtn").onclick = compactNow;' in html)
 
 # ---- S: Tools & policy clarity ----
-check("S1 runtime explained", "Runtime · giri di continuazione" in html and "Quante volte l'agente" in html)
+check("S1 runtime explained", "<b>Runtime</b>" in html and "giri di continuazione" in html
+      and "Quante volte l'agente" in html)
 check("S2 difficulty plain labels + tooltip",
       "tentativi · facile" in html and "soglia → medio" in html and 'title="Soglia di difficoltà' in html)
 check("S3 ids unchanged",
@@ -72,7 +73,9 @@ if base and tok:
         r = urllib.request.Request(base + path, data=data, method=method,
                                    headers={"Authorization": "Bearer " + tok,
                                             "Content-Type": "application/json"})
-        with urllib.request.urlopen(r, timeout=25) as resp:
+        # JAG-159: adding a client reconnects every configured MCP server; a slow
+        # HTTP gateway can push a single request past 25s, so allow more headroom.
+        with urllib.request.urlopen(r, timeout=120) as resp:
             return json.loads(resp.read().decode())
     try:
         lf = req("POST", "/api/mcp/local-file", {})

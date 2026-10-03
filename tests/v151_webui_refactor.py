@@ -31,7 +31,9 @@ def main():
     check("S1 window shell present", 'id="settingsWin"' in html and "function openSettings" in html)
     check("S2 drag + resize + persist wired",
           "sf_settings_pos" in html and "function dragify" in html and "function resizify" in html)
-    for cat in ["general", "models", "providers", "keys", "mcp", "skills", "rules", "tools"]:
+    # JAG-160: "general" -> "info" (moved last), "providers" merged into "models",
+    # "harness" split out of "tools".
+    for cat in ["models", "keys", "mcp", "skills", "rules", "tools", "harness", "info"]:
         check("S3 category %r" % cat, ('data-cat="%s"' % cat) in html)
 
     # I — inspector

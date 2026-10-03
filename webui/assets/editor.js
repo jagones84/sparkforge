@@ -133,6 +133,13 @@ const STYLE = `
 #editorDock .ed-foot{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line,#26304a)}
 #editorDock.ed-overlay{position:fixed;top:44px;right:0;bottom:0;height:auto;width:min(520px,92vw);z-index:40;box-shadow:-16px 0 40px rgba(0,0,0,.45)}
 .ed-tab-note{color:var(--warn,#e0b341)}
+#editorDock.ed-drop{outline:2px dashed var(--accent,#8b7bf0);outline-offset:-4px}
+#edCtx{position:fixed;z-index:60;background:var(--toolbar-menu-bg,#0f172a);border:1px solid var(--line,#26304a);
+  border-radius:.5rem;padding:4px;box-shadow:0 10px 30px rgba(0,0,0,.5);font-size:12px;min-width:160px}
+#edCtx button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--txt,#e6edf7);
+  padding:6px 10px;border-radius:.35rem;cursor:pointer;font:inherit;font-size:12px}
+#edCtx button:hover{background:rgba(108,140,255,.16)}
+.ed-tab .tmp{color:var(--accent,#8b7bf0)}
 `;
 
 function buildDock() {
@@ -185,7 +192,15 @@ function buildDock() {
     localStorage.setItem("sf_ed_tree", t.hidden ? "0" : "1");
     if (!t.hidden && !t.childElementCount) loadTree();
   };
-  dock.querySelector(".ed-refresh").onclick = () => loadTree();
+  dock.querySelector(".ed-refresh").onclick = () => refreshAll();
+
+  // JAG-159: drop a file from the OS into the dock -> open it as a temp tab.
+  dock.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; dock.classList.add("ed-drop"); });
+  dock.addEventListener("dragleave", (e) => { if (!dock.contains(e.relatedTarget)) dock.classList.remove("ed-drop"); });
+  dock.addEventListener("drop", (e) => { e.preventDefault(); dock.classList.remove("ed-drop"); handleDrop(e.dataTransfer && e.dataTransfer.files); });
+  // JAG-159: close the right-click menu on any outside click / Escape.
+  document.addEventListener("click", (e) => { if (!$id("edCtx")) return; if (!(e.target.closest && e.target.closest("#edCtx"))) hideTreeMenu(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTreeMenu(); });
 
   const saved = parseInt(localStorage.getItem(LS_W) || "", 10);
   if (saved) dock.style.width = saved + "px";
@@ -277,6 +292,7 @@ function renderTree(container, d, depth) {
     row.textContent = "📄 " + f.name;
     row.title = f.path;
     row.onclick = () => open(f.path);
+    row.oncontextmenu = (e) => { e.preventDefault(); showTreeMenu(e.clientX, e.clientY, f.path); };
     container.appendChild(row);
   });
 }
@@ -287,7 +303,7 @@ function renderTabs() {
   state.tabs.forEach((t, i) => {
     const b = document.createElement("div");
     b.className = "ed-tab" + (i === state.active ? " active" : "");
-    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = basename(t.path);
+    const nm = document.createElement("span"); nm.className = "nm" + (t.temp ? " tmp" : ""); nm.textContent = basename(t.path);
     b.appendChild(nm);
     if (t.dirty) { const d = document.createElement("span"); d.className = "dirty"; d.textContent = "●"; b.appendChild(d); }
     const x = document.createElement("span"); x.className = "x"; x.textContent = "✕";
@@ -299,7 +315,11 @@ function renderTabs() {
 }
 
 function persistTabs() {
-  try { localStorage.setItem(tabsKey(), JSON.stringify({ paths: state.tabs.map((t) => t.path), active: state.active })); } catch (e) { /* ignore */ }
+  try {
+    // temp tabs (dragged-in files) are never persisted
+    const paths = state.tabs.filter((t) => !t.temp).map((t) => t.path);
+    localStorage.setItem(tabsKey(), JSON.stringify({ paths, active: state.active }));
+  } catch (e) { /* ignore */ }
 }
 
 function showCode(show) {
@@ -329,7 +349,9 @@ function renderActive() {
     state.preview.appendChild(ifr);
   } else if (t.viewer === "image" || t.viewer === "pdf") {
     state.preview.innerHTML = "";
-    const url = "/api/fs/raw?path=" + encodeURIComponent(t.path) + (TOKEN() ? "&token=" + encodeURIComponent(TOKEN()) : "");
+    const url = (t.temp && t.objectUrl)
+      ? t.objectUrl
+      : ("/api/fs/raw?path=" + encodeURIComponent(t.path) + (TOKEN() ? "&token=" + encodeURIComponent(TOKEN()) : ""));
     const node = document.createElement(t.viewer === "pdf" ? "iframe" : "img");
     node.src = url;
     if (t.viewer === "pdf") node.setAttribute("style", "width:100%;height:100%;border:0");
@@ -408,6 +430,7 @@ function closeTab(i) {
   if (!t) return;
   if (t.dirty && !window.confirm('Chiudere "' + basename(t.path) + '" con modifiche non salvate?')) return;
   if (i === state.active) syncActive();
+  if (t.temp && t.objectUrl) { try { URL.revokeObjectURL(t.objectUrl); } catch (e) { /* ignore */ } }
   state.tabs.splice(i, 1);
   if (state.tabs.length === 0) { state.active = -1; close(); return; }
   state.active = Math.min(i, state.tabs.length - 1);
@@ -512,13 +535,96 @@ async function refresh(path) {
     }
   } catch (e) { /* ignore */ }
 }
+/* JAG-160: the dock's reload button refreshes EVERYTHING — the tree plus the
+   content of every open (non-temp) tab, re-read from disk. */
+async function refreshAll() {
+  syncActive();
+  const paths = state.tabs.filter((t) => !t.temp).map((t) => t.path);
+  await loadTree();
+  for (const p of paths) { await refresh(p); }
+  setStatus(paths.length ? ("reloaded · " + paths.length + " tab") : "tree reloaded");
+}
 function closePath(path) { const i = state.tabs.findIndex((t) => t.path === path); if (i >= 0) closeTab(i); }
 function has(path) { return state.tabs.some((t) => t.path === path); }
+
+/* JAG-159: right-click menu on a file row in the tree. */
+function hideTreeMenu() { const m = $id("edCtx"); if (m) m.remove(); }
+function showTreeMenu(x, y, path) {
+  hideTreeMenu();
+  const m = document.createElement("div");
+  m.id = "edCtx";
+  const mk = (label, fn) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = () => { hideTreeMenu(); fn(); };
+    m.appendChild(b);
+  };
+  mk("⧉ copia path", () => copyPath(path));
+  mk("📄 apri nell'editor", () => open(path));
+  mk("⇩ scarica", () => downloadPath(path));
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, window.innerWidth - r.width - 8) + "px";
+  m.style.top = Math.min(y, window.innerHeight - r.height - 8) + "px";
+}
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); } catch (e) { /* ignore */ }
+  ta.remove();
+}
+function copyPath(path) {
+  const done = () => setStatus("path copiato ✓ " + path);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(path).then(done, () => { fallbackCopy(path); done(); });
+      return;
+    }
+  } catch (e) { /* fall through */ }
+  fallbackCopy(path); done();
+}
+function downloadPath(path) {
+  const url = "/api/fs/raw?path=" + encodeURIComponent(path) + (TOKEN() ? "&token=" + encodeURIComponent(TOKEN()) : "");
+  window.open(url, "_blank");
+}
+/* JAG-159: drop from the OS -> temp tab (the browser does not expose the path). */
+function handleDrop(files) {
+  if (!files || !files.length) return;
+  Array.from(files).slice(0, 5).forEach((f) => {
+    if ((f.type || "").startsWith("image/")) openTempImage(f.name, URL.createObjectURL(f));
+    else f.text().then((t) => openTemp(f.name, t)).catch(() => openTemp(f.name, ""));
+  });
+}
+function openTemp(name, text) {
+  buildDock();
+  const p = "untitled://" + name;
+  const i = state.tabs.findIndex((t) => t.path === p);
+  if (i >= 0) { activate(i); show(); return; }
+  const tab = { path: p, viewer: viewerFor(name), lang: langOf(name), mode: "render",
+                saved: text || "", value: text || "", dirty: false, readonly: true,
+                size: (text || "").length, temp: true };
+  state.tabs.push(tab); state.active = state.tabs.length - 1;
+  renderTabs(); renderActive(); show();
+  setStatus("file trascinato · temporaneo (non salvato)");
+}
+function openTempImage(name, url) {
+  buildDock();
+  const p = "untitled://" + name;
+  const i = state.tabs.findIndex((t) => t.path === p);
+  if (i >= 0) { activate(i); show(); return; }
+  const tab = { path: p, viewer: "image", lang: null, mode: "render", saved: "", value: "",
+                dirty: false, readonly: true, objectUrl: url, temp: true };
+  state.tabs.push(tab); state.active = state.tabs.length - 1;
+  renderTabs(); renderActive(); show();
+  setStatus("immagine trascinata · temporanea");
+}
 
 window.SparkEditor = {
   open: (p) => { open(p); },
   save,
   refresh,
+  refreshAll,
   closePath,
   has,
   close,

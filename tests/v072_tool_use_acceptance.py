@@ -170,6 +170,16 @@ def t3_agent_fs_read():
 
 
 def t4_agent_mcp():
+    # JAG-159: pmcp is optional — skip when no pmcp client is configured.
+    try:
+        import mcp_client as _mc
+        configured = "pmcp" in (_mc.load_doc().get("clients") or {})
+    except Exception:  # noqa: BLE001
+        configured = False
+    if not configured:
+        check("T4 AGENT MCP: deve chiamare pmcp__gateway.health E poi finish", True,
+              "SKIP: pmcp not configured")
+        return
     evs = sse("/api/agent/run?goal=%s&max_steps=5" % urllib.parse.quote(
         "Chiama il tool MCP pmcp__gateway.health, poi chiama finish summary=ok"),
         method="GET", timeout=600)

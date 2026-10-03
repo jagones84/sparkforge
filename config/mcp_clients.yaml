@@ -1,23 +1,24 @@
 # SparkForge external MCP clients — v0.7
 # Each entry: command+args (stdio) OR url (HTTP streamable). Optional headers
 # support ${VAR} expansion; env_files are loaded before expansion (KEY=VALUE).
+#
+# This TRACKED file ships EXAMPLES only and stays generic (no machine paths, no
+# tokens, no required server). Add your own clients, preferably from the WebUI
+# (Settings -> MCP -> "Edit mcp.json"), which writes the gitignored
+# config/mcp_clients.local.json in format {"mcpServers": {...}}.
 env_files:
   - ~/.hermes/.env
 
-clients:
-  pmcp:
-    url: http://127.0.0.1:3344/mcp
-    enabled: true
-    headers:
-      Authorization: Bearer ${PMCP_AUTH_TOKEN}
+clients: {}
 
-  # JAG-125: Python snippet sandbox (Pyodide/WASM — no host filesystem, no net).
-  # Exposes the `run_python_code` tool as `python_sandbox__run_python_code`.
-  # node must be on PATH for npx, so the nvm bin dir is passed explicitly (the
-  # systemd service PATH does not necessarily include it).
-  python_sandbox:
-    command: /home/jagones/.nvm/versions/node/v24.15.0/bin/npx
-    args: ["-y", "@pydantic/mcp-run-python", "stdio"]
-    env:
-      PATH: /home/jagones/.nvm/versions/node/v24.15.0/bin:/usr/local/bin:/usr/bin:/bin
-    enabled: true
+# --- examples (copy into config/mcp_clients.local.json to use) --------------
+# clients:
+#   filesystem:
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/YOU"]
+#     enabled: true
+#   my-gateway:
+#     url: http://127.0.0.1:3344/mcp
+#     headers:
+#       Authorization: Bearer ${MY_GATEWAY_TOKEN}
+#     enabled: true

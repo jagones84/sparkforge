@@ -38,6 +38,13 @@ def check(name, ok, detail=""):
     return bool(ok)
 
 
+def skip(name, detail="not configured"):
+    """JAG-159: the pmcp gateway is optional — a repo without it must not fail."""
+    RESULTS["checks"].append({"name": name, "ok": True, "detail": "SKIP " + detail})
+    print("SKIP %s %s" % (name, detail))
+    return True
+
+
 def main():
     ok = True
 
@@ -48,20 +55,35 @@ def main():
     mgr = mcp_client.get_manager()
     mgr.start_all()
     st = mgr.status()
-    ok &= check("A1 pmcp connected", st["clients"].get("pmcp", {}).get("connected"),
-                st["clients"])
-    ext = mgr.list_external_tools()
-    ok &= check("A2 tools/list real", len(ext) > 0, "%d external tools" % len(ext))
-    names = [t["name"] for t in registry.catalog() if "__" in t["name"]]
-    ok &= check("A3 external tools in registry catalog", len(names) >= len(ext),
-                "catalog=%d external=%d" % (len(names), len(ext)))
+    clients = st.get("clients") or {}
+    if not clients:
+        skip("A1 pmcp connected", "no MCP client configured")
+        skip("A2 tools/list real", "no MCP client configured")
+        skip("A3 external tools in registry catalog", "no MCP client configured")
+    else:
+        if "pmcp" in clients:
+            ok &= check("A1 pmcp connected", clients.get("pmcp", {}).get("connected"), clients)
+        else:
+            skip("A1 pmcp connected", "pmcp not configured")
+        ext = mgr.list_external_tools()
+        ok &= check("A2 tools/list real", len(ext) > 0, "%d external tools" % len(ext))
+        names = [t["name"] for t in registry.catalog() if "__" in t["name"]]
+        ok &= check("A3 external tools in registry catalog", len(names) >= len(ext),
+                    "catalog=%d external=%d" % (len(names), len(ext)))
 
     # ---- B: real MCP tools/call through the gate ----------------------------
-    res = tools.execute("pmcp__gateway.health", {})
-    ok &= check("B1 pmcp__gateway.health executed", res.get("ok"),
-                res.get("stdout", "")[:120])
-    ok &= check("B2 backend is mcp(pmcp)", res.get("backend") == "mcp(pmcp)",
-                res.get("backend"))
+    # JAG-159: pmcp is optional — skip when it is absent OR the live client
+    # reports no tools (a declared-but-empty gateway cannot serve health).
+    pmcp_st = clients.get("pmcp") or {}
+    if bool(pmcp_st.get("connected")) and int(pmcp_st.get("tools") or 0) > 0:
+        res = tools.execute("pmcp__gateway.health", {})
+        ok &= check("B1 pmcp__gateway.health executed", res.get("ok"),
+                    res.get("stdout", "")[:120])
+        ok &= check("B2 backend is mcp(pmcp)", res.get("backend") == "mcp(pmcp)",
+                    res.get("backend"))
+    else:
+        skip("B1 pmcp__gateway.health executed", "pmcp exposes no tools")
+        skip("B2 backend is mcp(pmcp)", "pmcp exposes no tools")
 
     # ---- C: fs.edit ---------------------------------------------------------
     ws = registry.workspace_dir()

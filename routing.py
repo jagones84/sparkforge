@@ -140,6 +140,17 @@ def pick(role, preferred=None):
     return _match(chain, roster)
 
 
+def role_model(role):
+    """Explicit model ref configured for a role (e.g. roles.summarizer.model).
+
+    JAG-160: lets the WebUI pin an EXACT model (a local alias OR a
+    ``provider:model`` ref) instead of a substring pattern. Returns None when
+    unset, so callers keep the pattern/fallback behaviour of ``pick()``.
+    """
+    entry = (load_config().get("roles") or {}).get(role) or {}
+    return entry.get("model") or None
+
+
 def fallback_chain(role):
     """Full alias candidates for a role, resolved against the roster.
 
@@ -167,6 +178,7 @@ def status():
     roles = {}
     for role in (cfg.get("roles") or {}):
         roles[role] = {
+            "model": (cfg.get("roles", {}).get(role) or {}).get("model"),
             "selected": pick(role),
             "chain": fallback_chain(role),
         }
@@ -180,6 +192,13 @@ def update(body):
     roles = body.get("roles") or {}
     for role, entry in roles.items():
         cur = cfg.setdefault("roles", {}).setdefault(role, {})
+        if "model" in entry:
+            # JAG-160: explicit model ref (local alias or provider:model); an
+            # empty value clears the pin and restores pattern-based selection.
+            if entry.get("model"):
+                cur["model"] = str(entry["model"])
+            else:
+                cur.pop("model", None)
         if "pattern" in entry:
             cur["pattern"] = str(entry["pattern"])
         if "fallbacks" in entry:

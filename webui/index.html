@@ -127,6 +127,8 @@
   button:active { transform: scale(.97); }
   button.ghost { background: transparent; border: 1px solid var(--line); color: var(--dim); font-weight: 400; padding: 8px 14px; }
   button.ghost:hover { color: var(--txt); border-color: rgba(108,140,255,.4); }
+  /* JAG-159: the settings gear gets an accent (blue) border so it stands out. */
+  #settingsBtn { border-color: rgba(108,140,255,.55); color: var(--accent, #8b7bf0); }
   .feed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
   .feed-dot.off { background: var(--dim); box-shadow: none; }
 
@@ -364,6 +366,34 @@
     margin: 16px 0 8px; text-transform: uppercase; }
   #settingsWin .sw-main .sw-cat > h2:first-child { margin-top: 0; }
   #settingsWin .sw-cat[hidden] { display: none; }
+  /* JAG-159: Harness + Tool-policy cards, restyled with the archify design tokens
+     (slate panel, accent dot header, compact inline labels). */
+  #swMain .sw-cat[data-cat="harness"] > .card,
+  #swMain .sw-cat[data-cat="tools"] > .card {
+    background: linear-gradient(180deg, rgba(15,23,42,.5), rgba(9,13,26,.55));
+    border: 1px solid #1e293b; border-radius: 12px; padding: 13px 15px; margin-bottom: 10px;
+  }
+  .hcard-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .hcard-hd .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px;
+    background: var(--hc, #6c8cff); box-shadow: 0 0 10px var(--hc, #6c8cff); }
+  .hcard-hd b { font-size: 13px; color: var(--txt); letter-spacing: .01em; }
+  .hcard-hd .hc-sub { font-size: 12px; color: var(--dim); }
+  .hrow { display: flex; flex-wrap: wrap; align-items: center; }
+  #swMain .sw-cat[data-cat="harness"] label {
+    display: inline-flex; align-items: center; gap: 7px; background: rgba(30,41,59,.35);
+    border: 1px solid #1e293b; border-radius: 8px; padding: 5px 9px; margin: 3px 6px 3px 0;
+    color: var(--txt); font-size: 12px;
+  }
+  #swMain .sw-cat[data-cat="harness"] label input {
+    background: #0b1020; border: 1px solid #263349; border-radius: 6px;
+    color: var(--txt); padding: 3px 7px; font: inherit; font-size: 12px; width: 84px;
+  }
+  #swMain .sw-cat[data-cat="harness"] label input[type=checkbox] { width: auto; accent-color: var(--hc, #6c8cff); }
+  #swMain .sw-cat[data-cat="harness"] #vfCmd,
+  #swMain .sw-cat[data-cat="harness"] #vfPaths,
+  #swMain .sw-cat[data-cat="harness"] #seCat { width: 190px; }
+  #swMain .sw-cat[data-cat="harness"] > .card > .ghost,
+  #swMain .sw-cat[data-cat="tools"] > .card > .ghost { margin-top: 8px; }
   #settingsWin .sw-resize { position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
     cursor: nwse-resize; color: var(--dim); }
   /* JAG-152: MCP JSON "configure manually" (read the final config + paste your own) */
@@ -501,87 +531,72 @@
         </div>
         </div>
       </section>
-      <section data-insp="feed" class="insp-open">
-        <button class="insp-hd" onclick="toggleInsp('feed')">Feed</button>
-        <div class="insp-body">
-        <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
-        </div>
-      </section>
-      <div class="sw-cat" data-cat="tools" hidden>
-        <h2>Tools &amp; policy</h2>
-        <div class="card"><b>Runtime · giri di continuazione</b>
-          <div class="remaining" style="margin:2px 0 6px">Quante volte l'agente può continuare da solo prima di fermarsi: tiene in vita i lavori lunghi senza restare bloccato per sempre.</div>
-          <label title="Numero massimo di continuazioni automatiche dopo la prima risposta (0 = disattivato).">continuazioni massime <input id="rtKgMax" type="number" min="0" value="8"></label>
-          <label title="Dopo quanti giri consecutivi senza progressi l'agente si ferma (0 = mai).">giri senza progressi <input id="rtNoProg" type="number" min="0" value="2"></label>
-          <label title="Tempo massimo per l'intero run, in secondi (0 = nessun limite).">limite tempo (s) <input id="rtWall" type="number" min="0" value="3600"></label>
-          <label title="Quanti livelli di sub-agent può generare un agente (0 = nessuno).">livelli di sub-agent <input id="rtDepth" type="number" min="0" value="2"></label>
+      <div class="sw-cat" data-cat="harness" hidden>
+        <h2>Harness · comportamento dell'agente</h2>
+        <div class="card hcard" style="--hc:#22d3ee">
+          <div class="hcard-hd"><span class="dot"></span><b>Runtime</b><span class="hc-sub">giri di continuazione</span></div>
+          <div class="remaining" style="margin:0 0 6px">Quante volte l'agente può continuare da solo prima di fermarsi: tiene in vita i lavori lunghi senza restare bloccato per sempre.</div>
+          <div class="hrow">
+            <label title="Numero massimo di continuazioni automatiche dopo la prima risposta (0 = disattivato).">continuazioni massime <input id="rtKgMax" type="number" min="0" value="8"></label>
+            <label title="Dopo quanti giri consecutivi senza progressi l'agente si ferma (0 = mai).">giri senza progressi <input id="rtNoProg" type="number" min="0" value="2"></label>
+            <label title="Tempo massimo per l'intero run, in secondi (0 = nessun limite).">limite tempo (s) <input id="rtWall" type="number" min="0" value="3600"></label>
+            <label title="Quanti livelli di sub-agent può generare un agente (0 = nessuno).">livelli di sub-agent <input id="rtDepth" type="number" min="0" value="2"></label>
+          </div>
           <button class="ghost" onclick="saveRuntime()" title="salva le impostazioni del runtime">salva runtime</button>
         </div>
-        <div class="card"><b>Verifier · applica solo se verde</b>
-          <div class="remaining" style="margin:2px 0 6px">Dopo le modifiche esegue un comando di verifica (es. i test) e le applica solo se passa: se fallisce, annulla.</div>
-          <label title="Attiva il controllo prima di applicare le modifiche dell'agente.">attivo <input id="vfOn" type="checkbox"></label>
-          <label title="Comando eseguito per verificare (es. python3 -m pytest -q).">comando di verifica <input id="vfCmd" type="text" placeholder="python3 -m pytest -q"></label>
-          <label title="Secondi massimi di attesa per il comando di verifica.">timeout (s) <input id="vfTimeout" type="number" min="0" value="120"></label>
-          <label title="Limita la verifica a questi percorsi, separati da virgola (vuoto = tutto il workspace).">path controllati <input id="vfPaths" type="text" placeholder="opzionale"></label>
+        <div class="card hcard" style="--hc:#34d399">
+          <div class="hcard-hd"><span class="dot"></span><b>Verifier</b><span class="hc-sub">applica solo se verde</span></div>
+          <div class="remaining" style="margin:0 0 6px">Dopo le modifiche esegue un comando di verifica (es. i test) e le applica solo se passa: se fallisce, annulla.</div>
+          <div class="hrow">
+            <label title="Attiva il controllo prima di applicare le modifiche dell'agente.">attivo <input id="vfOn" type="checkbox"></label>
+            <label title="Comando eseguito per verificare (es. python3 -m pytest -q).">comando di verifica <input id="vfCmd" type="text" placeholder="python3 -m pytest -q"></label>
+            <label title="Secondi massimi di attesa per il comando di verifica.">timeout (s) <input id="vfTimeout" type="number" min="0" value="120"></label>
+            <label title="Limita la verifica a questi percorsi, separati da virgola (vuoto = tutto il workspace).">path controllati <input id="vfPaths" type="text" placeholder="opzionale"></label>
+          </div>
           <button class="ghost" onclick="saveVerifier()" title="salva le impostazioni del verifier">salva verifier</button>
         </div>
-        <div class="card"><b>Best-of-N · più risposte, la migliore</b>
-          <div class="remaining" style="margin:2px 0 6px">Genera N risposte indipendenti e tiene la migliore: più affidabile, ma più lento e costoso.</div>
-          <label title="Attiva il campionamento di più risposte.">attivo <input id="bnOn" type="checkbox"></label>
-          <label title="Quante risposte generare (1 = nessun best-of-N).">numero risposte N <input id="bnN" type="number" min="1" max="16" value="1"></label>
-          <label title="Punteggio minimo (0..1) che una risposta deve avere per essere accettata.">punteggio minimo <input id="bnMin" type="number" step="0.05" value="0"></label>
+        <div class="card hcard" style="--hc:#fbbf24">
+          <div class="hcard-hd"><span class="dot"></span><b>Best-of-N</b><span class="hc-sub">più risposte, la migliore</span></div>
+          <div class="remaining" style="margin:0 0 6px">Genera N risposte indipendenti e tiene la migliore: più affidabile, ma più lento e costoso.</div>
+          <div class="hrow">
+            <label title="Attiva il campionamento di più risposte.">attivo <input id="bnOn" type="checkbox"></label>
+            <label title="Quante risposte generare (1 = nessun best-of-N).">numero risposte N <input id="bnN" type="number" min="1" max="16" value="1"></label>
+            <label title="Punteggio minimo (0..1) che una risposta deve avere per essere accettata.">punteggio minimo <input id="bnMin" type="number" step="0.05" value="0"></label>
+          </div>
           <button class="ghost" onclick="saveBestofn()" title="salva le impostazioni del best-of-N">salva best-of-N</button>
         </div>
-        <div class="card"><b>Difficulty · sforzo adattivo</b>
-          <div class="remaining" style="margin:2px 0 6px">Adatta quanti tentativi fare in base a quanto è difficile il task: pochi se è facile, di più se è complesso.</div>
-          <label title="Attiva la stima automatica della difficoltà.">attivo <input id="dfOn" type="checkbox"></label>
-          <label title="Numero di tentativi per i task facili.">tentativi · facile <input id="dfEasy" type="number" min="1" max="16" value="1"></label>
-          <label title="Numero di tentativi per i task medi.">tentativi · medio <input id="dfMed" type="number" min="1" max="16" value="2"></label>
-          <label title="Numero di tentativi per i task difficili.">tentativi · difficile <input id="dfHard" type="number" min="1" max="16" value="3"></label>
-          <label title="Soglia di difficoltà (0..1) oltre la quale il task è considerato medio.">soglia → medio <input id="dfMedAt" type="number" step="0.05" value="0.35"></label>
-          <label title="Soglia di difficoltà (0..1) oltre la quale il task è considerato difficile.">soglia → difficile <input id="dfHardAt" type="number" step="0.05" value="0.65"></label>
+        <div class="card hcard" style="--hc:#a78bfa">
+          <div class="hcard-hd"><span class="dot"></span><b>Difficulty</b><span class="hc-sub">sforzo adattivo</span></div>
+          <div class="remaining" style="margin:0 0 6px">Adatta quanti tentativi fare in base a quanto è difficile il task: pochi se è facile, di più se è complesso.</div>
+          <div class="hrow">
+            <label title="Attiva la stima automatica della difficoltà.">attivo <input id="dfOn" type="checkbox"></label>
+            <label title="Numero di tentativi per i task facili.">tentativi · facile <input id="dfEasy" type="number" min="1" max="16" value="1"></label>
+            <label title="Numero di tentativi per i task medi.">tentativi · medio <input id="dfMed" type="number" min="1" max="16" value="2"></label>
+            <label title="Numero di tentativi per i task difficili.">tentativi · difficile <input id="dfHard" type="number" min="1" max="16" value="3"></label>
+            <label title="Soglia di difficoltà (0..1) oltre la quale il task è considerato medio.">soglia → medio <input id="dfMedAt" type="number" step="0.05" value="0.35"></label>
+            <label title="Soglia di difficoltà (0..1) oltre la quale il task è considerato difficile.">soglia → difficile <input id="dfHardAt" type="number" step="0.05" value="0.65"></label>
+          </div>
           <button class="ghost" onclick="saveDifficulty()" title="salva le impostazioni della difficoltà">salva difficulty</button>
         </div>
-        <div class="card"><b>Self-evolving · nuove skill</b>
-          <div class="remaining" style="margin:2px 0 6px">Riconosce i pattern ricorrenti nei tuoi task e propone di salvarli come skill riutilizzabili.</div>
-          <label title="Lunghezza minima (in righe) perché un pattern diventi una skill.">lunghezza minima <input id="seMinLen" type="number" min="1" value="2"></label>
-          <label title="Quante volte deve ricorrere un pattern prima di diventare una skill.">occorrenze minime <input id="seMinCount" type="number" min="2" value="3"></label>
-          <label title="Lunghezza massima (in righe) di una skill sintetizzata.">lunghezza massima <input id="seMaxLen" type="number" min="2" value="6"></label>
-          <label title="Categoria in cui salvare le skill generate (auto = decisa dall'agente).">categoria <input id="seCat" type="text" value="auto"></label>
+        <div class="card hcard" style="--hc:#fb923c">
+          <div class="hcard-hd"><span class="dot"></span><b>Self-evolving</b><span class="hc-sub">nuove skill</span></div>
+          <div class="remaining" style="margin:0 0 6px">Riconosce i pattern ricorrenti nei tuoi task e propone di salvarli come skill riutilizzabili.</div>
+          <div class="hrow">
+            <label title="Lunghezza minima (in righe) perché un pattern diventi una skill.">lunghezza minima <input id="seMinLen" type="number" min="1" value="2"></label>
+            <label title="Quante volte deve ricorrere un pattern prima di diventare una skill.">occorrenze minime <input id="seMinCount" type="number" min="2" value="3"></label>
+            <label title="Lunghezza massima (in righe) di una skill sintetizzata.">lunghezza massima <input id="seMaxLen" type="number" min="2" value="6"></label>
+            <label title="Categoria in cui salvare le skill generate (auto = decisa dall'agente).">categoria <input id="seCat" type="text" value="auto"></label>
+          </div>
           <button class="ghost" onclick="saveSelfevolve()" title="salva le impostazioni del self-evolving">salva selfevolve</button>
         </div>
+      </div>
+      <div class="sw-cat" data-cat="tools" hidden>
+        <h2>Tool policy · cosa può fare l'agente</h2>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
       </div>
-      <div class="sw-cat" data-cat="general" hidden>
-        <h2>Self · harness</h2>
+      <div class="sw-cat" data-cat="info" hidden>
+        <h2>ⓘ Info · harness</h2>
         <div class="card" id="selfPanel"><div class="remaining">loading…</div></div>
-      </div>
-      <div class="sw-cat" data-cat="providers" hidden>
-        <h2>Providers · LLM</h2>
-        <div class="card">
-          <div class="remaining" id="provSummary">loading…</div>
-          <div id="provList" style="margin-top:8px"></div>
-        </div>
-        <h2>Add / edit provider</h2>
-        <div class="card">
-          <input id="provId" class="inp" placeholder="id (es. openrouter) *" style="width:100%;padding:6px 10px;font-size:12px">
-          <input id="provName" class="inp" placeholder="name" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <select id="provKind" class="inp" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-            <option value="openai">openai-compatible</option>
-            <option value="llamacpp">llama.cpp</option>
-            <option value="openrouter">openrouter</option>
-            <option value="deepseek">deepseek</option>
-            <option value="anthropic">anthropic</option>
-            <option value="custom">custom</option>
-          </select>
-          <input id="provUrl" class="inp" placeholder="base_url (https://…/v1)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <input id="provKeyEnv" class="inp" placeholder="api_key_env = VAR name (not the key)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <input id="provModels" class="inp" placeholder="models (comma-separated)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="provLocal"> local (no key)</label>
-          <button class="ghost" onclick="saveProvider()" style="margin-top:8px">save provider</button>
-          <div id="provResult" class="remaining" style="margin-top:6px"></div>
-          <div class="remaining" style="margin-top:6px">saved in config/providers.local.yaml (outside the repo)</div>
-        </div>
       </div>
       <div class="sw-cat" data-cat="keys" hidden>
         <h2>Keys · secrets</h2>
@@ -608,7 +623,7 @@
           <div id="approvals" class="remaining">no pending approvals</div>
         </div>
         <div class="remaining" style="margin-top:8px">A tool set to <b>auto</b> never asks.
-          To change a tool's policy (<b>auto / required / denied</b>) use <b>Impostazioni → Tools &amp; policy</b>.</div>
+          To change a tool's policy (<b>auto / required / denied</b>) use <b>Impostazioni → Tool policy</b>.</div>
         </div>
       </section>
       <div class="sw-cat" data-cat="mcp" hidden>
@@ -703,6 +718,12 @@
         </div>
         </div>
       </section>
+      <section data-insp="feed" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('feed')">Feed</button>
+        <div class="insp-body">
+        <div class="card" id="feed" style="font-size:11px;color:var(--dim);max-height:220px;overflow-y:auto">connecting…</div>
+        </div>
+      </section>
       <div class="sw-cat" data-cat="rules" hidden>
         <h2>Workspace · folder</h2>
         <div class="card">
@@ -759,14 +780,39 @@
     <nav class="sw-nav" id="swNav"></nav>
     <div class="sw-main" id="swMain">
       <div class="sw-cat" data-cat="models" hidden>
-        <h2>Models</h2>
+        <h2>Available models</h2>
         <div class="card" id="modelsList"><div class="remaining">loading…</div></div>
         <h2>Compaction model</h2>
         <div class="card">
-          <div class="remaining" style="margin-bottom:6px">Modello che riassume il transcript quando fai <b>compact</b> (ruolo <code>summarizer</code> in <code>config/routing.yaml</code>).</div>
+          <div class="remaining" style="margin-bottom:6px">Model that summarizes the transcript when you run <b>compact</b> — the same list as the chat model selector.</div>
           <select id="compactionModel" class="inp" style="width:100%;padding:6px 10px;font-size:12px"></select>
           <button class="ghost" onclick="saveCompactionModel()" style="margin-top:8px">save</button>
           <div class="remaining" id="compactionResult" style="margin-top:6px"></div>
+        </div>
+        <h2>Providers</h2>
+        <div class="card">
+          <div class="remaining" id="provSummary">loading…</div>
+          <div id="provList" style="margin-top:8px"></div>
+        </div>
+        <h2>Add / edit provider</h2>
+        <div class="card">
+          <input id="provId" class="inp" placeholder="id (e.g. openrouter) *" style="width:100%;padding:6px 10px;font-size:12px">
+          <input id="provName" class="inp" placeholder="name" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <select id="provKind" class="inp" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+            <option value="openai">openai-compatible</option>
+            <option value="llamacpp">llama.cpp</option>
+            <option value="openrouter">openrouter</option>
+            <option value="deepseek">deepseek</option>
+            <option value="anthropic">anthropic</option>
+            <option value="custom">custom</option>
+          </select>
+          <input id="provUrl" class="inp" placeholder="base_url (https://…/v1)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <input id="provKeyEnv" class="inp" placeholder="api_key_env = VAR name (not the key)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <input id="provModels" class="inp" placeholder="models (comma-separated)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="provLocal"> local (no key)</label>
+          <button class="ghost" onclick="saveProvider()" style="margin-top:8px">save provider</button>
+          <div id="provResult" class="remaining" style="margin-top:6px"></div>
+          <div class="remaining" style="margin-top:6px">Saved in <code>config/providers.local.yaml</code> (outside the repo).</div>
         </div>
       </div>
     </div>
@@ -2480,9 +2526,8 @@ function skillsAutocomplete() {
 
 /* JAG-150: movable settings window (non-blocking). */
 const SETTINGS_CATS = [
-  ["general", "General"], ["models", "Models"], ["providers", "Providers"],
-  ["keys", "Keys & Token"], ["mcp", "MCP"], ["skills", "Skills"],
-  ["rules", "Rules"], ["tools", "Tools & policy"],
+  ["models", "Models"], ["keys", "Keys & Token"], ["mcp", "MCP"], ["skills", "Skills"],
+  ["rules", "Rules"], ["harness", "Harness"], ["tools", "Tool policy"], ["info", "\u24D8 Info"],
 ];
 function settingsWin() { return $("settingsWin"); }
 function settingsCategory(name) {
@@ -2492,13 +2537,18 @@ function settingsCategory(name) {
   if (name === "mcp") { loadMcpClients(); if (typeof renderMcpCatalog === "function") renderMcpCatalog(); }
   else if (name === "skills") { loadSkills(); }
   else if (name === "rules") { loadRules(); loadMemories(); }
-  else if (name === "tools") {
+  else if (name === "harness") {
     loadRuntime(); loadVerifier(); loadBestofn(); loadDifficulty(); loadSelfevolve();
+  }
+  else if (name === "tools") {
     api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), { error: String(e) }));
   }
-  else if (name === "models") { if (typeof loadRouting === "function") loadRouting(); }
+  else if (name === "models") {
+    if (typeof loadRouting === "function") loadRouting();
+    if (typeof loadProviders === "function") loadProviders();
+  }
   else if (name === "keys") { $("token-input").value = TOKEN || ""; loadKeys(); }
-  else if (name === "general") {
+  else if (name === "info") {
     api("GET", "/api/self").then(d => renderSelf($("selfPanel"), d)).catch(e => json_pre($("selfPanel"), { error: String(e) }));
   }
 }
@@ -2518,7 +2568,9 @@ function buildSettingsWin() {
 }
 function openSettings(cat) {
   buildSettingsWin(); settingsWin().hidden = false;
-  settingsCategory(cat || localStorage.getItem("sf_settings_cat") || "general");
+  const saved = cat || localStorage.getItem("sf_settings_cat") || "models";
+  const known = SETTINGS_CATS.some(([k]) => k === saved);
+  settingsCategory(known ? saved : "models");
 }
 function closeSettings() { settingsWin().hidden = true; }
 function dragify(handle, box, key) {
@@ -2554,23 +2606,44 @@ async function loadRouting() {
   try {
     const d = await api("GET", "/api/routing");
     const sel = $("compactionModel"); if (!sel) return;
-    const roster = (d.roster || []).map(m => (m && (m.alias || m.id || m.name)) || "").filter(Boolean);
+    // JAG-160: the compaction picker offers the SAME roster as the chat model
+    // selector (every provider + model), not just the local llama.cpp aliases.
+    let models = _modelsCache;
+    if (!models || !models.length) {
+      const md = await api("GET", "/api/models");
+      models = [];
+      (md.providers || []).forEach(p => (p.models || []).forEach(m => models.push({
+        ref: m.ref || (p.id + ":" + m.id), id: m.id, provider: p.id,
+        pname: p.name || p.id, local: !!p.local, available: p.available !== false,
+      })));
+    }
     const cur = ((d.config || {}).roles || {}).summarizer || {};
-    sel.innerHTML = roster.map(m => `<option value="${m}">${m}</option>`).join("");
-    const pat = (cur.pattern || "").toLowerCase();
-    const match = pat ? roster.find(a => a.toLowerCase().includes(pat)) : null;
-    sel.value = match || roster[0] || "";
+    const curRef = cur.model || "";
+    const groups = {};
+    models.forEach(m => { (groups[m.provider] = groups[m.provider] || { name: m.pname, items: [] }).items.push(m); });
+    sel.innerHTML = Object.keys(groups).map(pid => {
+      const g = groups[pid];
+      return '<optgroup label="' + _attr(g.name) + '">' + g.items.map(m =>
+        '<option value="' + _attr(m.ref) + '"' + (m.ref === curRef ? " selected" : "") + '>' +
+        esc(m.ref) + (m.available ? "" : " · no key") + '</option>').join("") + '</optgroup>';
+    }).join("");
+    if (!curRef && cur.pattern) {
+      // legacy config: preselect the first ref whose alias matches the pattern
+      const pat = String(cur.pattern).toLowerCase();
+      const match = models.find(m => m.ref.toLowerCase().includes(pat) || m.id.toLowerCase().includes(pat));
+      if (match) sel.value = match.ref;
+    }
     const box = $("modelsList");
-    if (box) box.innerHTML = '<div class="remaining">modelli disponibili: <b>' + roster.length +
+    if (box) box.innerHTML = '<div class="remaining">models available: <b>' + models.length +
       '</b> · fallback: <b>' + ((d.config || {}).default_fallbacks || []).slice(0, 4).join(" › ") + '</b></div>';
   } catch (e) { if ($("compactionResult")) $("compactionResult").textContent = "error: " + e; }
 }
 async function saveCompactionModel() {
   const m = $("compactionModel").value;
-  if (!m) { const el0 = $("compactionResult"); if (el0) el0.textContent = "nessun modello selezionato"; return; }
-  const r = await api("POST", "/api/routing", { roles: { summarizer: { pattern: m } } });
+  if (!m) { const el0 = $("compactionResult"); if (el0) el0.textContent = "no model selected"; return; }
+  const r = await api("POST", "/api/routing", { roles: { summarizer: { model: m } } });
   const el = $("compactionResult");
-  if (el) el.textContent = r.error ? ("error: " + r.error) : ("salvato: summarizer = " + m);
+  if (el) el.textContent = r.error ? ("error: " + r.error) : ("saved: summarizer = " + m);
 }
 function moveSettingsCats() {
   const main = $("swMain"); if (!main) return;
@@ -3060,8 +3133,9 @@ function paletteItems() {
     .forEach(([k, label]) => items.push({ label: "\u25B8 Inspector \u00A7 " + label, run: () => focusInsp(k) }));
   return items;
 }
-/* JAG-157: live items — sessions (switch to it), skills and MCP servers (jump to
-   settings). Loaded when the palette opens, so it always reflects new entries. */
+/* JAG-157: live items — sessions (switch to it). Loaded when the palette opens
+   so it always reflects new sessions. JAG-160: the per-MCP-server entries were
+   removed; the generic "Settings ▸ MCP" item is the single MCP entry point. */
 async function loadPaletteDynamic() {
   const dyn = [];
   try {
@@ -3069,20 +3143,6 @@ async function loadPaletteDynamic() {
     (d.sessions || []).slice(0, 40).forEach(s => dyn.push({
       label: "\uD83D\uDDC2 session \u25B8 " + (s.title || s.id),
       run: () => selectSession(s),
-    }));
-  } catch (e) { /* best effort */ }
-  try {
-    const d = await api("GET", "/api/skills");
-    (d.skills || []).forEach(s => dyn.push({
-      label: "\uD83E\uDDE9 skill \u25B8 " + s.name + (s.category ? " (" + s.category + ")" : ""),
-      run: () => openSettings("skills"),
-    }));
-  } catch (e) { /* best effort */ }
-  try {
-    const d = await api("GET", "/api/mcp/clients");
-    Object.keys(d.clients || {}).forEach(nm => dyn.push({
-      label: "\uD83D\uDD0C mcp \u25B8 " + nm,
-      run: () => openSettings("mcp"),
     }));
   } catch (e) { /* best effort */ }
   _palDyn = dyn;

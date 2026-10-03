@@ -1085,8 +1085,13 @@ SYSTEM_PROMPT = (
     "You are SparkForge, the reasoning core of a frontier-style agent harness "
     "running locally on a DGX Spark (GB10, ARM64, unified memory) behind a "
     "llama.cpp router. Be direct, concrete and useful. When asked to plan or "
-    "act, produce compact, actionable output.\n\n"
-    "## MCP gateway (PMCP)\n"
+    "act, produce compact, actionable output."
+)
+
+# JAG-159: the PMCP gateway block is injected only when a `pmcp` MCP client is
+# actually configured — a clone without it must not advertise tools it lacks.
+PMCP_PROMPT = (
+    "\n\n## MCP gateway (PMCP)\n"
     "Besides your native tools you can reach ~140 downstream MCP servers through "
     "the PMCP gateway (tools named `pmcp__gateway.*`). To use a capability you do "
     "not have natively:\n"
@@ -1099,6 +1104,17 @@ SYSTEM_PROMPT = (
     "gateway only when a capability is genuinely missing. A tool_id is prefixed by "
     "the server name, e.g. `core-time::get_current_time`."
 )
+
+
+def system_prompt():
+    """Base system prompt, plus the PMCP block only if a `pmcp` client exists."""
+    try:
+        import mcp_client
+        if "pmcp" in (mcp_client.get_manager().status().get("clients") or {}):
+            return SYSTEM_PROMPT + PMCP_PROMPT
+    except Exception:  # noqa: BLE001 — never break the prompt
+        pass
+    return SYSTEM_PROMPT
 
 # JAG-114/125: standing rules — global (user) + project (workspace), AGENTS.md-style.
 # The actual file paths are rendered by rules.rules_prompt_block (below), so the
@@ -1314,7 +1330,7 @@ def breakdown_tasks(message, model=None, session=None):
     """
     def work():
         try:
-            msgs = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + BREAKDOWN_PROMPT},
+            msgs = [{"role": "system", "content": system_prompt() + "\n\n" + BREAKDOWN_PROMPT},
                     {"role": "user", "content": message}]
             m = routing.pick("planner") or model or default_model()
             answer, _think = _router_stream(msgs, m, lambda ch, t: None)
@@ -2321,7 +2337,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
 
 def generate_plan(goal, model=None):
     sess = {"id": "planner", "title": "planner", "created": time.time(), "messages": []}  # ephemeral
-    sys = SYSTEM_PROMPT + "\n\n" + PLANNER_PROMPT
+    sys = system_prompt() + "\n\n" + PLANNER_PROMPT
     msgs = [{"role": "system", "content": sys}, {"role": "user", "content": goal}]
     model = model or routing.pick("planner") or default_model()
     trace = RunTrace("plan", goal=goal, model=model)
@@ -2477,7 +2493,7 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_stat
         for i in range(max_steps):
             api_v02.checkpoint(st)  # JAG-111: honour pause / abort between steps
             sys = (prompt_mod.prompt_map_text() + "\n\n" + prompt_mod.capability_text()
-                   + "\n\n" + SYSTEM_PROMPT + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT
+                   + "\n\n" + system_prompt() + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT
                    + "\n\n" + RULES_POLICY + ("\n" + rb if rb else "")
                    + "\n\nHarness state (your persistent task list):\n"
                    + context_summary(graph_key=trace.id))
@@ -3051,7 +3067,7 @@ def _system_prompt(sess, tool_ctx=None):
         import prompt as prompt_mod
         return prompt_mod.render_sections(sess, ws=ws, tool_ctx=tool_ctx)
     except Exception:  # noqa: BLE001 — il prompt non deve mai rompere la chat
-        return SYSTEM_PROMPT
+        return system_prompt()
 
 
 def context_display(tokens_used=0, budget_tokens=0, messages=0,
@@ -3200,6 +3216,14 @@ def _summarize_with_llm(messages, model=None, meta=None):
         "file paths and commands, user preferences, and any OPEN tasks or questions. "
         "Drop chit-chat and repetition. Reply with the summary text ONLY (no preamble), "
         "at most ~200 words.\n\nTRANSCRIPT:\n" + transcript)
+    # JAG-160: honour an explicitly pinned summarizer model (Settings -> Models)
+    # before falling back to pattern-based routing for the "summarizer" role.
+    if not model:
+        try:
+            import routing as _routing
+            model = _routing.role_model("summarizer")
+        except Exception:  # noqa: BLE001
+            model = None
     try:
         answer, _think, used = stream_with_fallback(
             [{"role": "user", "content": prompt}], model, "summarizer",
