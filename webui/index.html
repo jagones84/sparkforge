@@ -164,6 +164,24 @@
   .toolcard .tc-meta { color: var(--dim); font-size: 11px; margin-left: auto; }
   .toolcard.pending { opacity: .7; }
   .toolcard.err { border-color: rgba(255,119,119,.5); }
+  /* JAG-166: in-chat task tree + visible harness→LLM injections */
+  .tctree { margin: 4px 0; }
+  .tctree > summary { cursor: pointer; font-size: 12px; font-weight: 600; list-style: none; display: flex;
+    align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
+  .tctree > summary::-webkit-details-marker { display: none; }
+  .tctree[open] > summary { border-color: rgba(108,140,255,.45); }
+  .tctree .st { font-size: 10px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); }
+  .tctree .st.todo { color: var(--dim); }
+  .tctree .st.doing { color: #fbbf24; border-color: rgba(251,191,36,.5); }
+  .tctree .st.done { color: #34d399; border-color: rgba(52,211,153,.5); }
+  .tctree .st.blocked { color: #ff7777; border-color: rgba(255,119,119,.5); }
+  .tctree .tc-kids { margin: 6px 0 6px 16px; padding-left: 10px; border-left: 2px solid rgba(108,140,255,.25); }
+  .hinj { margin: 4px 0; font-size: 11.5px; }
+  .hinj > summary { cursor: pointer; color: var(--info); letter-spacing: .04em; }
+  .hinj .hbody { white-space: pre-wrap; color: var(--dim); font-family: ui-monospace, monospace; font-size: 11px;
+    border-left: 2px solid rgba(120,120,255,.3); padding: 6px 0 6px 10px; margin-top: 4px; max-height: 260px; overflow: auto; }
+  .hinj .hkind { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: var(--acc); border: 1px solid var(--line);
+    border-radius: 5px; padding: 0 5px; margin-left: 6px; }
   .cursor { display: inline-block; width: 8px; height: 14px; background: var(--acc); margin-left: 2px;
     vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
@@ -909,6 +927,11 @@ const $ = id => document.getElementById(id);
 let sessionId = localStorage.getItem("sf_session") || null;
 let TOKEN = localStorage.getItem("sf_token");
 let curThink = null, curAns = null, feedSince = 0, cotText = "";
+/* JAG-166: in-chat task tree state. activeScope = the container of the node
+   currently 'doing'; every thought/tool/injection is appended there (indented). */
+let _chatNodes = {}, _activeScope = null, _sysInjectEl = null;
+function _scope() { return _activeScope || $("log"); }
+function _logAppend(el) { _scope().appendChild(el); }
 let cursorEl = null;
 
 async function ensureToken() {
@@ -963,7 +986,10 @@ function who(role, text) {
   if (role === "user") { b.textContent = text; }
   else { b.dataset.raw = (text == null ? "" : String(text)); renderAnswerBubble(b); }
   d.querySelector(".copy").onclick = () => copyText(d.querySelector(".copy"), b.dataset.raw != null ? b.dataset.raw : b.textContent);
-  $("log").appendChild(d); scroll(); return d;
+  // JAG-166: user turns always sit at top level; harness/agent output nests under
+  // the active todo node (see _scope).
+  if (role === "user") $("log").appendChild(d); else _logAppend(d);
+  scroll(); return d;
 }
 /* v1.6.3 (JAG-55): inline tool-call mini-card, coherent with the run graph nodes */
 /* v0.8: expandable card (head + args/output body) */
@@ -981,7 +1007,7 @@ function toolCard(tool, args) {
     if (a) a.textContent = "input: " + (typeof args === "string" ? args : JSON.stringify(args));
   }
   d.classList.add("pending");
-  $("log").appendChild(d);
+  _logAppend(d);
   // JAG-163: start a FRESH reasoning block after each tool card, so the model's
   // next `thought` renders BETWEEN this tool call and the next one (previously
   // every think delta piled into the first block, hiding the reasoning).
@@ -1028,7 +1054,7 @@ function ensureThink() {
   if (!curThink) {
     const d = document.createElement("div"); d.className = "msg ai";
     d.innerHTML = `<div class="who">SPARKFORGE</div><details class="think" open><summary>🧠 chain-of-thought (live)…</summary><div class="t"></div></details>`;
-    $("log").appendChild(d); curThink = d; scroll();
+    _logAppend(d); curThink = d; scroll();
   }
   return curThink.querySelector(".t");
 }
@@ -1045,6 +1071,68 @@ function ensureAnswer() {
 function endStream() {
   if (cursorEl) { cursorEl.remove(); cursorEl = null; }
   curAns = curThink = null;
+  _activeScope = null;
+}
+/* JAG-166: the todo graph rendered IN the chat as a collapsible tree. Each node
+ * is a <details>; while it is 'doing' it becomes the active scope, so thoughts,
+ * tool cards and harness→LLM injections nest (indented) underneath it; on 'done'
+ * it collapses and the next node takes over. */
+function _resetChatTree() { _chatNodes = {}; _activeScope = null; _sysInjectEl = null; }
+function _nodeDepth(id, d) {
+  d = d || 0;
+  if (d > 8) return d;
+  const n = ((graph && graph.nodes) || []).find(x => x.id === id);
+  if (n && n.parent && _chatNodes[n.parent]) return _nodeDepth(n.parent, d + 1);
+  return d;
+}
+function _paintNode(node) {
+  const det = _chatNodes[node.id]; if (!det) return;
+  const st = det.querySelector(".st");
+  st.textContent = node.status || "todo";
+  st.className = "st " + (node.status || "todo");
+  det.querySelector(".tclabel").textContent = node.label || "";
+}
+function chatNodeAdd(node) {
+  if (!node || !node.id || _chatNodes[node.id]) return;
+  const det = document.createElement("details");
+  det.className = "tctree"; det.dataset.id = node.id;
+  det.style.marginLeft = (_nodeDepth(node.id) * 14) + "px";
+  det.innerHTML = '<summary><span class="st"></span><span class="tclabel"></span></summary><div class="tc-kids"></div>';
+  $("log").appendChild(det);
+  _chatNodes[node.id] = det;
+  _paintNode(node);
+  if (node.status === "doing") { det.open = true; _activeScope = det.querySelector(".tc-kids"); }
+  scroll();
+}
+function chatNodeUpdate(node) {
+  if (!node || !node.id) return;
+  if (!_chatNodes[node.id]) { chatNodeAdd(node); return; }
+  _paintNode(node);
+  const det = _chatNodes[node.id];
+  if (node.status === "doing") {
+    det.open = true; _activeScope = det.querySelector(".tc-kids");
+  } else if (node.status === "done" || node.status === "cancelled") {
+    det.open = false;
+    if (det.querySelector(".tc-kids") === _activeScope) _activeScope = null;
+  }
+  scroll();
+}
+function harnessInject(d) {
+  if (!d) return;
+  const det = document.createElement("details");
+  det.className = "hinj";
+  const kind = d.inject_kind || "inject";
+  det.innerHTML = '<summary>🔌 harness &rarr; LLM<span class="hkind"></span></summary><pre class="hbody"></pre>';
+  det.querySelector(".hkind").textContent = kind;
+  det.querySelector(".hbody").textContent = d.text || "";
+  if (kind === "system") {
+    // one 'system prompt' block per turn, at the top of the turn
+    if (_sysInjectEl) _sysInjectEl.remove();
+    $("log").appendChild(det); _sysInjectEl = det;
+  } else {
+    _logAppend(det);
+  }
+  scroll();
 }
 function cotFeed(text) {
   cotText += text;
@@ -1109,9 +1197,11 @@ function send(text) {
   const url = "/api/chat/stream?message=" + encodeURIComponent(msg) + (sessionId ? "&session=" + sessionId : "") + mode + (currentModel() ? "&model=" + encodeURIComponent(currentModel()) : "") + (authQS() ? "&" + authQS() : "");
   const es = new EventSource(url);
   activeSSE = es; activeRunId = null;
-  es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); setRun(d.run_id); });
+  // JAG-166: a new turn starts at top level; the previous turn's tree/system block stay in history.
+  es.addEventListener("chat.run", e => { const d = JSON.parse(e.data); setRun(d.run_id); _activeScope = null; _sysInjectEl = null; });
   es.addEventListener("graph.node.added", e => applyGraphEvent(JSON.parse(e.data)));
   es.addEventListener("graph.node.updated", e => applyGraphEvent(JSON.parse(e.data)));
+  es.addEventListener("harness.inject", e => harnessInject(JSON.parse(e.data)));
   es.addEventListener("chat.delta", e => {
     const d = JSON.parse(e.data);
     if (!sessionId) { sessionId = d.session; localStorage.setItem("sf_session", sessionId); }
@@ -1151,7 +1241,7 @@ function selectSession(s) {
   if (!s || !s.id) return;
   sessionId = s.id; localStorage.setItem("sf_session", sessionId);
   _sessModel[s.id] = s.model || _sessModel[s.id] || "";
-  $("log").innerHTML = ""; curThink = curAns = null;
+  $("log").innerHTML = ""; curThink = curAns = null; _resetChatTree();
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
   loadSessions(); loadHistory(); loadCtx(); loadRules(); loadPlan();
   modelLabel(); closeAside();
@@ -1400,7 +1490,10 @@ async function loadGraph() {
   } catch {}
 }
 function applyGraphEvent(d) {
-  if (!d || !d.run) return;
+  if (!d || !d.run || !d.node) return;
+  // JAG-166: keep the in-chat tree in sync FIRST, independent of the panel state.
+  const _known = ((graph && graph.nodes) || []).some(n => n.id === d.node.id);
+  if (_known) chatNodeUpdate(d.node); else chatNodeAdd(d.node);
   if (!curRunId || curRunId !== d.run) { setRun(d.run); return; }
   if (!graph) { loadGraph(); return; }
   graphFresh = d.node.id;
@@ -1653,7 +1746,7 @@ function approvalCard(d) {
   row.appendChild(ok); row.appendChild(no);
   bub.appendChild(title); bub.appendChild(sum); bub.appendChild(row);
   card.appendChild(whoEl); card.appendChild(bub);
-  $("log").appendChild(card); scroll(); return card;
+  _logAppend(card); scroll(); return card;
 }
 /* JAG-127f: at end of turn, if the persistent plan still has open steps, warn
  * (no auto-continue — the user resumes with the button). */
@@ -1670,7 +1763,7 @@ function planIncomplete(d) {
   const go = document.createElement("button"); go.className = "ghost"; go.textContent = "▶ continua";
   go.onclick = () => { go.disabled = true; go.textContent = "▶ ripreso"; send("Continua: completa i passi aperti del piano."); };
   row.appendChild(go); bub.appendChild(row);
-  card.appendChild(bub); $("log").appendChild(card); scroll();
+  card.appendChild(bub); _logAppend(card); scroll();
 }
 /* JAG-129B: il piano puo' proseguire da solo (round multipli) o fermarsi per
  * un motivo esplicito; la checklist viene renderizzata annidata (figli sotto
@@ -1737,7 +1830,7 @@ function improveCard(d) {
     .then(() => { no.textContent = "⛔ rifiutata"; ok.remove(); });
   row.appendChild(ok); row.appendChild(no);
   bub.appendChild(head); bub.appendChild(body); bub.appendChild(row);
-  card.appendChild(bub); $("log").appendChild(card); scroll();
+  card.appendChild(bub); _logAppend(card); scroll();
 }
 
 /* ---- agent loop (tool-enabled, SSE) ---- */

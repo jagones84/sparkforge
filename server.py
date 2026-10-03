@@ -2153,6 +2153,27 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             _diff_level = _diff.estimate(_diff_signals(message, [], 0))["level"]
         except Exception:  # noqa: BLE001
             _diff_level = None
+
+    def _inject(content, kind):
+        """JAG-166: add a synthetic message to the LLM context AND surface it.
+
+        The harness is the model's secretary: every nudge, observation and
+        'continue' it feeds back is ALSO emitted as `harness.inject`, so the chat
+        can show exactly what was injected — nothing is hidden.
+        """
+        msgs.append({"role": "user", "content": content})
+        # NOTE: the payload key must NOT be `kind` — the SSE emitters take the
+        # event name as a positional `kind`, so a `kind` kwarg collides.
+        on_event("harness.inject", session=sess["id"], inject_kind=kind, text=content)
+
+    # JAG-166: publish the assembled system prompt once per turn (collapsed in the
+    # UI), so the operator can read the real prompt the model received.
+    try:
+        if msgs and msgs[0].get("role") == "system":
+            on_event("harness.inject", session=sess["id"], inject_kind="system",
+                     text=msgs[0].get("content") or "")
+    except Exception:  # noqa: BLE001 — must never break the turn
+        pass
     while iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
         # JAG-164: the tool budget is PER keepgoing round, not per turn. Before
@@ -2191,13 +2212,13 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             work_steps = 0  # grant another round of tool calls
             on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
                      open=len(_open), total=len(_nodes), difficulty=_diff_level)
-            msgs.append({"role": "user", "content": (
+            _inject(
                 "Ti restano %d passo/i APERTI nella task list: NON fermarti. Per OGNI passo "
                 "aperto esegui l'azione con una tool call e poi marcalo 'done' con "
                 "update_todos + l'evidenza concreta (comando eseguito ed esito). Non "
                 "consegnare una risposta finale finche' l'ultimo passo non e' 'done' "
                 "(o ripianifica se non serve piu'). Lista attuale:\n%s"
-                % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))))})
+                % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))), "continue")
             continue
         # JAG-127b: inject any steering message typed while this turn was running.
         for _s in drain_steer(sess["id"]):
@@ -2258,11 +2279,11 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         if isinstance(act, dict) and act.get("action") == "write_todos":
             n = _apply_chat_todos(sess, act, on_event)
             msgs.append({"role": "assistant", "content": answer})
-            msgs.append({"role": "user", "content":
-                         "Task list saved (%d new step(s)); the full persistent list "
-                         "is in your system state. Now work through it: answer the "
-                         "user in plain prose, or call a tool — one step at a time."
-                         % n})
+            _inject(
+                "Task list saved (%d new step(s)); the full persistent list "
+                "is in your system state. Now work through it: answer the "
+                "user in plain prose, or call a tool — one step at a time."
+                % n, "nudge")
             continue
         if isinstance(act, dict) and act.get("action") in ("update_todos", "replan_todos"):
             # JAG-75: the model advances its own plan mid-run (in_progress → done
@@ -2277,7 +2298,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 nudge = ("Plan updated. Now resume following the plan from where you "
                          "left off; do not re-plan again unless something really changed.")
             msgs.append({"role": "assistant", "content": answer})
-            msgs.append({"role": "user", "content": nudge})
+            _inject(nudge, "nudge")
             continue
         tc = _chat_tool_call(act, api_v02) if tool_ctx else None
         if tc:
@@ -2344,38 +2365,38 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                         "Now answer the user in plain text, or call another tool."
                         % (tool, obs))
             msgs.append({"role": "assistant", "content": answer})
-            msgs.append({"role": "user", "content": note})
+            _inject(note, "observation")
             continue
         if isinstance(act, dict) and act:
             # stray JSON the model emitted in a schema we do not recognise: never
             # show it to the user — nudge it back to a valid tool call or prose.
             msgs.append({"role": "assistant", "content": answer})
-            msgs.append({"role": "user", "content":
-                         "That was not a valid tool call. Either emit "
-                         '{"action":"tool","tool":"<name>","args":{...}} for a real '
-                         "tool, or answer the user in plain text."})
+            _inject(
+                "That was not a valid tool call. Either emit "
+                '{"action":"tool","tool":"<name>","args":{...}} for a real '
+                "tool, or answer the user in plain text.", "retry")
             continue
         if _looks_like_json_action(answer):
             # JAG-64: malformed/TRUNCATED tool-call JSON (extract_json failed, so
             # `act` is None). Never leak it into the chat — ask for a clean retry.
             msgs.append({"role": "assistant", "content": answer})
-            msgs.append({"role": "user", "content":
-                         "That JSON was invalid or incomplete (it did not parse). "
-                         "Re-emit a VALID "
-                         '{"action":"tool","tool":"<name>","args":{...}} with all '
-                         "braces closed, or answer the user in plain prose. Never "
-                         "show JSON to the user."})
+            _inject(
+                "That JSON was invalid or incomplete (it did not parse). "
+                "Re-emit a VALID "
+                '{"action":"tool","tool":"<name>","args":{...}} with all '
+                "braces closed, or answer the user in plain prose. Never "
+                "show JSON to the user.", "retry")
             continue
         if _looks_like_promise(answer) and not announce_nudged:
             # JAG-74: the model promised an action ("Carico un'altra skill…") but
             # called no tool this turn — nudge it ONCE to actually act or conclude.
             announce_nudged = True
             msgs.append({"role": "assistant", "content": answer})
-            msgs.append({"role": "user", "content":
-                         "You announced an action but did not call any tool. Either "
-                         'call it NOW with {"action":"tool","tool":"<name>","args":{...}}, '
-                         "or — if there is nothing left to do — reply with the final "
-                         "result in plain prose. Do not just repeat the announcement."})
+            _inject(
+                "You announced an action but did not call any tool. Either "
+                'call it NOW with {"action":"tool","tool":"<name>","args":{...}}, '
+                "or — if there is nothing left to do — reply with the final "
+                "result in plain prose. Do not just repeat the announcement.", "nudge")
             continue
         if tool_ctx:
             # JAG-129A: l'harness (la "segretaria") decide se l'agente puo' davvero
@@ -2407,13 +2428,13 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
                          open=len(_open), total=len(_nodes), difficulty=_diff_level)
                 msgs.append({"role": "assistant", "content": answer})
-                msgs.append({"role": "user", "content": (
+                _inject(
                     "CONTINUA: la tua TASK LIST ha ancora %d passo/i aperto/i. NON "
                     "fermarti e non chiedere il permesso. Per OGNI passo aperto: "
                     "esegui l'azione con una tool call, poi marcalo 'done' con "
                     "update_todos e l'evidenza concreta; se non serve piu', "
                     "ripianifica. Lista attuale:\n%s"
-                    % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))))})
+                    % (len(_open), taskgraph.render_todos(taskgraph.load(sess["id"]))), "continue")
                 continue
             _kg_stop_reason = _dec["reason"]
             on_event("plan.stopped", session=sess["id"], reason=_dec["reason"],
@@ -2431,10 +2452,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         # (the JSON guard below only protected the PERSISTED text, not the stream).
         # JAG-84: a forced "final" that is only an ANNOUNCEMENT ("Procedo con…") is
         # not an answer — retry (bounded) asking for the RESULT, not a promise.
-        msgs.append({"role": "user", "content":
-                     "Answer the user now in plain text. Do not emit JSON, and do NOT "
-                     "announce future work: report the RESULT you already have (what "
-                     "you did, what you found, what is still missing)."})
+        _inject(
+            "Answer the user now in plain text. Do not emit JSON, and do NOT "
+            "announce future work: report the RESULT you already have (what "
+            "you did, what you found, what is still missing).", "final")
         for _try in range(3):
             forced = []
 
@@ -2454,9 +2475,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     on_delta(ch, t)
                 break
             msgs.append({"role": "assistant", "content": final_answer or ""})
-            msgs.append({"role": "user", "content":
-                         "That was still an announcement/JSON, not a result. Give the "
-                         "final RESULT in plain prose now."})
+            _inject(
+                "That was still an announcement/JSON, not a result. Give the "
+                "final RESULT in plain prose now.", "final")
         else:
             # last resort: stream whatever prose we have (never leak JSON)
             if final_answer and not _looks_like_json_action(final_answer):
