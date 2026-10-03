@@ -1888,8 +1888,13 @@ async function loadStatus() {
     $("server-badge").textContent = "server ok";
     $("server-badge").className = "pill ok";
     if (s.sandbox) {
-      $("sbxPill").textContent = "sandbox: " + s.sandbox.backend + (s.sandbox.isolated ? "" : " (!)");
-      $("sbxPill").className = "pill" + (s.sandbox.isolated ? " ok" : "");
+      const sb = s.sandbox;
+      const byConfig = (sb.requested === "none");
+      $("sbxPill").textContent = "sandbox: " + sb.backend +
+        (sb.isolated ? "" : (byConfig ? " (by config)" : " (!)"));
+      $("sbxPill").className = "pill" + (sb.isolated ? " ok" : "");
+      $("sbxPill").title = "sandbox backend: " + sb.backend + " (requested: " +
+        (sb.requested || "?") + ")" + (sb.isolated ? "" : " — host execution, not isolated");
     }
   } catch { $("server-badge").textContent = "server down"; $("server-badge").className = "pill"; }
 }
