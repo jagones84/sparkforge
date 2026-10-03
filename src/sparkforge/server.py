@@ -67,6 +67,9 @@ ASSET_CTYPES = {
 
 ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
+# JAG-208 (v208): cap the request body we buffer (memory-DoS guard). Larger
+# bodies are drained, not allocated; the endpoint then sees an empty body.
+MAX_BODY_BYTES = int(os.environ.get("SPARKFORGE_MAX_BODY", str(8 * 1024 * 1024)))
 STORE_LOCK = threading.RLock()
 
 VERSION = "0.7.1"
@@ -4273,12 +4276,18 @@ class Handler(BaseHTTPRequestHandler):
             body = obj
         else:
             body = obj.encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        # JAG-208 (v208): a client that disconnects mid-response must never raise
+        # an unhandled BrokenPipeError/ConnectionResetError (it floods the log and
+        # is indistinguishable from a real crash under abuse). Swallow it.
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _send_asset(self, rel):
         """Serve a read-only static asset under webui/assets (vendored editor
@@ -4306,8 +4315,21 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         if not n:
             return {}
+        # JAG-208 (v208): an unbounded Content-Length is a memory-DoS. Buffer at
+        # most MAX_BODY_BYTES and DRAIN the rest in chunks (so the socket stays
+        # framed) instead of allocating the whole payload.
+        keep = min(n, MAX_BODY_BYTES)
+        raw = self.rfile.read(keep)
+        remaining = n - keep
+        while remaining > 0:
+            got = self.rfile.read(min(65536, remaining))
+            if not got:
+                break
+            remaining -= len(got)
+        if n > MAX_BODY_BYTES:
+            return {}
         try:
-            return json.loads(self.rfile.read(n).decode("utf-8"))
+            return json.loads(raw.decode("utf-8"))
         except json.JSONDecodeError:
             return {}
 

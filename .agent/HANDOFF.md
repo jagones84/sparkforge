@@ -120,6 +120,17 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
      esplicito, niente 5xx.
   Inoltre `battery.sh` ora usa `PYTHONPYCACHEPREFIX` su temp: un `__pycache__` stale
   (SMB) aveva fatto fallire v204 "per finta". Commit `9310d01`. Battery **9/9 GREEN**.
+- **JAG-208** Chaos HTTP LIVE (il "far crollare il sistema"): `tests/live/v208_chaos_http.py`
+  (10/10) — JSON malformato, body 2MB, path/metodo ignoti, garbage raw-socket, header
+  100KB, chiusura brusca mid-request, burst 40 thread. Esito: **mai un 5xx, server in
+  piedi**. Ha rivelato **2 bug reali**, corretti in `server.py`:
+  1. `_body()` leggeva `Content-Length` **senza limite** (DoS di memoria) → ora cap
+     `MAX_BODY_BYTES` (8MB, env `SPARKFORGE_MAX_BODY`) + drain dei byte eccedenti.
+  2. un client che si disconnette mid-risposta produceva un `BrokenPipeError` **non
+     gestito** → traceback nel log (0 prima → flood sotto abuso) → ora assorbito in
+     `_send`. Verificato: **0 traceback** dopo il caos. Commit `______`.
+  *Nota:* body 2MB → connessione chiusa (status 0) ma nessun traceback e server sano;
+  da approfondire se serve un 413 esplicito.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -129,7 +140,8 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
 
 ### Test LIVE (richiedono il server up) — cartella `tests/live/`
 - `v199_endpoint_sweep.py` (51/51), `v200_concurrent_chat.py` (7/7),
-  `v202_concurrent_stream.py` (4/4). NON nel gate `battery.sh`.
+  `v202_concurrent_stream.py` (4/4), `v208_chaos_http.py` (10/10, caos/abuso HTTP).
+  NON nel gate `battery.sh`.
 
 Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 20/20,
 v205 13/13, v206 10/10, v207 28/28 → **9/9 GREEN**.
