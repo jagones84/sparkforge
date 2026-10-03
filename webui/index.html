@@ -676,7 +676,19 @@
   </div>
   <div class="sw-body">
     <nav class="sw-nav" id="swNav"></nav>
-    <div class="sw-main" id="swMain"></div>
+    <div class="sw-main" id="swMain">
+      <div class="sw-cat" data-cat="models" hidden>
+        <h2>Models</h2>
+        <div class="card" id="modelsList"><div class="remaining">loading…</div></div>
+        <h2>Compaction model</h2>
+        <div class="card">
+          <div class="remaining" style="margin-bottom:6px">Modello che riassume il transcript quando fai <b>compact</b> (ruolo <code>summarizer</code> in <code>config/routing.yaml</code>).</div>
+          <select id="compactionModel" class="inp" style="width:100%;padding:6px 10px;font-size:12px"></select>
+          <button class="ghost" onclick="saveCompactionModel()" style="margin-top:8px">save</button>
+          <div class="remaining" id="compactionResult" style="margin-top:6px"></div>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="sw-resize">⤢</div>
 </div>
@@ -2397,6 +2409,28 @@ function resizify(handle, box, key) {
     };
     document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up); e.preventDefault();
   });
+}
+async function loadRouting() {
+  try {
+    const d = await api("GET", "/api/routing");
+    const sel = $("compactionModel"); if (!sel) return;
+    const roster = (d.roster || []).map(m => (m && (m.alias || m.id || m.name)) || "").filter(Boolean);
+    const cur = ((d.config || {}).roles || {}).summarizer || {};
+    sel.innerHTML = roster.map(m => `<option value="${m}">${m}</option>`).join("");
+    const pat = (cur.pattern || "").toLowerCase();
+    const match = pat ? roster.find(a => a.toLowerCase().includes(pat)) : null;
+    sel.value = match || roster[0] || "";
+    const box = $("modelsList");
+    if (box) box.innerHTML = '<div class="remaining">modelli disponibili: <b>' + roster.length +
+      '</b> · fallback: <b>' + ((d.config || {}).default_fallbacks || []).slice(0, 4).join(" › ") + '</b></div>';
+  } catch (e) { if ($("compactionResult")) $("compactionResult").textContent = "error: " + e; }
+}
+async function saveCompactionModel() {
+  const m = $("compactionModel").value;
+  if (!m) { const el0 = $("compactionResult"); if (el0) el0.textContent = "nessun modello selezionato"; return; }
+  const r = await api("POST", "/api/routing", { roles: { summarizer: { pattern: m } } });
+  const el = $("compactionResult");
+  if (el) el.textContent = r.error ? ("error: " + r.error) : ("salvato: summarizer = " + m);
 }
 function moveSettingsCats() {
   const main = $("swMain"); if (!main) return;
