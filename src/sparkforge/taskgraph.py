@@ -263,14 +263,21 @@ def _has_evidence(node):
     return bool([e for e in (node.get("evidence") or []) if (e.get("text") or "").strip()])
 
 
+def _has_observed(node):
+    """True when the node carries at least one OBSERVED (environment-proof) entry."""
+    return bool([e for e in (node.get("evidence") or []) if e.get("observed")])
+
+
 # ------------------------------------------------------------ node mutation --
 
 def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None,
-             source="model", parent=None, child_run_id=None):
+             source="model", parent=None, child_run_id=None, requires_proof=False):
     """Append a node; emits `graph.node.added`. `done` requires evidence.
 
     JAG-63: `parent` (a node id) turns a node into a SUBTASK of another step,
     so the task list can carry hierarchy, not just flat `deps`.
+    JAG-206 (RDD P1): `requires_proof` marks a RISKY step that may only be closed
+    with an OBSERVED (environment-proof) evidence entry, not a bare claim.
     """
     label = str(label or "").strip()[:200]
     if not label:
@@ -283,12 +290,15 @@ def add_node(graph, label, deps=None, status="todo", evidence=None, node_id=None
         ev = list(evidence) if isinstance(evidence, list) else [_evidence_entry(evidence)]
     if status == "done" and not ev:
         raise ValueError("evidence required for a node in status 'done'")
+    if status == "done" and requires_proof and not _has_observed({"evidence": ev}):
+        raise ValueError("environment proof required to mark a risky node done")
     # JAG-195: assign the id INSIDE the lock. `_next_id` scans the current nodes,
     # so computing it before the lock let concurrent add_node calls read the same
     # "next" id and append duplicates (20 threads -> only 3 unique ids).
     with GRAPH_LOCK:
         node = {"id": node_id or _next_id(graph), "label": label, "status": status,
                 "deps": deps, "parent": str(parent) if parent else None, "evidence": ev,
+                "requires_proof": bool(requires_proof),
                 "plan": graph.get("plan", 0),
                 "source": source, "child_run_id": child_run_id,
                 "created": round(time.time(), 3), "updated": round(time.time(), 3)}
@@ -337,6 +347,10 @@ def update_node(graph, node_id, evidence=None, source=None, **fields):
         probe = {**node, **changes}
         if not _has_evidence(probe):
             raise ValueError("evidence required to mark node %s done" % node_id)
+        # JAG-206 (RDD P1): a risky step needs OBSERVED (environment) proof.
+        if probe.get("requires_proof") and not _has_observed(probe):
+            raise ValueError("environment proof required to mark risky node %s done"
+                             % node_id)
     with GRAPH_LOCK:
         node.update(changes)
         node["updated"] = round(time.time(), 3)
@@ -346,20 +360,52 @@ def update_node(graph, node_id, evidence=None, source=None, **fields):
     return node
 
 
-def complete_node(graph, node_id=None, label=None, evidence=None, source=None):
-    """Mark a node done (creating it from the label when it is unknown)."""
+def complete_node(graph, node_id=None, label=None, evidence=None, source=None,
+                  observed=False):
+    """Mark a node done (creating it from the label when it is unknown).
+
+    JAG-206 (RDD P1): `observed=True` attaches an environment-proof evidence
+    entry, which is what a `requires_proof` node needs to close.
+    """
     node = find(graph, node_id, label)
     if node is None and label:
         node = add_node(graph, label, source=source or "action")
     if node is None:
         raise KeyError("node %r not found" % (node_id or label))
-    ev = evidence or "completed by agent"
-    return update_node(graph, node["id"], status="done", evidence=ev, source=source)
+    if isinstance(evidence, list):
+        entries = evidence
+    else:
+        entries = [_evidence_entry(evidence or "completed by agent",
+                                   **({"observed": True} if observed else {}))]
+    return update_node(graph, node["id"], status="done", evidence=entries, source=source)
 
 
 def cancel_node(graph, node_id):
     """Cancel (soft-delete) a node — never silently drop history."""
     return update_node(graph, node_id, status="cancelled", source="cancel")
+
+
+def audit_node(graph, node_id):
+    """Read-only verdict on a node (RDD P1 / JAG-206).
+
+    A `requires_proof` (risky) node is only `ok` once it carries an OBSERVED
+    (environment-proof) evidence entry. Never mutates the graph.
+    """
+    node = find(graph, node_id)
+    if node is None:
+        return {"node": node_id, "ok": False, "has_proof": False,
+                "requires_proof": False, "status": None,
+                "observed_entries": [], "reason": "unknown_node"}
+    obs = [e for e in (node.get("evidence") or []) if e.get("observed")]
+    has = bool(obs)
+    requires = bool(node.get("requires_proof"))
+    reason = "ok"
+    if requires and not has:
+        reason = "missing_environment_proof"
+    return {"node": node_id, "ok": (has or not requires), "has_proof": has,
+            "requires_proof": requires, "status": node.get("status"),
+            "observed_entries": [str(e.get("text") or "")[:200] for e in obs][:5],
+            "reason": reason}
 
 
 def apply_write_todos(graph, todos, source="model:write_todos", index_map=None, start=0):
@@ -403,7 +449,8 @@ def apply_write_todos(graph, todos, source="model:write_todos", index_map=None, 
         elif isinstance(parent, str) and parent.isdigit() and int(parent) in index_map:
             parent = index_map[int(parent)]
         node = add_node(graph, label, deps=deps, status=status, evidence=evidence,
-                        source=source, parent=parent)
+                        source=source, parent=parent,
+                        requires_proof=bool(item.get("requires_proof")))
         index_map[start + i] = node["id"]
         added.append(node)
     graph["generated"] = True
