@@ -15,7 +15,7 @@ Exit code 0 iff every check passed.
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 RESULTS = {"task": "JAG-122 skill dir injection", "checks": [], "passed": False}

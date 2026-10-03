@@ -7,7 +7,7 @@ Checks (exit 0 = pass):
 """
 import os, sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ok = True
 def check(name, cond, detail=""):
     global ok

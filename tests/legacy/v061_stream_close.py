@@ -31,7 +31,7 @@ import urllib.parse
 import urllib.request
 import uuid
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASE = os.environ.get("SPARKFORGE_URL", "http://127.0.0.1:8790")
 MOCK_PORT = int(os.environ.get("SPARKFORGE_MOCK_PORT", 8096))
 TEST_PORT = int(os.environ.get("SPARKFORGE_TEST_PORT", 8796))

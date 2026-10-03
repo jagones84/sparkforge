@@ -12,7 +12,7 @@ transcript so the total prompt lands back under the threshold and within budget.
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 os.environ["SPARKFORGE_CONTEXT_BUDGET"] = "8000"
 os.environ.setdefault("SPARKFORGE_DB", os.path.join(REPO, "data", "events.db"))

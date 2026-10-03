@@ -8,7 +8,7 @@ import json
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 INDEX = os.path.join(REPO, "webui", "index.html")
 RESULTS = {"task": "v0.8 webui redesign", "checks": [], "passed": False}
 

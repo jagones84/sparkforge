@@ -12,7 +12,7 @@
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = os.path.join(REPO, "data", "_v129")
 WS = os.path.join(TMP, "ws")
 OUT = os.path.join(TMP, "outside")

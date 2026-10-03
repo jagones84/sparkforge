@@ -15,7 +15,7 @@ import os
 import re
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HTML = os.path.join(REPO, "webui", "index.html")
 
 RESULTS = {"task": "JAG-121c English UI + Ctrl+Enter", "checks": [], "passed": False}

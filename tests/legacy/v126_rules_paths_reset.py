@@ -11,7 +11,7 @@ import os
 import sys
 import tempfile
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 tmp = tempfile.mkdtemp(prefix="sf-125-")
 CFG = os.path.join(tmp, "cfg")
 os.environ["SPARKFORGE_CONFIG_DIR"] = CFG

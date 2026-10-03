@@ -9,7 +9,7 @@
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 html = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8", errors="replace").read()
 
 results = []

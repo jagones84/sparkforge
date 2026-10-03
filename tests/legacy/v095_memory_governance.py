@@ -6,7 +6,7 @@ Tests score persistence, time decay, dedupe and ranking. Exit 0 iff all pass.
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src"))
 from sparkforge import memory  # noqa: E402
 
 

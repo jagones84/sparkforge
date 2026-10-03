@@ -6,7 +6,7 @@ import sys
 import tempfile
 import zipfile
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 tmp = tempfile.mkdtemp(prefix="sf-skills-")
 os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
 os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")

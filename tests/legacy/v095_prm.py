@@ -6,7 +6,7 @@ Offline unit test of the deterministic PRM core (no model call). Exit 0 iff all 
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src"))
 from sparkforge import prm  # noqa: E402
 
 

@@ -6,7 +6,7 @@ Mirrors the v077 stubbing style: the model is faked, the loop is real.
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 os.environ.setdefault("SPARKFORGE_DB", os.path.join(REPO, "data", "events.db"))
 

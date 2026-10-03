@@ -25,7 +25,7 @@ import time
 import urllib.error
 import urllib.request
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASE = os.environ.get("SPARKFORGE_URL", "http://127.0.0.1:8790")
 TOKEN = os.environ.get("SPARKFORGE_TOKEN")
 

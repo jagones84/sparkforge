@@ -48,25 +48,56 @@ SparkForge is the "super harness" successor to the SparkPulse mobile telemetry p
 - 🔌 **MCP client**: connect external MCP servers as native tools
 - 👶 **Subagent delegation**: spawn child agent runs for delegated subtasks
 
-## Quick start
+## Install & run
+
+SparkForge is **stdlib-only (Python 3.10+)** — the core has **no `pip` dependencies**.
+The only requirement is an LLM: a local **llama.cpp router** over HTTP (default
+`http://127.0.0.1:8080`) or a remote provider key in `.env`.
+
+It runs natively on **both** platforms from the same codebase. Every platform-specific
+bit (shell argv, process-tree kill, `npx`/`pip` resolution, service restart) lives in
+`src/sparkforge/osutil.py`, so no POSIX assumption leaks into the core.
+
+### Linux / ARM64 — DGX Spark (reference host)
 
 ```bash
-./run.sh                     # WebUI + API on http://127.0.0.1:8790
-./run.sh --host 0.0.0.0      # expose on the Tailscale IP for the phone
+git clone https://github.com/jagones84/sparkforge && cd sparkforge
+cp .env.template .env          # keys stay local (gitignored) — never commit them
+./run.sh                       # WebUI + API on http://127.0.0.1:8790
+./run.sh --host 0.0.0.0        # expose on the Tailscale IP for the phone
 ```
 
-Then open `http://127.0.0.1:8790` (or `http://<dgx-tailscale-ip>:8790` from the phone).
+Open `http://127.0.0.1:8790` (or `http://<dgx-tailscale-ip>:8790` from the phone).
+Run it always-on as a **systemd user service**:
 
-On Windows (native, no WSL) the same core runs with Python 3.10+ on PATH:
+```bash
+cp deploy/sparkforge.service ~/.config/systemd/user/
+systemctl --user enable --now sparkforge.service
+```
+
+### Windows 10/11 (native, no WSL)
 
 ```powershell
-.\run.ps1                     # WebUI + API on http://127.0.0.1:8790
-.\run.ps1 --host 0.0.0.0      # expose on the LAN for the phone
+git clone https://github.com/jagones84/sparkforge; cd sparkforge
+Copy-Item .env.template .env
+.\run.ps1                      # WebUI + API on http://127.0.0.1:8790
+.\run.ps1 --host 0.0.0.0       # expose on the LAN for the phone
 ```
 
-Shell execution, process-tree kill and `npx` MCP launch all route through
-`osutil.py`, so no POSIX assumption leaks into the core; `deploy/sparkforge.service`
-stays a Linux-only convenience (on Windows install it as a service with `nssm`).
+If the execution policy blocks the script:
+`powershell -ExecutionPolicy Bypass -File .\run.ps1`.
+
+There is **no systemd on Windows**: run `run.ps1` directly, or wrap it as a service with
+[`nssm`](https://nssm.cc) (`nssm install SparkForge …`). `deploy/sparkforge.service` is a
+Linux-only convenience.
+
+### Sandbox (optional)
+
+Shell commands run inside `docker`, `bubblewrap` or `nsjail` when one is available;
+otherwise they run **directly on the host** and the topbar shows `sandbox: none (!)`.
+Install/enable one of them for real isolation (see `config/tools.yaml` → `sandbox`).
+
+### CLI quick examples
 
 ```bash
 python3 forge.py chat "hello, who are you?"       # one-shot chat

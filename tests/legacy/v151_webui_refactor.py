@@ -11,7 +11,7 @@ Static checks over webui/index.html (exit 0 = all passed):
 import os
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOTAL = 0
 PASSED = 0
 

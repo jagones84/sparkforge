@@ -10,7 +10,7 @@ import os
 import sys
 import tempfile
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 tmp = tempfile.mkdtemp(prefix="sf-hooks-")
 log = os.path.join(tmp, "audit.log")
