@@ -123,10 +123,16 @@ bash tests/battery.sh
 It runs exactly three checks:
 - `tests/v140_subagent_todos.py` — subagent spawning, per-child todo lists, depth cap, taskgraph nesting;
 - `tests/v177_session_delete_cascade.py` — deleting a session removes transcript + graph + run + edits;
-- `tests/v183_chat_core.py` — chat loop core: a normal turn runs + persists its reply, and a stuck model's repeated failed call is executed ONCE then blocked (anti-loop, JAG-183).
+- `tests/v183_chat_core.py` — chat loop core: a normal turn runs + persists its reply; a stuck model's repeated failed call is executed ONCE then blocked (anti-loop, JAG-183); the `subagent` action is reachable and delegates once (JAG-189); a fresh message is not hijacked by a stale plan (JAG-189); harness-action cards (`write_todos`/`update_todos`/`subagent`) are persisted so a reload rebuilds them (JAG-190).
 
 Everything else under `tests/legacy/` is historic acceptance evidence, run ad hoc,
 and is **not** part of the gate.
+
+> **Live/smart testing:** the battery is necessary but not sufficient — the real
+> bugs (truncated output, unreachable subagent, reload losing the chat) only showed
+> up by driving the running WebUI. See [`docs/TESTING-PLAYBOOK.md`](docs/TESTING-PLAYBOOK.md)
+> for the seams to probe (refresh, session swap, swap-during-run, topic pivot, long
+> tasks), the read-only DOM/network probes, and the pass criteria.
 
 ### v0.2 — tools, sandbox, approvals, MCP
 
