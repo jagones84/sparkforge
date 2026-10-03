@@ -42,6 +42,27 @@ DATA_DIR = os.path.join(REPO, "data")
 SESSIONS_DIR = os.environ.get("SPARKFORGE_SESSIONS_DIR") or os.path.join(DATA_DIR, "sessions")
 WEBUI_DIR = os.path.join(REPO, "webui")
 
+# Static assets for the WebUI (vendored editor libs, css, images). Served
+# read-only from webui/assets with an extension whitelist so a crafted path can
+# never reach outside the assets root.
+ASSET_EXTS = {".js", ".mjs", ".css", ".map", ".json", ".svg", ".png", ".jpg",
+              ".jpeg", ".webp", ".gif", ".ico", ".woff2"}
+ASSET_CTYPES = {
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".map": "application/json",
+    ".json": "application/json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+}
+
 ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
 MAX_FEED_EVENTS = 800
 STORE_LOCK = threading.RLock()
@@ -3307,6 +3328,28 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_asset(self, rel):
+        """Serve a read-only static asset under webui/assets (vendored editor
+        libs, css, images). The path is resolved inside the assets root and the
+        extension is whitelisted, so it can never escape the folder."""
+        import posixpath
+        rel = posixpath.normpath("/" + (rel or "")).lstrip("/")
+        if not rel or rel.startswith(".."):
+            return self._send(404, {"error": "not found"})
+        root = os.path.normpath(os.path.join(WEBUI_DIR, "assets"))
+        full = os.path.normpath(os.path.join(root, rel))
+        if full != root and not full.startswith(root + os.sep):
+            return self._send(404, {"error": "not found"})
+        ext = os.path.splitext(full)[1].lower()
+        if ext not in ASSET_EXTS:
+            return self._send(404, {"error": "not found"})
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except (FileNotFoundError, IsADirectoryError, PermissionError):
+            return self._send(404, {"error": "not found"})
+        return self._send(200, data, ctype=ASSET_CTYPES.get(ext, "application/octet-stream"))
+
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
         if not n:
@@ -3324,6 +3367,8 @@ class Handler(BaseHTTPRequestHandler):
     # ---- GET ----
     def do_GET(self):
         path, qs = self._query()
+        if path.startswith("/assets/"):
+            return self._send_asset(path[len("/assets/"):])
         if not check_auth(self.headers, qs):
             return self._send(401, {"error": "unauthorized"})
         if api_v02.handle(self, "GET", path, qs, None):

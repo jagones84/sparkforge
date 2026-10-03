@@ -801,6 +801,8 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, fs_list(qs))
         if path == "/api/fs/read":  # JAG-124: read a text file into the editor
             return _r(handler, 200, fs_read(qs))
+        if path == "/api/fs/raw":  # JAG-150: raw bytes for inline image/pdf preview
+            return _fs_raw(handler, qs)
         if path == "/api/edits":  # JAG-127: change summary for the run/session
             return _r(handler, 200, edits_summary(qs))
         if path == "/api/edits/diff":  # JAG-127: side-by-side rows for one file
@@ -1334,6 +1336,32 @@ def fs_read(qs=None) -> dict:
     except (UnicodeDecodeError, ValueError):
         return {"path": p, "text": "", "size": size, "truncated": False, "binary": True}
     return {"path": p, "text": text, "size": size, "truncated": False, "binary": False}
+
+
+def _fs_raw(handler, qs=None):
+    """GET /api/fs/raw — raw bytes for an inline preview (images / PDF only).
+
+    Deliberately restricted to safe MIME types: it must never serve text/html or
+    javascript from the workspace inline, or it would become an XSS vector.
+    """
+    import os as _os
+    import mimetypes
+    q = qs or {}
+    p = _safe_fs_path(q.get("path"), _browse_roots() + [_ws_root(q)])
+    if not p or not _os.path.isfile(p):
+        return _r(handler, 404, {"error": "not found"})
+    if _os.path.getsize(p) > 32 * 1024 * 1024:
+        return _r(handler, 413, {"error": "file too large to preview"})
+    ctype = mimetypes.guess_type(p)[0] or "application/octet-stream"
+    if not (ctype.startswith("image/") or ctype == "application/pdf"):
+        return _r(handler, 415, {"error": "unsupported preview type: %s" % ctype})
+    try:
+        with open(p, "rb") as f:
+            data = f.read()
+    except OSError as e:
+        return _r(handler, 500, {"error": str(e)})
+    handler._send(200, data, ctype=ctype)
+    return True
 
 
 def fs_write(body) -> dict:
