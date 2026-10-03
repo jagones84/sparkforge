@@ -1991,7 +1991,7 @@ def _chat_tool_call(act, av02):
     return str(tool), args
 
 
-def _apply_chat_todos(sess, act, on_event):
+def _apply_chat_todos(sess, act, on_event, node=None):
     """Harness action `write_todos`: persist the model-authored todo list.
 
     The chat loop is the ONLY writer of the task list (no separate planner
@@ -2040,11 +2040,18 @@ def _apply_chat_todos(sess, act, on_event):
                  exit_code=0, backend="harness", args=todo_args,
                  output=out[:2000] or ("+%d node(s)" % len(added)),
                  summary="task list: %d node(s), +%d" % (total, len(added)))
+        # JAG-190: persist the card so a reload rebuilds it (harness-action cards
+        # were streamed live but never stored, so they vanished on refresh).
+        persist_tool_card(sess, "write_todos", True, args=todo_args,
+                          result=out[:2000] or ("+%d node(s)" % len(added)),
+                          exit_code=0, backend="harness", node=node)
         return len(added)
     except Exception as e:  # noqa: BLE001 — the task list must never break chat
         try:
             on_event("tool.result", session=sess["id"], tool="write_todos",
                      ok=False, backend="harness", stderr=str(e)[:200])
+            persist_tool_card(sess, "write_todos", False, error=str(e)[:200],
+                              backend="harness", node=node)
         except Exception:  # noqa: BLE001
             pass
         return 0
@@ -2068,7 +2075,7 @@ def _resolve_graph_node(graph, step):
     return node
 
 
-def _apply_chat_todo_updates(sess, act, on_event):
+def _apply_chat_todo_updates(sess, act, on_event, node=None):
     """Harness action `update_todos`: the MODEL advances its own plan (JAG-75).
 
     `{"action":"update_todos","steps":[{"index":0,"status":"doing"}]}` marks a
@@ -2117,23 +2124,29 @@ def _apply_chat_todo_updates(sess, act, on_event):
                 on_event("graph.node.updated", session=sess["id"], node=_dn,
                          index=graph["nodes"].index(_dn),
                          total=len(graph["nodes"]), changes=["status"])
+        _out = ("\n".join("- [%s] %s" % (n.get("status", "open"), n.get("label", ""))
+                          for n in changed)[:2000] or "nessun passo modificato")
         on_event("tool.result", session=sess["id"], tool="update_todos", ok=True,
                  exit_code=0, backend="harness", args={"steps": steps},
-                 output="\n".join("- [%s] %s" % (n.get("status", "open"), n.get("label", ""))
-                                  for n in changed)[:2000] or "nessun passo modificato",
+                 output=_out,
                  summary="task list: %d/%d step(s) updated"
                          % (len(changed), len([s for s in steps if isinstance(s, dict)])))
+        # JAG-190: persist so the card survives a reload.
+        persist_tool_card(sess, "update_todos", True, args={"steps": steps},
+                          result=_out, exit_code=0, backend="harness", node=node)
         return len(changed)
     except Exception as e:  # noqa: BLE001 — the task list must never break chat
         try:
             on_event("tool.result", session=sess["id"], tool="update_todos",
                      ok=False, backend="harness", stderr=str(e)[:200])
+            persist_tool_card(sess, "update_todos", False, error=str(e)[:200],
+                              backend="harness", node=node)
         except Exception:  # noqa: BLE001
             pass
         return 0
 
 
-def _apply_chat_replan(sess, act, on_event):
+def _apply_chat_replan(sess, act, on_event, node=None):
     """Harness action `replan_todos`: a brief, controlled re-plan (JAG-75).
 
     The model asks for the graph to be extended/corrected; only NEW steps are
@@ -2147,17 +2160,23 @@ def _apply_chat_replan(sess, act, on_event):
         on_event("tool.result", session=sess["id"], tool="replan_todos", ok=True,
                  exit_code=0, backend="harness",
                  summary="re-plan: +%d step(s)" % len(added))
+        # JAG-190: persist so the card survives a reload.
+        persist_tool_card(sess, "replan_todos", True,
+                          result="re-plan: +%d step(s)" % len(added),
+                          exit_code=0, backend="harness", node=node)
         return len(added)
     except Exception as e:  # noqa: BLE001 — never break chat
         try:
             on_event("tool.result", session=sess["id"], tool="replan_todos",
                      ok=False, backend="harness", stderr=str(e)[:200])
+            persist_tool_card(sess, "replan_todos", False, error=str(e)[:200],
+                              backend="harness", node=node)
         except Exception:  # noqa: BLE001
             pass
         return 0
 
 
-def _apply_chat_subagent(sess, act, on_event):
+def _apply_chat_subagent(sess, act, on_event, node=None):
     """Harness action `subagent` (JAG-189): delegate ONE subtask to a child run.
 
     The chat loop spawns a subagent (isolated transcript, its own task list, the
@@ -2176,6 +2195,8 @@ def _apply_chat_subagent(sess, act, on_event):
         if not goal:
             on_event("tool.result", session=sess["id"], tool="subagent", ok=False,
                      backend="harness", exit_code=1, summary="subagent: goal required")
+            persist_tool_card(sess, "subagent", False, error="goal required",
+                              backend="harness", node=node)
             return "subagent error: goal required"
         try:
             max_steps = int(_act.get("max_steps", _args.get("max_steps", 4)))
@@ -2192,6 +2213,8 @@ def _apply_chat_subagent(sess, act, on_event):
             err = spawned.get("error") or "spawn failed"
             on_event("tool.result", session=sess["id"], tool="subagent", ok=False,
                      backend="harness", exit_code=1, summary="subagent: " + str(err))
+            persist_tool_card(sess, "subagent", False, error=str(err),
+                              backend="harness", node=node)
             return "subagent error: %s" % err
         res = _sub.collect(sid, timeout=SUBAGENT_WAIT) or {}
         summary = str(res.get("summary") or "").strip()
@@ -2202,6 +2225,12 @@ def _apply_chat_subagent(sess, act, on_event):
                  args={"goal": goal, "max_steps": max_steps, "subagent_id": sid},
                  output=out[:4000],
                  summary="subagent %s: %s" % (sid, "done" if ok else "error"))
+        # JAG-190: persist so the card survives a reload.
+        persist_tool_card(sess, "subagent", ok,
+                          args={"goal": goal, "max_steps": max_steps,
+                                "subagent_id": sid},
+                          result=out[:4000], exit_code=0 if ok else 1,
+                          backend="subagent", node=node)
         return ("Subagent %s finished (goal: %s).\nResult:\n%s"
                 % (sid, goal[:120], out[:4000]))
     except Exception as e:  # noqa: BLE001 — delegation must never break chat
@@ -2209,6 +2238,8 @@ def _apply_chat_subagent(sess, act, on_event):
             on_event("tool.result", session=sess["id"], tool="subagent", ok=False,
                      backend="harness", exit_code=1, stderr=str(e)[:200],
                      summary="subagent: errore")
+            persist_tool_card(sess, "subagent", False, error=str(e)[:200],
+                              backend="harness", node=node)
         except Exception:  # noqa: BLE001
             pass
         return "subagent error: %s" % e
@@ -2644,13 +2675,14 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             # JAG-75: the model advances its own plan mid-run (in_progress → done
             # with evidence), or briefly re-plans. Then it must resume the plan.
             _user_pivot = False   # JAG-189: the model re-engaged the plan
+            _node_here = _cur_node()   # JAG-190: nest the card where it happened
             if act["action"] == "update_todos":
-                _apply_chat_todo_updates(sess, act, on_event)
+                _apply_chat_todo_updates(sess, act, on_event, node=_node_here)
                 nudge = ("Noted. Continue strictly: mark the next step 'doing' before "
                          "you start it, and 'done' with concrete evidence when it is "
                          "really finished — then move on. Never redo a step already done.")
             else:
-                _apply_chat_replan(sess, act, on_event)
+                _apply_chat_replan(sess, act, on_event, node=_node_here)
                 nudge = ("Plan updated. Now resume following the plan from where you "
                          "left off; do not re-plan again unless something really changed.")
             msgs.append({"role": "assistant", "content": answer})
@@ -2665,7 +2697,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             if _th:
                 _think_buf["t"] += _th + "\n"
                 on_delta("think", _th + "\n")
-            obs = _apply_chat_subagent(sess, act, on_event)
+            obs = _apply_chat_subagent(sess, act, on_event, node=_cur_node())
             msgs.append({"role": "assistant", "content": answer})
             _inject(obs + "\n\nContinue: call the next tool, or report the result.",
                     "observation")

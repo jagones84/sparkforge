@@ -1562,6 +1562,17 @@ async function loadHistory() {
   // full plan (including steps never touched) lives in the Plan panel.
   const _activeNode = nodes.find(n => n.status === "doing" || n.status === "blocked");
   if (_activeNode && !drawn[_activeNode.id]) { chatNodeAdd(_activeNode); drawn[_activeNode.id] = 1; }
+  // JAG-190: a refresh must never HIDE the turn inside a collapsed step. A node
+  // can be created by a REPLAYED feed event carrying a stale 'todo' status and
+  // then never re-opened, so loadHistory reopens every node that already holds
+  // content, plus the active ('doing'/'blocked') one. Nothing written to the
+  // chat may disappear on reload.
+  Object.keys(_chatNodes).forEach(nid => {
+    const det = _chatNodes[nid];
+    const kids = det.querySelector(".tc-kids");
+    if (kids && kids.children.length) det.open = true;
+  });
+  if (_activeNode && _chatNodes[_activeNode.id]) _chatNodes[_activeNode.id].open = true;
   // JAG-168: if a 'doing' node exists the turn may still be streaming — nest there
   const _doing = nodes.find(n => n.status === "doing");
   if (_doing && _chatNodes[_doing.id]) _activeScope = _chatNodes[_doing.id].querySelector(".tc-kids");
@@ -1687,7 +1698,10 @@ async function loadGraph() {
   if (!curRunId) { renderGraph(); return; }
   try {
     const g = await api("GET", "/api/runs/" + curRunId + "/graph");
-    if (g && !g.error) { graph = g; renderGraph(); }
+    // JAG-190: never clobber the session plan with an EMPTY run graph — a stale
+    // curRunId made the Plan panel read "0/0" after a refresh (the endpoint now
+    // answers 200 with an empty graph instead of a 404, so guard on nodes).
+    if (g && !g.error && (g.nodes || []).length) { graph = g; renderGraph(); }
   } catch {}
 }
 function applyGraphEvent(d) {

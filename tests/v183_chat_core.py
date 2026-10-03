@@ -162,6 +162,10 @@ _cs = (server.load_session("v183c") or {}).get("messages", [{}])[-1]
 check("C4 reply persisted after delegation",
       _cs.get("role") == "assistant" and "fatto" in (_cs.get("content") or ""),
       "%r" % (_cs.get("content") or "")[:40])
+_ccards = (server.load_session("v183c") or {}).get("tool_cards", [])
+check("C5 subagent card PERSISTED for reload (JAG-190)",
+      any(c.get("tool") == "subagent" for c in _ccards),
+      "cards=%s" % [c.get("tool") for c in _ccards])
 
 
 # ---- scenario D: a fresh user message is not hijacked by a stale plan ------
@@ -180,6 +184,23 @@ _ds = (server.load_session("v183d") or {}).get("messages", [{}])[-1]
 check("D2 the direct answer is persisted",
       _ds.get("role") == "assistant" and "risposta diretta" in (_ds.get("content") or ""),
       "%r" % (_ds.get("content") or "")[:40])
+
+
+# ---- scenario E: harness-action cards are PERSISTED for reload (JAG-190) ---
+_PLAN = '{"action":"write_todos","todos":[{"label":"step one"},{"label":"step two"}]}'
+_DONE0 = '{"action":"update_todos","steps":[{"index":0,"status":"done","evidence":"did one"}]}'
+_DONE1 = '{"action":"update_todos","steps":[{"index":1,"status":"done","evidence":"did two"}]}'
+
+def script_plan(n):
+    return (_PLAN, _DONE0, _DONE1)[n] if n < 3 else "piano chiuso."
+
+run_turn("v183e", script_plan, gated_ok)
+_ecards = (server.load_session("v183e") or {}).get("tool_cards", [])
+_tools = [c.get("tool") for c in _ecards]
+check("E1 write_todos card persisted (JAG-190)", "write_todos" in _tools,
+      "cards=%s" % _tools)
+check("E2 update_todos card persisted (JAG-190)", "update_todos" in _tools,
+      "cards=%s" % _tools)
 
 
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
