@@ -593,8 +593,14 @@ class _TodoStream:
 
 
 def _missing(graph, todos):
-    """Drop todos whose label already exists on the graph (idempotent re-parse)."""
-    seen = {n["label"].strip().lower() for n in graph.get("nodes", [])}
+    """Drop todos whose label already exists on the CURRENT plan (idempotent).
+
+    JAG-196: dedupe against the current plan only — with every plan's nodes kept
+    (JAG-194), comparing against the whole graph made a NEW task that reuses a
+    label ("run pwd" again) create no nodes at all.
+    """
+    seen = {n["label"].strip().lower()
+            for n in (plan_nodes(graph) or graph.get("nodes", []))}
     out = []
     for t in todos or []:
         label = t if isinstance(t, str) else (t.get("label") or t.get("title") or t.get("task"))
@@ -614,7 +620,7 @@ def generate_from_model(run_id, goal, session_id=None, model=None, on_event=None
     """
     from . import server as srv
     graph = ensure(run_id, session_id=session_id, goal=goal)
-    if graph.get("nodes"):
+    if plan_nodes(graph):
         return graph, []
     stream = _TodoStream(graph, on_event=on_event)
     msgs = [{"role": "system", "content": srv.SYSTEM_PROMPT + "\n\n" + WRITE_TODOS_PROMPT},

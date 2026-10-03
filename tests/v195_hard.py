@@ -35,6 +35,7 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 from sparkforge import registry, taskgraph, tools  # noqa: E402
+from sparkforge import server as _srv  # noqa: E402
 
 results = []
 
@@ -160,6 +161,30 @@ check("F1 concurrent add_node keeps all 20 nodes",
 check("F2 concurrent add_node kept unique ids",
       len({n["id"] for n in saved.get("nodes", [])}) == 20,
       "ids=%d" % len({n["id"] for n in saved.get("nodes", [])}))
+
+
+# ---- G: update_todos indices resolve inside the CURRENT plan (JAG-196) ------
+# Keeping old plans (JAG-194) must NOT let an old node shadow the current plan:
+# `index: 0` has to hit the current plan's first node, not the graph's first node.
+gg = taskgraph.ensure("v195-resolve")
+taskgraph.add_node(gg, "old A", status="done", evidence="x")
+taskgraph.begin_plan(gg)
+gg = taskgraph.load("v195-resolve")
+n1 = taskgraph.add_node(gg, "new A", status="todo")
+n2 = taskgraph.add_node(gg, "new B", status="todo")
+r0 = _srv._resolve_graph_node(gg, {"index": 0})
+r1 = _srv._resolve_graph_node(gg, {"index": 1})
+check("G1 index 0 -> current plan's FIRST node",
+      r0 and r0["id"] == n1["id"], str(r0 and r0["id"]))
+check("G2 index 1 -> current plan's node",
+      r1 and r1["id"] == n2["id"], str(r1 and r1["id"]))
+check("G3 label lookup stays inside the current plan",
+      _srv._resolve_graph_node(gg, {"label": "old a"}) is None
+      and (_srv._resolve_graph_node(gg, {"label": "new b"}) or {}).get("id") == n2["id"], "")
+check("G4 _missing still dedupes within the current plan",
+      len(taskgraph._missing(gg, [{"label": "new A"}])) == 0, "")
+check("G5 _missing does NOT drop a re-used label from an old plan",
+      len(taskgraph._missing(gg, [{"label": "old A"}])) == 1, "")
 
 
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))

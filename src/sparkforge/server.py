@@ -2074,14 +2074,25 @@ def _apply_chat_todos(sess, act, on_event, node=None, after=None):
 
 
 def _resolve_graph_node(graph, step):
-    """Locate a node by id, label or 0-based index (JAG-75)."""
+    """Locate a node by id, label or 0-based index (JAG-75).
+
+    JAG-196: the model's `update_todos` uses 0-based indices / labels into ITS
+    CURRENT list. Since JAG-194 keeps every plan's nodes in the graph, resolving
+    against the whole node list made index 0 hit an OLD plan's node — the current
+    plan never advanced ("All steps complete" vs "4 open" deadlock). Resolve
+    labels/indices against the CURRENT plan only; ids stay globally unique.
+    """
+    nodes = taskgraph.plan_nodes(graph) or graph.get("nodes", [])
     node = None
     if step.get("id") is not None:
         node = taskgraph.find(graph, node_id=str(step["id"]))
     if node is None and step.get("label"):
-        node = taskgraph.find(graph, label=step["label"])
+        _lbl = str(step["label"]).strip().lower()
+        for _n in nodes:
+            if str(_n.get("label", "")).strip().lower() == _lbl:
+                node = _n
+                break
     if node is None and step.get("index") is not None:
-        nodes = graph.get("nodes", [])
         try:
             i = int(step["index"])
         except (TypeError, ValueError):
@@ -3668,8 +3679,8 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
                 # Skipped for one-liners (greetings/chit-chat) where a task list
                 # would be noise.
                 _g = taskgraph.load(gkey)
-                if (not _g or not _g.get("nodes")) and (autonomous or
-                                                        len(str(message).split()) >= 4):
+                if (not _g or not taskgraph.plan_nodes(_g)) and (autonomous or
+                                                                 len(str(message).split()) >= 4):
                     start_run_graph(gkey, message, gkey, routing.pick("planner"),
                                     on_event=_emit)
                 # JAG-63: do NOT finalize the task list at the end of every
