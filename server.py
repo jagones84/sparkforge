@@ -1771,6 +1771,57 @@ def _looks_like_promise(text):
     return bool(t) and len(t) <= 400 and bool(_PROMISE_RE.match(t))
 
 
+def _skill_hints(text, limit=3):
+    """JAG-178: names of installed skills that best match `text`. Cheap keyword
+    scoring — a name/title hit weighs more than a description hit — so a stuck
+    model is nudged to READ the skill that actually covers the problem instead of
+    guessing the syntax again."""
+    try:
+        import skills
+        words = set(re.findall(r"[a-z]{3,}", (text or "").lower()))
+        words -= {"the", "and", "for", "with", "you", "are", "not", "this", "that",
+                  "error", "failed", "unknown", "command", "tool", "run", "get", "set"}
+        if not words:
+            return []
+        scored = []
+        for s in skills.list_skills():
+            name = str(s.get("name") or "")
+            strong = (name + " " + str(s.get("title") or "")).lower()
+            weak = str(s.get("description") or "").lower()
+            score = sum(3 for w in words if w in strong) + sum(1 for w in words if w in weak)
+            if score:
+                scored.append((score, name))
+        scored.sort(key=lambda x: (-x[0], x[1]))
+        return [n for _, n in scored[:limit] if n]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _stuck_note(tool, obs, fail_streak, repeats, hints):
+    """JAG-178: a socratic "you are stuck" nudge. The harness does NOT solve the
+    problem — it makes the model ask the RIGHT questions (syntax? skill? another
+    route? ask the user?) and reminds it that it has skills and tools."""
+    why = []
+    if fail_streak >= 2:
+        why.append("'%s' has failed %d times in a row" % (tool, fail_streak))
+    if repeats >= 1:
+        why.append("you just repeated the SAME call")
+    return "\n".join([
+        "Observation for tool %s:" % tool,
+        obs,
+        "",
+        "SYSTEM (harness) — YOU ARE STUCK: %s." % ("; ".join(why) or "no progress"),
+        "STOP and THINK before the next tool call. Ask yourself:",
+        "  1) Is the command SYNTAX exactly right for this exact subcommand? (re-read the error above)",
+        "  2) Have I READ the skill that covers this? You have skills — e.g. %s — "
+        "read one with the `skills` tool (action=read, name=<skill>)."
+        % (", ".join(hints) if hints else "check them in your system prompt"),
+        "  3) Is there a DIFFERENT route to the same result that avoids this broken call?",
+        "  4) If you cannot progress, ASK THE USER one precise question instead of retrying.",
+        "Do NOT repeat the same call. Change approach, read a skill, or ask the user.",
+    ])
+
+
 def _open_plan_steps(sess):
     """How many plan nodes are still OPEN (todo/doing/blocked) for this session.
 
@@ -2236,6 +2287,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     _kg_stop_reason = None
     _kg_prev = None
     _kg_stale = 0
+    _fail_streak = 0        # JAG-178: consecutive failing tool calls
+    _last_tool_hash = None  # JAG-178: detect a repeated identical call
+    _tool_repeat = 0
     _kg_started = time.time()
     _kg_last_tool = None
     _last_tool_ok = None
@@ -2479,6 +2533,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     obs = "Azione '%s' NEGATA dall'utente." % tool
                 ok = status == "executed"
                 sub = res.get("result") or {}
+                # JAG-178: `ok` means "the tool executed"; a tool can execute and
+                # still FAIL (nonzero exit / ok:false). Track failure separately.
+                _tool_failed = ((not ok) or (sub.get("ok") is False)
+                                or (sub.get("exit_code") not in (None, 0)))
                 # JAG-96: persist the card so cold-start UIs rebuild the transcript.
                 persist_tool_card(sess, tool, ok, args=args,
                                   result=sub.get("stdout") or obs or "",
@@ -2494,6 +2552,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                     inline=True, summary=("errore" if not ok else "")))
             except Exception as e:  # noqa: BLE001 — a tool failure must not kill chat
                 obs, ok = "tool error: %s" % e, False
+                _tool_failed = True   # JAG-178: a raised tool error is a failure too
                 persist_tool_card(sess, tool, False, args=args, error=str(e)[:200],
                                   backend="harness", node=_cur_node(),
                                   think=_think_buf["t"].strip())
@@ -2506,7 +2565,19 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             # JAG-88: an oversized observation goes to a file (referenced) rather
             # than being truncated into the context — nothing is lost.
             obs = str(obs)
-            if len(obs) > CHAT_TOOL_OBS_LIMIT:
+            # JAG-178: track consecutive failures + repeated identical calls, and
+            # COACH a stuck model (socratic) instead of the generic continue.
+            _th = _kg.tool_hash(tool, args)
+            if _th == _last_tool_hash:
+                _tool_repeat += 1
+            else:
+                _tool_repeat = 0
+            _last_tool_hash = _th
+            _fail_streak = (_fail_streak + 1) if _tool_failed else 0
+            if len(obs) <= CHAT_TOOL_OBS_LIMIT and (_fail_streak >= 2 or _tool_repeat >= 1):
+                note = _stuck_note(tool, obs, _fail_streak, _tool_repeat,
+                                   _skill_hints(tool + " " + obs))
+            elif len(obs) > CHAT_TOOL_OBS_LIMIT:
                 note = _offload_observation(sess, tool, obs)
             else:
                 note = ("Observation for tool %s:\n%s\n\n"

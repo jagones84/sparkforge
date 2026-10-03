@@ -43,6 +43,9 @@ checks = {
     "improve.proposal filtered": 'if (!d.session || d.session === sessionId) improveCard(d);' in html,
     "improve.nudge filtered": "if (d.session && d.session !== sessionId) return;" in html,
     "inject dedupe counter": 'class="hcount"' in html and "prev.dataset.k === key" in html,
+    "no empty-plan wall in chat":
+        "turned the chat into a wall of empty bars" in html
+        and "any todo node never referenced by content still appears" not in html,
     "no abort on switch": html.count('"/api/chat/abort"') == 1,
 }
 bad = [k for k, ok in checks.items() if not ok]
