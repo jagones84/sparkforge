@@ -54,8 +54,8 @@ check("D4b path outside roots rejected", r.get("ok") is False, str(r.get("error"
 html = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8").read()
 check("U1 skills upload is above the skills list",
       html.find("Install from zip") < html.find("Skills · installed"), "")
-check("U2 the rail scrolls only its body (titles stay)",
-      "#panel-body { flex: 1 1 auto; overflow-y: auto" in html
+check("U2 the inspector scrolls on its own (titles stay)",
+      "#inspector { flex: 1; min-height: 0; overflow-y: auto" in html
       and '[data-col="context"]  { flex: 0 0 238px; width: 238px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden' in html,
       "")
 check("U3 config tab can change the approval policy",

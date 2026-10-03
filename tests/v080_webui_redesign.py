@@ -44,11 +44,12 @@ def main():
     check("server badge", 'id="server-badge"' in src)
     check("responsive 1100", "@media (max-width: 1100px)" in src)
     check("responsive 820", "@media (max-width: 820px)" in src)
-    # --- Fase 2: rail contesto (JAG-127: panel consolidati, niente Self/Providers/Keys) ---
-    for p in ("graph", "config", "settings", "approvals", "mcp", "skills", "rules", "files"):
-        check("panel tab %s" % p, ('data-panel="%s"' % p) in src)
-    check("panel body", 'id="panel-body"' in src)
-    check("open panel fn", "openPanel(" in src)
+    # --- Fase 2: rail contesto (JAG-150: inspector a sezioni, settings in finestra) ---
+    for p in ("plan", "context", "approvals", "files", "feed"):
+        check("inspector section %s" % p, ('data-insp="%s"' % p) in src)
+    check("inspector container", 'id="inspector"' in src)
+    check("toggle inspector fn", "toggleInsp(" in src)
+    check("settings window", 'id="settingsWin"' in src and "function openSettings" in src)
     # --- Fase 3: tool card + thinking ---
     check("tool card markup", 'class="toolcard"' in src)
     check("tool card expand", "toggleTool(" in src)

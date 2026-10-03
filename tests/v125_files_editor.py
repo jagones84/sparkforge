@@ -85,8 +85,8 @@ check("W4 non-string content refused", bool(w4.get("error")), str(w4.get("error"
 
 # ---- U: WebUI panel --------------------------------------------------------
 html = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8").read()
-check("U rail tab + section + editor wired to the dock",
-      'data-panel="files"' in html and 'data-section="files"' in html
+check("U inspector section + editor wired to the dock",
+      'data-insp="files"' in html
       and "function loadFiles" in html and "async function openFile" in html
       and "/api/fs/list" in html and "SparkEditor" in html, "")
 
