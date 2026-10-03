@@ -125,7 +125,7 @@ Not yet (roadmap in PLAN.md): shell/file tools with approval gates, MCP client, 
 ## Honest maturity statement (v0.2)
 
 Implemented and verified by `tests/v02_acceptance.py` (8/8, raw evidence in
-[docs/V02-EVIDENCE.md](V02-EVIDENCE.md)): Docker sandbox with blocked egress; registry +
+[docs/evidence/V02-EVIDENCE.md](evidence/V02-EVIDENCE.md)): Docker sandbox with blocked egress; registry +
 allowlist; hard-deny; an agent run that executes a real shell command in the sandbox with a
 recorded human approval and the output returned as observation; pause/resume/abort; MCP over
 stdio and HTTP.

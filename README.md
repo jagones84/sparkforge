@@ -77,7 +77,7 @@ python3 forge.py tasks ls                         # task board + remaining bulle
 python3 forge.py models                           # router model roster/status
 ```
 
-> 📖 **Full CLI reference** — every command, every endpoint, examples: **[CLI.md](CLI.md)**.
+> 📖 **Full CLI reference** — every command, every endpoint, examples: **[CLI.md](docs/CLI.md)**.
 
 ### v0.2 — tools, sandbox, approvals, MCP
 
@@ -327,7 +327,7 @@ Optional auth: start with `--token <t>` and send `Authorization: Bearer <t>`.
 (`./run.sh`; report in `data/v02-acceptance.json`), and the two v0.2 acceptance criteria
 were reproduced by hand — an agent run executing a real sandboxed shell command with a
 recorded approval whose output is the observation, and a Paperclip-style MCP session that
-receives a reply. Raw command + output evidence: [docs/V02-EVIDENCE.md](docs/V02-EVIDENCE.md).
+receives a reply. Raw command + output evidence: [docs/evidence/V02-EVIDENCE.md](docs/evidence/V02-EVIDENCE.md).
 
 ## Architecture
 

@@ -43,7 +43,7 @@ verificato da `tests/v071_skills_pmcp.py` (13/13 checks) — evidenza in
 
 Deliverable from `docs/specs/2026-09-29-frontier-harness-design.md` §3 (v0.2).
 Everything below is verified by `tests/v02_acceptance.py` (8/8 checks) — see
-[docs/V02-EVIDENCE.md](V02-EVIDENCE.md) for the raw command+output evidence.
+[docs/evidence/V02-EVIDENCE.md](evidence/V02-EVIDENCE.md) for the raw command+output evidence.
 Re-verified independently on 2026-09-29 by a by-hand run (agent run `run_684e5723`
 → approval `e65e4b7e90` → sandboxed shell `exit=0`, `NET_BLOCKED`; MCP stdio session
 `initialize`/`tools/list`/`tools/call` → reply) — same evidence file, §"Independent
@@ -216,7 +216,7 @@ todo-tracking, Deep Agents `write_todos`, plan/act/check with visible state) kee
 per-run graph the model itself produces. Verified by `tests/v06_taskgraph.py`
 (**15/15** — 5 module checks, 8 mock-router end-to-end checks, 2 live-model checks) —
 raw report in `data/v06-acceptance.json`, raw command+output in
-[docs/V06-EVIDENCE.md](V06-EVIDENCE.md).
+[docs/evidence/V06-EVIDENCE.md](evidence/V06-EVIDENCE.md).
 
 - ✅ **`plan_graph` per run** (`taskgraph.py`): one graph per run in `data/graphs/<run_id>.json`,
   bound to `session_id` + `run_id`; nodes `{id, label, status todo|doing|done|blocked|cancelled,

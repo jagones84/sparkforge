@@ -1,8 +1,15 @@
 __pycache__/
+.pytest_cache/
 data/
 *.log
 .venv/
 eval/results/
+
+# JAG-180: editor/agent backup + temp files must never reach the repo.
+*.bak
+*.bak-*
+*.orig
+*.tmp
 
 # Secrets — NEVER commit API keys (JAG-71). Providers reference their key by
 # env-var name and the values live in a .env / ~/.hermes/.env, both ignored here.
