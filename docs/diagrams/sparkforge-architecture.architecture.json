@@ -7,7 +7,7 @@
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/jagones84/sparkforge.git",
-      "revision": "72c2e553d9b33fe5c967901280ac30d8c957c9ed"
+      "revision": "ebf0a6bb5005819b84bd113815468339cd5865fb"
     },
     "views": [
       {
@@ -51,7 +51,7 @@
     { "id": "tools", "type": "backend", "label": "Tool Executor", "sublabel": "fs · git · web · skills", "pos": [760, 300], "size": [122, 60], "sources": [{ "path": "tools.py" }] },
     { "id": "sandbox", "type": "security", "label": "Sandbox", "sublabel": "docker · bwrap · host", "pos": [908, 300], "size": [122, 60], "sources": [{ "path": "sandbox.py" }] },
     { "id": "observe", "type": "external", "label": "Osservabilita'", "sublabel": "hooks · metriche · OTel", "pos": [168, 136], "size": [122, 58], "sources": [{ "path": "hooks.py" }, { "path": "runmetrics.py" }, { "path": "otel_tracing.py" }] },
-    { "id": "router", "type": "cloud", "label": "LLM Router", "sublabel": ":8080 · OpenRouter", "pos": [308, 136], "size": [140, 58], "sources": [{ "path": "routing.py" }, { "path": "providers.py" }] },
+    { "id": "router", "type": "cloud", "label": "LLM Router", "sublabel": ":8080 · local+hosted", "pos": [308, 136], "size": [140, 58], "sources": [{ "path": "routing.py" }, { "path": "providers.py" }] },
     { "id": "store", "type": "database", "label": "Stato harness", "sublabel": "sessioni · graph · memoria", "pos": [316, 468], "size": [132, 60], "sources": [{ "path": "taskgraph.py" }, { "path": "memory.py" }] },
     { "id": "evolve", "type": "backend", "label": "Self-Evolution", "sublabel": "improve · selfevolve · PRM", "pos": [480, 468], "size": [140, 60], "sources": [{ "path": "selfevolve.py" }, { "path": "improve.py" }, { "path": "prm.py" }] },
     { "id": "mcp", "type": "messagebus", "label": "MCP Bridge", "sublabel": "tool esterni · stdio/HTTP", "pos": [640, 468], "size": [140, 60], "sources": [{ "path": "mcp_client.py" }, { "path": "mcp_server.py" }] }
@@ -95,7 +95,7 @@
       "items": [
         "think -> act -> observe: il modello emette write_todos/update_todos e chiama tool reali.",
         "L'osservazione RIENTRA nel loop: il risultato del tool torna all'Agent Loop come nuovo contesto.",
-        "keepgoing decide se continuare: con passi aperti re-inietta la lista e prosegue il turno.",
+        "keepgoing decide se continuare: se restano passi aperti RIMBORSA il budget dei tool, re-inietta la lista e prosegue — non abbandona mai un piano aperto.",
         "difficulty stima la difficolta' e scala N (best-of-N) e i giri di continuazione (compute-optimal).",
         "best-of-N campiona piu' candidati e sceglie il migliore col ranker deterministico (prm.rank_text).",
         "verifier applica 'apply-only-if-green': se il check in sandbox e' rosso la modifica e' annullata.",
@@ -109,7 +109,8 @@
         "registry.py carica config/tools.yaml + overlay e costruisce l'allowlist dichiarativa dei tool.",
         "Approval gate: auto per i comandi read-only, required per le azioni che toccano il mondo, deny per le distruttive.",
         "Sandbox: docker / bubblewrap / nsjail con --network none e rootfs read-only; fallback host 'none' esplicito.",
-        "hooks.py: PreToolUse (exit 2 blocca la chiamata), PostToolUse e Stop, senza modello nel loop."
+        "hooks.py: PreToolUse (exit 2 blocca la chiamata), PostToolUse e Stop, senza modello nel loop.",
+        "Il Tool Executor gira con la CARTELLA della SESSIONE come cwd (workspace), non con la scratch dir della sandbox: le azioni toccano il progetto giusto."
       ]
     },
     {
