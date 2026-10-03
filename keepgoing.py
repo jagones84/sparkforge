@@ -17,6 +17,10 @@ DEFAULTS = {
     "no_progress_rounds": 2,  # giri senza progresso prima dello stop 'no_progress'
     "max_wall_secs": 3600,    # tetto di tempo per run
     "subagent_max_depth": 2,  # profondita' massima della matrioska
+    # JAG-171: quando True l'harness insiste da solo (fino a keepgoing_max) prima
+    # di fermarsi; quando False, al primo tentativo di stop con passi aperti passa
+    # subito il controllo all'umano (HUMAN IN THE LOOP).
+    "autocontinue": True,
 }
 
 

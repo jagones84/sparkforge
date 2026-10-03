@@ -194,6 +194,15 @@
     border-left: 2px solid rgba(120,120,255,.3); padding: 6px 0 6px 10px; margin-top: 4px; max-height: 260px; overflow: auto; }
   .hinj .hkind { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: var(--acc); border: 1px solid var(--line);
     border-radius: 5px; padding: 0 5px; margin-left: 6px; }
+  /* JAG-171: HUMAN IN THE LOOP card. */
+  .hitl { display: flex; flex-direction: column; gap: 6px; }
+  .hitl-title { font-size: 12.5px; font-weight: 600; color: var(--warn); }
+  .hitl-open { white-space: pre-wrap; font-size: 11.5px; color: var(--dim); background: rgba(255,255,255,.03);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 0; max-height: 160px; overflow: auto; }
+  .hitl-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .hitl-other, .hitl-note { background: rgba(255,255,255,.04); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+  .hitl-send { align-self: flex-start; }
   .cursor { display: inline-block; width: 8px; height: 14px; background: var(--acc); margin-left: 2px;
     vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
@@ -571,6 +580,7 @@
             <label title="Dopo quanti giri consecutivi senza progressi l'agente si ferma (0 = mai).">giri senza progressi <input id="rtNoProg" type="number" min="0" value="2"></label>
             <label title="Tempo massimo per l'intero run, in secondi (0 = nessun limite).">limite tempo (s) <input id="rtWall" type="number" min="0" value="3600"></label>
             <label title="Quanti livelli di sub-agent può generare un agente (0 = nessuno).">livelli di sub-agent <input id="rtDepth" type="number" min="0" value="2"></label>
+            <label title="Se attivo l'harness insiste da solo finché i todo non sono chiusi, poi chiede a te. Se disattivato, appena restano passi aperti passa la parola all'umano (HUMAN IN THE LOOP).">autocontinue <input id="rtAuto" type="checkbox" checked></label>
           </div>
           <button class="ghost" onclick="saveRuntime()" title="salva le impostazioni del runtime">salva runtime</button>
         </div>
@@ -1166,6 +1176,46 @@ function renderThink(text) {
   d.querySelector(".t").textContent = text;
   _logAppend(d); scroll();
 }
+/* JAG-171: HUMAN IN THE LOOP — when the turn stops with open todos the harness
+   does not end on prose: it asks the operator how to proceed (options + Other +
+   an "additional info" field). The choice is sent as a NEW message that resumes
+   the turn; the open task list is still there, so the loop continues. */
+function hitlCard(d) {
+  d = d || {};
+  const card = document.createElement("div"); card.className = "msg ai";
+  const open = (d.open || []).map(t => "• " + (t.label || t.id || "") + (t.id ? "  (" + t.id + ")" : "")).join("\n");
+  card.innerHTML =
+    '<div class="who">HUMAN IN THE LOOP</div><div class="bubble"><div class="hitl">' +
+    '<div class="hitl-title">⏸ Fermato con ' + ((d.open || []).length) + ' passi aperti (' + esc(d.reason || "stop") + '). Come procedo?</div>' +
+    '<pre class="hitl-open"></pre>' +
+    '<div class="hitl-row">' +
+      '<button class="ghost" data-a="continue">▶ Continua</button>' +
+      '<button class="ghost" data-a="close">✓ Chiudi un passo</button>' +
+      '<button class="ghost" data-a="replan">♻ Ripianifica</button>' +
+      '<button class="ghost" data-a="stop">⏹ Fermati</button>' +
+    '</div>' +
+    '<input class="hitl-other" placeholder="Other: cosa devo fare? (opzionale)">' +
+    '<input class="hitl-note" placeholder="info aggiuntive per l\'agente (opzionale)">' +
+    '<button class="hitl-send">invia scelta</button></div></div>';
+  card.querySelector(".hitl-open").textContent = open;
+  const build = (a) => {
+    const other = (card.querySelector(".hitl-other").value || "").trim();
+    const note = (card.querySelector(".hitl-note").value || "").trim();
+    let s;
+    if (other) { s = other; }
+    else if (a === "continue") s = "Continua: esegui e chiudi i passi aperti con l'evidenza concreta.";
+    else if (a === "close") s = "Chiudi il prossimo passo come 'done' SOLO se hai l'evidenza (comando eseguito + output); altrimenti dimmi cosa manca.";
+    else if (a === "replan") s = "Ripianifica la task list in base a cosa serve davvero e poi prosegui.";
+    else if (a === "stop") s = "Fermati: per ora basta. Riassumi in una riga lo stato e cosa resta aperto.";
+    else s = "";
+    if (note) s += (s ? " — " : "") + "info aggiuntive: " + note;
+    return s.trim();
+  };
+  const go = (a) => { const t = build(a); if (t) send(t); };
+  card.querySelectorAll("[data-a]").forEach(b => b.onclick = () => go(b.dataset.a));
+  card.querySelector(".hitl-send").onclick = () => go(null);
+  _logAppend(card); scroll();
+}
 function cotFeed(text) {
   cotText += text;
   $("cotDrawer").querySelector(".t").textContent = cotText;
@@ -1272,6 +1322,7 @@ function send(text) {
   es.addEventListener("plan.incomplete", e => { if (live()) planIncomplete(JSON.parse(e.data)); });
   es.addEventListener("plan.continuing", e => { if (live()) planContinuing(JSON.parse(e.data)); });
   es.addEventListener("plan.stopped", e => { if (live()) planStopped(JSON.parse(e.data)); });
+  es.addEventListener("hitl.request", e => { if (live()) hitlCard(JSON.parse(e.data)); });
   es.addEventListener("verify.run", e => { if (!live()) return; const d = JSON.parse(e.data); if (d && d.ran) who("ai", (d.green ? "✅ verifier green" : "⛔ verifier ROSSO — modifica annullata") + " · " + (d.path || "").split("/").pop() + (d.duration_ms ? " · " + d.duration_ms + "ms" : "")); });
   es.addEventListener("run.metrics", e => { if (live()) runFooter(JSON.parse(e.data).metrics); });
   es.addEventListener("bestofn.chosen", e => { if (!live()) return; const d = JSON.parse(e.data); who("ai", `🎲 best-of-N: scelto il migliore tra ${d.n} campioni`); });
@@ -2542,6 +2593,7 @@ async function loadRuntime() {
   if ($("rtNoProg")) $("rtNoProg").value = r.no_progress_rounds ?? 2;
   if ($("rtWall")) $("rtWall").value = r.max_wall_secs ?? 3600;
   if ($("rtDepth")) $("rtDepth").value = r.subagent_max_depth ?? 2;
+  if ($("rtAuto")) $("rtAuto").checked = (r.autocontinue !== false);   // JAG-171
 }
 async function saveRuntime() {
   await api("POST", "/api/tools", { runtime: {
@@ -2549,6 +2601,7 @@ async function saveRuntime() {
     no_progress_rounds: +$("rtNoProg").value,
     max_wall_secs: +$("rtWall").value,
     subagent_max_depth: +$("rtDepth").value,
+    autocontinue: !!(($("rtAuto") || {}).checked),   // JAG-171
   }});
   who("ai", "✅ runtime aggiornato");
 }

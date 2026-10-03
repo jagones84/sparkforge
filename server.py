@@ -2157,6 +2157,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     answer, think = "", ""
     final_answer = ""
     announce_nudged = False
+    _hitl = None   # JAG-171: set when the turn stops with OPEN todos → ask the human
     # JAG-84: only REAL tool calls consume the work budget. Plan/todo bookkeeping
     # (write_todos / update_todos / replan_todos) and invalid-JSON retries used to
     # eat the same 4-step budget, so a "plan then work" turn ran out of steps right
@@ -2530,6 +2531,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                               started=_kg_started, aborted=_is_aborted(sess["id"]),
                               blocked=any(n.get("status") == "blocked" for n in _nodes),
                               steer=has_steer(sess["id"]), override=_kg_override)
+            # JAG-171: with autocontinue OFF the harness does not insist — the
+            # first stop with OPEN todos goes straight to the human gate.
+            if _open and not bool((_kg.cfg(_kg_override) or {}).get("autocontinue", True)):
+                _dec = {"continue": False, "reason": "need_input"}
             if _dec["continue"]:
                 _kg_rounds += 1
                 _kg_prev = _cur
@@ -2553,6 +2558,14 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                      open=len(_open), total=len(_nodes), rounds=_kg_rounds,
                      difficulty=_diff_level,
                      duration_s=round(time.time() - _kg_started, 1))
+            # JAG-171: HUMAN IN THE LOOP — never end on prose with open todos; ask
+            # the operator how to proceed (continue / close / replan / stop).
+            if _open:
+                _hitl = {"reason": _dec["reason"],
+                         "open": [{"id": n.get("id"), "label": n.get("label", "")}
+                                  for n in _open[:8]]}
+                on_event("hitl.request", session=sess["id"], reason=_dec["reason"],
+                         open=_hitl["open"], total=len(_nodes), rounds=_kg_rounds)
         for ch, t in collected:
             on_delta(ch, t)
         final_answer, think = answer, think
@@ -2601,6 +2614,13 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         trace.llm_call(msgs, answer + think)
     meta = {"model": model, "node": _cur_node()}
     content = answer.strip()
+    if _hitl:
+        # JAG-171: the turn stopped with open todos → the visible reply is the
+        # human gate, not the model's prose report.
+        content = ("⏸ In pausa: ci sono %d passi aperti e serve la tua scelta "
+                   "(vedi la card HUMAN IN THE LOOP)." % len(_hitl["open"]))
+        meta = {"model": model, "hitl": True, "node": _cur_node(),
+                "open": len(_hitl["open"]), "reason": _hitl["reason"]}
     if _looks_like_json_action(content) or not content:
         # JAG-64/78b: last-resort guard — never show/persist raw tool-call JSON
         # (or an empty turn). Summarise the plan state instead of leaking JSON.
