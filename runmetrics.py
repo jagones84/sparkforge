@@ -21,14 +21,15 @@ def _path(key):
 def start(key, model=None):
     rec = {"key": key, "model": model, "started": round(time.time(), 3),
            "ended": None, "duration_s": None, "iterations": 0, "steps": 0,
-           "tokens": 0, "outcome": "running", "stop_reason": None}
+           "tokens": 0, "outcome": "running", "stop_reason": None,
+           "difficulty": None}
     _START[key] = rec["started"]
     _write(key, rec)
     return rec
 
 
 def finish(key, outcome="done", stop_reason=None, iterations=0, steps=0, tokens=0,
-           prompt_tokens=0, completion_tokens=0, model=None):
+           prompt_tokens=0, completion_tokens=0, model=None, difficulty=None):
     rec = get(key)
     if not rec:
         rec = start(key)
@@ -40,6 +41,8 @@ def finish(key, outcome="done", stop_reason=None, iterations=0, steps=0, tokens=
                 "outcome": outcome, "stop_reason": stop_reason})
     if model:
         rec["model"] = model
+    if difficulty is not None:
+        rec["difficulty"] = difficulty
     started = _START.get(key) or rec.get("started") or now
     rec["duration_s"] = round(now - float(started), 1)
     _write(key, rec)

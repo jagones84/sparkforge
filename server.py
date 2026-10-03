@@ -1918,16 +1918,34 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     _kg_stale = 0
     _kg_started = time.time()
     _kg_last_tool = None
-    # JAG-134: la difficolta' stimata del task alza il budget di continuazione
-    # (compute-optimal) e viene riportata negli eventi per osservabilita'.
+    _last_tool_ok = None
+    # JAG-134/135: UN'unica stima di difficolta' (compute-optimal) alimenta sia il
+    # best-of-N sia il budget dei giri keepgoing. I segnali sono quelli che l'harness
+    # gia' possiede, ricalcolati a ogni giro (un solo stimatore, nessuna divergenza).
     try:
         import difficulty as _diff
-        _diff_est = _diff.estimate({"msg_words": len(str(message).split())})
-        _kg_override = {"keepgoing_max": _diff.rounds_for(
-            _kg.cfg()["keepgoing_max"], {"msg_words": len(str(message).split())})}
-        _diff_level = _diff_est["level"]
+        _kg_base = int(_kg.cfg().get("keepgoing_max") or 0)
     except Exception:  # noqa: BLE001
-        _kg_override, _diff_level = None, None
+        _diff, _kg_base = None, None
+
+    def _diff_signals(_msg, _used, _stale=0):
+        try:
+            _nodes = (taskgraph.load(sess["id"]) or {}).get("nodes", [])
+        except Exception:  # noqa: BLE001
+            _nodes = []
+        _open_n = len([n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES])
+        return {"open_nodes": _open_n,
+                "msg_words": len(str(_msg).split()),
+                "tool_count": len(_used or []),
+                "prev_error": (_last_tool_ok is False),
+                "prev_no_progress": bool(_stale)}
+
+    _diff_level = None
+    if _diff is not None:
+        try:
+            _diff_level = _diff.estimate(_diff_signals(message, [], 0))["level"]
+        except Exception:  # noqa: BLE001
+            _diff_level = None
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
         # JAG-127b: inject any steering message typed while this turn was running.
@@ -1965,11 +1983,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
         # difficolta' stimata del task (compute-optimal). n=1 -> zero overhead.
         try:
             import bestofn as _bn
-            _open_now = len([n for n in (taskgraph.load(sess["id"]) or {}).get("nodes", [])
-                             if n.get("status") in taskgraph.OPEN_STATUSES])
-            _bN = _bn.n_of(signals={"open_nodes": _open_now,
-                                    "msg_words": len(str(message).split()),
-                                    "tool_count": len(used_tools)})
+            _bN = _bn.n_of(signals=_diff_signals(message, used_tools, _kg_stale))
         except Exception:  # noqa: BLE001
             _bN = 1
         if _bN > 1 and _looks_like_json_action(answer):
@@ -2067,6 +2081,8 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 on_event("tool.result", session=sess["id"], **_tool_event(
                     tool, False, args=args, output=str(e)[:200],
                     backend="harness", inline=True, summary="errore"))
+            # JAG-134: alimenta il segnale prev_error della stima di difficolta'.
+            _last_tool_ok = bool(ok)
             # JAG-88: an oversized observation goes to a file (referenced) rather
             # than being truncated into the context — nothing is lost.
             obs = str(obs)
@@ -2118,6 +2134,14 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             _open = [n for n in _nodes if n.get("status") in taskgraph.OPEN_STATUSES]
             _cur = _kg.state_hash(_nodes)
             _kg_stale = (_kg_stale + 1) if (_kg_prev is not None and _cur == _kg_prev) else 0
+            # JAG-134: budget di continuazione ricalcolato sui segnali correnti.
+            _kg_override = None
+            if _diff is not None and _kg_base:
+                try:
+                    _kg_override = {"keepgoing_max": _diff.rounds_for(
+                        _kg_base, _diff_signals(message, used_tools, _kg_stale))}
+                except Exception:  # noqa: BLE001
+                    _kg_override = None
             _dec = _kg.decide(open_nodes=len(_open), rounds=_kg_rounds, stale=_kg_stale,
                               started=_kg_started, aborted=_is_aborted(sess["id"]),
                               blocked=any(n.get("status") == "blocked" for n in _nodes),
@@ -2216,7 +2240,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                           completion_tokens=int(chat_usage.get("completion_tokens") or 0),
                           tokens=int(chat_usage.get("prompt_tokens") or 0)
                                  + int(chat_usage.get("completion_tokens") or 0),
-                          model=model)
+                          model=model, difficulty=_diff_level)
         publish("run.metrics", session=sess["id"], metrics=runmetrics.get(sess["id"]))
     except Exception:  # noqa: BLE001 — le metriche non devono mai rompere un turno
         pass
@@ -2225,7 +2249,9 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     try:  # JAG-133: registra la sequenza di tool del turno per il mining skill
         import selfevolve as _se
         if used_tools:
-            _se.record(sess["id"], used_tools)
+            # chiave per-TURNO (non per-sessione): cosi' il mining vede le sequenze
+            # ripetute su run diverse invece di sovrascrivere sempre lo stesso record.
+            _se.record("%s#%.3f" % (sess["id"], time.time()), used_tools)
     except Exception:  # noqa: BLE001 — la history non deve mai rompere un turno
         pass
     # JAG-128B: nudge di fine turno — quando il turno ha usato parecchi tool (o e'
