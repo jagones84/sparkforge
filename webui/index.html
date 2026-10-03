@@ -88,6 +88,7 @@
   .task .st.cancelled { color: var(--dim); text-decoration: line-through; }
   .task .dep { font-size: 9px; color: var(--dim); }
   .task .ev { font-size: 9px; color: var(--ok); }
+  .task .tcid { font-family: ui-monospace, monospace; font-size: 10px; color: #8ab4ff; flex-shrink: 0; }
   .graphrow { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
   .task.fresh { animation: pop .5s ease; border: 1px dashed rgba(181,108,255,.4); }
   @keyframes pop { from { transform: scale(.96); opacity: .3; } }
@@ -111,6 +112,10 @@
   .sess .ws { font-size: 12px; flex-shrink: 0; opacity: .85; }
   .sess .del { color: var(--err); font-size: 13px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: .55; }
   .sess .del:hover { opacity: 1; background: rgba(248,113,113,.12); }
+  /* JAG-169: the session's stable job id (JX) shown in the rail. */
+  .sess .jid { font-family: ui-monospace, monospace; font-size: 10px; color: #8ab4ff; flex-shrink: 0;
+    background: rgba(108,140,255,.12); border: 1px solid rgba(108,140,255,.3);
+    border-radius: 6px; padding: 1px 5px; }
 
   /* context meter */
   .meter { height: 14px; border-radius: 999px; background: rgba(120,140,255,.12);
@@ -181,6 +186,8 @@
   .tctree .st.done { color: #34d399; border-color: rgba(52,211,153,.5); }
   .tctree .st.blocked { color: #ff7777; border-color: rgba(255,119,119,.5); }
   .tctree .tc-kids { margin: 6px 0 6px 16px; padding-left: 10px; border-left: 2px solid rgba(108,140,255,.25); }
+  /* JAG-169: the todo id JX.TY, monospaced and visible in chat + panel. */
+  .tctree .tcid { font-family: ui-monospace, monospace; font-size: 10px; color: #8ab4ff; margin-right: 6px; }
   .hinj { margin: 4px 0; font-size: 11.5px; }
   .hinj > summary { cursor: pointer; color: var(--info); letter-spacing: .04em; }
   .hinj .hbody { white-space: pre-wrap; color: var(--dim); font-family: ui-monospace, monospace; font-size: 11px;
@@ -932,6 +939,13 @@ const $ = id => document.getElementById(id);
 let sessionId = localStorage.getItem("sf_session") || null;
 let TOKEN = localStorage.getItem("sf_token");
 let curThink = null, curAns = null, feedSince = 0, cotText = "";
+/* JAG-169: human ids. JX = the session (X = its stable job number), JX.TY = todo
+   Y of job X (Y = the numeric part of the node id). */
+let curJob = null;
+function _todoid(node) {
+  const y = String((node && node.id) || "").replace(/\D+/g, "");
+  return (curJob ? "J" + curJob : "J?") + (y ? ".T" + y : "");
+}
 /* JAG-166: in-chat task tree state. activeScope = the container of the node
    currently 'doing'; every thought/tool/injection is appended there (indented). */
 let _chatNodes = {}, _activeScope = null, _sysInjectEl = null;
@@ -1095,6 +1109,8 @@ function _paintNode(node) {
   const st = det.querySelector(".st");
   st.textContent = node.status || "todo";
   st.className = "st " + (node.status || "todo");
+  const idEl = det.querySelector(".tcid");
+  if (idEl) idEl.textContent = _todoid(node);
   det.querySelector(".tclabel").textContent = node.label || "";
 }
 function chatNodeAdd(node) {
@@ -1102,7 +1118,7 @@ function chatNodeAdd(node) {
   const det = document.createElement("details");
   det.className = "tctree"; det.dataset.id = node.id;
   det.style.marginLeft = (_nodeDepth(node.id) * 14) + "px";
-  det.innerHTML = '<summary><span class="st"></span><span class="tclabel"></span></summary><div class="tc-kids"></div>';
+  det.innerHTML = '<summary><span class="st"></span><span class="tcid"></span><span class="tclabel"></span></summary><div class="tc-kids"></div>';
   $("log").appendChild(det);
   _chatNodes[node.id] = det;
   _paintNode(node);
@@ -1265,6 +1281,7 @@ async function api(method, path, body) {
 function selectSession(s) {
   if (!s || !s.id) return;
   sessionId = s.id; localStorage.setItem("sf_session", sessionId);
+  curJob = s.job || _sessJob[s.id] || null;   // JAG-169: the active job id (JX)
   _sessModel[s.id] = s.model || _sessModel[s.id] || "";
   $("log").innerHTML = ""; curThink = curAns = null; _resetChatTree();
   // JAG-167: never carry another session's run graph into this one.
@@ -1284,12 +1301,14 @@ async function loadSessions() {
   const hideEmpty = $("hide-empty") ? $("hide-empty").checked : false;
   (out.sessions || []).filter(s => (!hideEmpty || (s.messages || 0) > 0) && ((s.title || s.id || "").toLowerCase().includes(q))).forEach(s => {
     _sessModel[s.id] = s.model || "";   // JAG-157: cache each session's model
+    _sessJob[s.id] = s.job || null;     // JAG-169: cache each session's job id
     const d = document.createElement("div");
     d.className = "sess" + (s.id === sessionId ? " active" : "") + (runningSessions[s.id] ? " running" : "");
     d.dataset.sid = s.id;   // JAG-168: lets setRunning() toggle the busy marker
     const age = s.age ? (" · " + s.age) : "";
     const fol = s.workspace ? `<span class="ws" title="workspace: ${s.workspace}">📁</span>` : "";
-    d.innerHTML = `${fol}<span class="col"><span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span></span><span class="del" title="delete">✕</span>`;
+    const jid = s.job ? `<span class="jid" title="job id (JX)">J${s.job}</span>` : "";
+    d.innerHTML = `${jid}${fol}<span class="col"><span class="t">${s.title || s.id}</span><span class="n">${s.messages} msg${age}</span></span><span class="del" title="delete">✕</span>`;
     d.onclick = e => {
       if (e.target.classList.contains("del")) return;
       selectSession(s);
@@ -1365,6 +1384,7 @@ async function loadHistory() {
   if (!sessionId) return;
   _stick = true;  // JAG-116: opening a session always lands at the latest message
   const s = await api("GET", "/api/history?session=" + encodeURIComponent(sessionId));
+  curJob = (s && s.job) || null;   // JAG-169: JX used by the todo ids on screen
   // JAG-167: rebuild the PERSISTENT in-chat tree from THIS session's graph.
   // Every todo node becomes a collapsible <details>; tool cards, harness
   // injections and assistant replies are re-nested under the node they were
@@ -1511,6 +1531,7 @@ async function loadPlan() {
   let g = null;
   try { g = await api("GET", "/api/sessions/" + encodeURIComponent(sessionId) + "/graph"); } catch (e) { g = null; }
   graph = (g && g.nodes && g.nodes.length) ? g : null;
+  curJob = _sessJob[sessionId] || curJob;   // JAG-169: keep JX aligned with the session
   renderGraph();
 }
 /* v0.8: dedupe identical plan steps (the "say hello" x9 bug) */
@@ -1571,13 +1592,14 @@ function applyGraphEvent(d) {
 }
 function renderGraph() {
   const box = $("tasks"); box.innerHTML = ""; $("taskDetail").innerHTML = "";
+  const _jid = curJob ? ("J" + curJob + " · ") : "";
   if (!graph) {
     box.innerHTML = '<div class="remaining">no run graph yet — send a request</div>';
-    $("graphHead").textContent = "run graph: —"; $("taskCount").textContent = "";
+    $("graphHead").textContent = _jid + "run graph: —"; $("taskCount").textContent = "";
     return;
   }
   const c = graph.counts || countNodes(graph.nodes); graph.counts = c;
-  $("graphHead").textContent = "run " + (graph.run_id || "").slice(0, 8) + " · " +
+  $("graphHead").textContent = _jid + "run " + (graph.run_id || "").slice(0, 8) + " · " +
     (graph.node_count || 0) + " nodes · " + (c.done || 0) + " done" +
     (graph.goal ? " · " + graph.goal.slice(0, 40) : "");
   $("taskCount").textContent = (c.done || 0) + "/" + (graph.node_count || 0);
@@ -1592,7 +1614,7 @@ function renderGraph() {
 function showNodeDetail(n) {
   const ev = (n.evidence || []).map(e => "• " + (e.text || "")).join("\n") || "(no evidence yet)";
   $("taskDetail").innerHTML =
-    `<div style="color:var(--txt)">${n.id} · ${n.status}` +
+    `<div style="color:var(--txt)">${_todoid(n)} · ${n.id} · ${n.status}` +
     ((n.deps || []).length ? " · deps " + n.deps.join(", ") : "") + `</div>` +
     `<div style="white-space:pre-wrap;margin:4px 0">${ev}</div>` +
     `<div class="graphrow">` +
@@ -1658,6 +1680,7 @@ let _modelsCache = [];   // flat [{ref,id,provider,pname,local,available,ctx,loa
 let _modelItems = [];    // items currently rendered, in visual order
 let _modelHi = 0;        // highlighted index (keyboard)
 let _sessModel = {};     // JAG-157: per-session model {sessionId: modelRef}
+let _sessJob = {};       // JAG-169: per-session job id {sessionId: JX}
 
 /* JAG-157: a session remembers its own LLM; fall back to the global default. */
 function currentModel() { return (sessionId && _sessModel[sessionId]) || localStorage.getItem("sf_model") || ""; }
@@ -1863,7 +1886,7 @@ function taskTree(nodes) {
     const deps = (n.deps || []).length ? ` <span class="dep">⤷ ${n.deps.join(", ")}</span>` : "";
     const ev = (n.evidence || []).length ? ` <span class="ev">📎 ${n.evidence.length}</span>` : "";
     return `<div class="task" data-id="${_attr(n.id)}" style="margin-left:${depth * 14}px">` +
-      `<span class="st ${n.status}">${n.status}</span><span>${mark[n.status] || "☐"} ${esc(n.label)}</span>${deps}${ev}</div>`;
+      `<span class="st ${n.status}">${n.status}</span><span class="tcid">${_todoid(n)}</span><span>${mark[n.status] || "☐"} ${esc(n.label)}</span>${deps}${ev}</div>`;
   };
   const seen = new Set();
   const walk = (p, depth) => (byParent[p] || []).map(n => {

@@ -251,10 +251,42 @@ def list_sessions():
                             "created": s.get("created"), "updated": upd,
                             "age": _rel_time(upd), "messages": len(msgs),
                             "workspace": s.get("workspace"),
+                            "job": s.get("job"),
                             "model": s.get("model")})
     except FileNotFoundError:
         pass
     return sorted(out, key=lambda s: s.get("updated") or 0, reverse=True)
+
+
+def _max_job():
+    """JAG-169: highest job number already assigned across sessions (0 = none)."""
+    best = 0
+    try:
+        for fn in os.listdir(SESSIONS_DIR):
+            if fn.endswith(".json"):
+                s = _read_json(os.path.join(SESSIONS_DIR, fn), None) or {}
+                try:
+                    best = max(best, int(s.get("job") or 0))
+                except (TypeError, ValueError):
+                    pass
+    except FileNotFoundError:
+        pass
+    return best
+
+
+def ensure_job(sess):
+    """JAG-169: a stable human id for a session — JX, X = job number.
+
+    Assigned ONCE and persisted, so it never shifts when other sessions are
+    deleted (unlike a position in the list). Returns True when it changed `sess`.
+    """
+    try:
+        if int(sess.get("job") or 0) > 0:
+            return False
+    except (TypeError, ValueError):
+        pass
+    sess["job"] = _max_job() + 1
+    return True
 
 
 def ensure_session_workspace(sess, workspace=None):
@@ -290,6 +322,22 @@ def backfill_session_workspaces():
     return n
 
 
+def backfill_jobs():
+    """JAG-169: give every stored session a stable JX job id (assigned once)."""
+    n = 0
+    try:
+        for fn in sorted(os.listdir(SESSIONS_DIR)):
+            if not fn.endswith(".json"):
+                continue
+            s = _read_json(os.path.join(SESSIONS_DIR, fn), None)
+            if s and ensure_job(s):
+                save_session(s)
+                n += 1
+    except FileNotFoundError:
+        pass
+    return n
+
+
 def _remember_workspace(path):
     """JAG-126: remember the folder of the session being used, so the NEXT new
     session defaults to it. Never breaks the session if the write fails."""
@@ -314,7 +362,9 @@ def get_or_create_session(sid, title=None, workspace=None):
     if sid:
         s = load_session(sid)
         if s:
-            if ensure_session_workspace(s, workspace):
+            changed = ensure_session_workspace(s, workspace)
+            changed = ensure_job(s) or changed   # JAG-169: backfill a stable JX id
+            if changed:
                 save_session(s)
             _remember_workspace(s.get("workspace"))
             return s
@@ -322,6 +372,7 @@ def get_or_create_session(sid, title=None, workspace=None):
     s = {"id": sid, "title": title or "session " + sid[:6],
          "created": round(time.time(), 3), "messages": []}
     ensure_session_workspace(s, workspace)
+    ensure_job(s)                                # JAG-169: allocate JX on creation
     save_session(s)
     _remember_workspace(s.get("workspace"))
     return s
@@ -3748,6 +3799,8 @@ class Handler(BaseHTTPRequestHandler):
             sess = load_session(sid) if sid else None
             if not sess:
                 return self._send(404, {"error": "session not found"})
+            if ensure_job(sess):   # JAG-169: backfill a stable JX on first read
+                save_session(sess)
             return self._send(200, sess)
         if path == "/api/chat/stream":
             # SSE chat. Session contract: see the Handler docstring (JAG-51).
@@ -4104,6 +4157,7 @@ def main():
     except Exception:  # noqa: BLE001 — provider metadata is optional
         pass
     backfill_session_workspaces()  # JAG-117: every session gets a folder
+    backfill_jobs()                # JAG-169: every session gets a stable JX id
     publish("service.start", host=args.host, port=args.port, router=ROUTER_BASE)
     print("SparkForge v%s on http://%s:%d  (router: %s)" % (
         VERSION, args.host, args.port, ROUTER_BASE))
