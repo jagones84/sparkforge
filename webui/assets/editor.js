@@ -107,7 +107,13 @@ const STYLE = `
 #editorDock .ed-tab.active{border-color:var(--accent,#8b7bf0);background:rgba(139,123,240,.14)}
 #editorDock .ed-tab .dirty{color:var(--warn,#e0b341)}
 #editorDock .ed-tab .x{opacity:.55}
-#editorDock .ed-body{flex:1;min-height:0;display:flex;flex-direction:column}
+#editorDock .ed-body{flex:1;min-height:0;display:flex;flex-direction:row}
+#editorDock .ed-tree{width:210px;flex:0 0 auto;overflow:auto;border-right:1px solid var(--line,#26304a);padding:6px;font-family:monospace;font-size:11px}
+#editorDock .ed-tree[hidden]{display:none}
+#editorDock .ed-main{flex:1;min-width:0;display:flex;flex-direction:column}
+#editorDock .ed-trow{cursor:pointer;padding:2px 4px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#editorDock .ed-trow:hover{background:rgba(108,140,255,.12)}
+#editorDock .ed-trow.active{background:rgba(139,123,240,.18)}
 #editorDock .ed-host{flex:1;min-height:0;overflow:auto}
 #editorDock .ed-host.hidden{display:none}
 #editorDock .ed-preview{flex:1;min-height:0;overflow:auto;padding:12px;line-height:1.5}
@@ -137,11 +143,16 @@ function buildDock() {
   dock.innerHTML = `
     <div class="ed-resize"></div>
     <div class="ed-head"><span class="ed-title">Editor</span><span class="ed-status"></span>
+      <button class="ed-files ghost" title="mostra/nascondi l'albero file">🗂 files</button>
+      <button class="ed-refresh ghost" title="ricarica l'albero">↻</button>
       <button class="ed-x ghost" title="close (Esc)">✕</button></div>
-    <div class="ed-tabs"></div>
     <div class="ed-body">
-      <div class="ed-host"></div>
-      <div class="ed-preview" hidden></div>
+      <div class="ed-tree"></div>
+      <div class="ed-main">
+        <div class="ed-tabs"></div>
+        <div class="ed-host"></div>
+        <div class="ed-preview" hidden></div>
+      </div>
     </div>
     <div class="ed-foot">
       <button class="ghost ed-save">save</button>
@@ -156,11 +167,19 @@ function buildDock() {
   state.preview = dock.querySelector(".ed-preview");
   state.toggleBtn = dock.querySelector(".ed-toggle");
   state.resizeEl = dock.querySelector(".ed-resize");
-
   dock.querySelector(".ed-x").onclick = close;
   dock.querySelector(".ed-save").onclick = save;
   dock.querySelector(".ed-revert").onclick = revert;
   state.toggleBtn.onclick = toggleRender;
+  state.treeEl = dock.querySelector(".ed-tree");
+  state.treeEl.hidden = localStorage.getItem("sf_ed_tree") === "0";
+  dock.querySelector(".ed-files").onclick = () => {
+    const t = state.treeEl;
+    t.hidden = !t.hidden;
+    localStorage.setItem("sf_ed_tree", t.hidden ? "0" : "1");
+    if (!t.hidden && !t.childElementCount) loadTree();
+  };
+  dock.querySelector(".ed-refresh").onclick = () => loadTree();
 
   const saved = parseInt(localStorage.getItem(LS_W) || "", 10);
   if (saved) dock.style.width = saved + "px";
@@ -198,6 +217,61 @@ function syncActive() {
     t.value = state.host.value();
     t.dirty = t.value !== t.saved;
   }
+}
+
+async function loadTree() {
+  const box = state.treeEl;
+  if (!box) return;
+  box.innerHTML = '<div class="remaining">loading…</div>';
+  const sid = localStorage.getItem("sf_session") || "";
+  try {
+    const d = await jget("/api/fs/list?session=" + encodeURIComponent(sid));
+    if (d.error) { box.innerHTML = '<div class="remaining">' + esc(d.error) + "</div>"; return; }
+    box.innerHTML = "";
+    const root = document.createElement("div");
+    root.className = "remaining";
+    root.style.marginBottom = "4px";
+    root.textContent = (d.root ? basename(d.root) : "workspace") + "/";
+    box.appendChild(root);
+    renderTree(box, d, 0);
+    if (!d.count) box.insertAdjacentHTML("beforeend", '<div class="remaining">empty folder</div>');
+  } catch (e) { box.innerHTML = '<div class="remaining">' + esc(e) + "</div>"; }
+}
+
+function renderTree(container, d, depth) {
+  (d.dirs || []).forEach((dir) => {
+    const row = document.createElement("div");
+    row.className = "ed-trow";
+    row.style.paddingLeft = (4 + depth * 12) + "px";
+    row.textContent = "▸ 📁 " + dir.name;
+    const kids = document.createElement("div");
+    kids.hidden = true;
+    let loaded = false;
+    row.onclick = async () => {
+      kids.hidden = !kids.hidden;
+      row.textContent = (kids.hidden ? "▸" : "▾") + " 📁 " + dir.name;
+      if (!kids.hidden && !loaded) {
+        loaded = true;
+        const sid = localStorage.getItem("sf_session") || "";
+        try {
+          const sub = await jget("/api/fs/list?session=" + encodeURIComponent(sid) + "&path=" + encodeURIComponent(dir.path));
+          if (sub.error) kids.innerHTML = '<div class="remaining" style="padding-left:' + (16 + depth * 12) + 'px">' + esc(sub.error) + "</div>";
+          else renderTree(kids, sub, depth + 1);
+        } catch (e) { /* ignore */ }
+      }
+    };
+    container.appendChild(row);
+    container.appendChild(kids);
+  });
+  (d.files || []).forEach((f) => {
+    const row = document.createElement("div");
+    row.className = "ed-trow";
+    row.style.paddingLeft = (16 + depth * 12) + "px";
+    row.textContent = "📄 " + f.name;
+    row.title = f.path;
+    row.onclick = () => open(f.path);
+    container.appendChild(row);
+  });
 }
 
 function renderTabs() {
@@ -364,7 +438,12 @@ function toggleRender() {
   renderActive();
 }
 
-function show() { buildDock(); state.dock.hidden = false; applyResponsive(); }
+function show() {
+  buildDock();
+  state.dock.hidden = false;
+  applyResponsive();
+  if (state.treeEl && !state.treeEl.hidden && !state.treeEl.childElementCount) loadTree();
+}
 function close() { syncActive(); if (state.dock) state.dock.hidden = true; }
 function toggle(e) {
   if (!$id("editorDock")) buildDock();
