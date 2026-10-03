@@ -104,6 +104,22 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   Opt-out esplicito `SPARKFORGE_REQUIRE_HELDOUT=0` solo per dev. Commit `5d265b9`.
   *Nota:* `tests/legacy/v148_selfevolve2.py` era GIA' stale (apre `api_v02.py` nella
   root, ora in `src/sparkforge/`) — pre-esistente, non nel gate.
+- **JAG-206** Step auditor read-only (RDD P1): `taskgraph` — i nodi hanno
+  `requires_proof`; un nodo "rischioso" NON può chiudersi `done` con una semplice
+  dichiarazione (ValueError) → serve un'evidenza **osservata** (`observed=True`).
+  `audit_node()` dà il verdetto read-only, fail-safe su id ignoti. `complete_node
+  (observed=True)` e `apply_write_todos` passano il flag. `tests/v206_task_auditor.py`
+  (10/10). Commit `ce55746`.
+- **JAG-207** Abuse/crash suite (RDD+TDD, hard): `tests/v207_abuse_hard.py` (28/28,
+  con time-bound anti-hang). Ha scovato **3 bug reali**, tutti corretti:
+  1. `memory._match` eseguiva `re.search` su input esterno → **DoS** da backtracking
+     catastrofico (`(a+)+$`). Ora match LETTERALE + AND-di-parole, niente regex utente.
+  2. `_parse_md_file` andava in crash su byte non-UTF8 in uno store corrotto →
+     ora `errors="replace"`.
+  3. `registry.resolve_path` sollevava su null byte (`embedded null byte`) → rifiuto
+     esplicito, niente 5xx.
+  Inoltre `battery.sh` ora usa `PYTHONPYCACHEPREFIX` su temp: un `__pycache__` stale
+  (SMB) aveva fatto fallire v204 "per finta". Commit `______`. Battery **9/9 GREEN**.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -116,11 +132,12 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   `v202_concurrent_stream.py` (4/4). NON nel gate `battery.sh`.
 
 Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 20/20,
-v205 13/13 → **7/7 GREEN**.
+v205 13/13, v206 10/10, v207 28/28 → **9/9 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).
-- Gate ufficiale = `tests/battery.sh` (oggi: v140, v177, v183, v195, v198, v204, v205).
+- Gate ufficiale = `tests/battery.sh` (v140, v177, v183, v195, v198, v204, v205,
+  v206, v207). Usa `PYTHONPYCACHEPREFIX` su temp (niente bytecode stale).
 - Suite "hard/bastarde" = `v195_hard.py` (da riusare per regressione SOLO se c'è
   motivo concreto). Scenari etichettati A..I con `check("Xn ...")`.
 - `tests/legacy/` = accettazione storica, NON parte del gate.

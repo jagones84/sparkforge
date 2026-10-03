@@ -154,16 +154,20 @@ def query(term=None, kind=None, limit=20):
 
 
 def _match(text, term):
-    try:
-        if re.search(term, text, re.I):
-            return True
-    except re.error:
-        pass
-    if term.lower() in text.lower():
+    """Case-insensitive LITERAL match, with an AND-of-words fallback.
+
+    JAG-207 (v207): the previous version ran `re.search(term, text)` on
+    caller-supplied text, so a pathological pattern like `(a+)+$` caused
+    catastrophic backtracking — a DoS on recall/health. No `re` on user input.
+    """
+    if not term:
+        return False
+    low = str(text).lower()
+    term_l = str(term).lower()
+    if term_l in low:
         return True
-    # fall back to AND-of-words: every whitespace-separated term must appear
-    words = [w for w in re.split(r"\W+", term.lower()) if len(w) > 2]
-    low = text.lower()
+    # fall back to AND-of-words: every meaningful word must appear
+    words = [w for w in re.split(r"\W+", term_l) if len(w) > 2]
     return bool(words) and all(w in low for w in words)
 
 
@@ -183,7 +187,9 @@ def _parse_md_file(path):
     line state machine instead so a record keeps its metadata AND content.
     """
     records = []
-    with open(path, "r", encoding="utf-8") as f:
+    # JAG-207 (v207): a corrupt / non-UTF8 byte in an append-only file must not
+    # crash recall/health — decode leniently instead.
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
         raw = f.read()
     rec = None
     in_front = False

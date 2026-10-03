@@ -535,6 +535,10 @@ def resolve_path(path, roots=None, base=None):
     """
     if roots is None:
         roots = ["."]
+    # JAG-207 (v207): a null byte makes os.path.realpath raise ValueError
+    # ("embedded null byte"); reject it gracefully instead of crashing a tool.
+    if "\x00" in str(path):
+        return None, "path contains a null byte"
     base = os.path.realpath(base) if base else REPO
     p = path if os.path.isabs(path) else os.path.join(base, path)
     p = os.path.realpath(p)
