@@ -376,6 +376,24 @@
   #mcpJsonWin textarea { flex: 1; min-height: 300px; width: 100%; box-sizing: border-box; resize: vertical;
     font-family: monospace; font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: 10px;
     border: 1px solid var(--line); background: #0b0f18; color: var(--txt); }
+  /* JAG-153: assistant replies are rendered markdown (sanitized) + HTML artifact preview */
+  .bubble.md-content p { margin: 0 0 8px; }
+  .bubble.md-content > :last-child { margin-bottom: 0; }
+  .bubble.md-content h1, .bubble.md-content h2, .bubble.md-content h3 { margin: 10px 0 6px; line-height: 1.25; }
+  .bubble.md-content h1 { font-size: 18px; } .bubble.md-content h2 { font-size: 15px; } .bubble.md-content h3 { font-size: 13px; }
+  .bubble.md-content ul, .bubble.md-content ol { margin: 4px 0 8px; padding-left: 20px; }
+  .bubble.md-content li { margin: 2px 0; }
+  .bubble.md-content code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .bubble.md-content pre { background: rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 8px;
+    padding: 10px 12px; overflow: auto; margin: 6px 0; }
+  .bubble.md-content pre code { background: none; padding: 0; }
+  .bubble.md-content table { border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+  .bubble.md-content th, .bubble.md-content td { border: 1px solid var(--line-2); padding: 4px 8px; }
+  .bubble.md-content blockquote { border-left: 3px solid var(--line); margin: 6px 0; padding: 2px 10px; color: var(--dim); }
+  .bubble.md-content a { color: var(--accent); }
+  .bubble.md-content img { max-width: 100%; border-radius: 8px; }
+  .bubble .artprev { margin-top: 6px; }
+  .bubble .artprev iframe { width: 100%; height: 320px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 </style>
 </head>
 <body>
@@ -861,8 +879,10 @@ function who(role, text) {
   // but this one-tap copy is what works reliably from a phone.
   d.innerHTML = `<div class="who">${role === "user" ? "YOU" : "SPARKFORGE"}` +
     `<button class="copy" title="copy message">⧉</button></div><div class="bubble"></div>`;
-  d.querySelector(".bubble").textContent = text;
-  d.querySelector(".copy").onclick = () => copyText(d.querySelector(".copy"), d.querySelector(".bubble").textContent);
+  const b = d.querySelector(".bubble");
+  if (role === "user") { b.textContent = text; }
+  else { b.dataset.raw = (text == null ? "" : String(text)); renderAnswerBubble(b); }
+  d.querySelector(".copy").onclick = () => copyText(d.querySelector(".copy"), b.dataset.raw != null ? b.dataset.raw : b.textContent);
   $("log").appendChild(d); scroll(); return d;
 }
 /* v1.6.3 (JAG-55): inline tool-call mini-card, coherent with the run graph nodes */
@@ -1010,7 +1030,7 @@ function send(text) {
     const d = JSON.parse(e.data);
     if (!sessionId) { sessionId = d.session; localStorage.setItem("sf_session", sessionId); }
     if (d.channel === "think") { ensureThink().textContent += d.text; cotFeed(d.text); }
-    else { ensureAnswer().textContent += d.text; }
+    else { appendAnswer(d.text); }
     scroll();
   });
   // v1.6.3 (JAG-55): tool calls happen inline in the chat when the turn runs a tool
@@ -2837,36 +2857,102 @@ function showImage(url) {
 function closeImage() {
   $("imgView").hidden = true; $("imgBackdrop").hidden = true; $("imgEl").src = "";
 }
-function linkifyFiles(bubble) {
-  if (!bubble || bubble.dataset.linked || !bubble.textContent) return;
-  const raw = bubble.textContent;
+/* ---- JAG-153: assistant replies are rendered as sanitized markdown (+ inline
+   HTML). Raw HTML artifacts (```html / ```svg) get an inline sandboxed preview. */
+function mdToHtml(text) {
+  const raw = String(text == null ? "" : text);
+  let html;
+  try { html = window.marked ? window.marked.parse(raw) : esc(raw).replace(/\n/g, "<br>"); }
+  catch (e) { html = esc(raw).replace(/\n/g, "<br>"); }
+  if (window.DOMPurify) html = window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+  return html;
+}
+function decorateHtmlPreviews(root) {
+  root.querySelectorAll("pre > code").forEach(code => {
+    if (code.dataset.art || !/language-(html|htm|svg|xml)/i.test(code.className || "")) return;
+    code.dataset.art = "1";
+    const pre = code.parentElement;
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "ghost"; btn.textContent = "▶ preview";
+    btn.style.cssText = "margin-top:6px;font-size:11px";
+    const box = document.createElement("div");
+    box.className = "artprev"; box.hidden = true;
+    const ifr = document.createElement("iframe");
+    ifr.setAttribute("sandbox", "allow-scripts allow-popups");
+    ifr.setAttribute("referrerpolicy", "no-referrer");
+    box.appendChild(ifr);
+    btn.onclick = () => {
+      if (box.hidden) { ifr.srcdoc = code.textContent || ""; box.hidden = false; btn.textContent = "▾ preview"; }
+      else { box.hidden = true; btn.textContent = "▶ preview"; }
+    };
+    pre.parentNode.insertBefore(btn, pre.nextSibling);
+    pre.parentNode.insertBefore(box, btn.nextSibling);
+  });
+}
+function renderAnswerBubble(b) {
+  if (!b) return;
+  b.classList.add("md-content");
+  b.innerHTML = mdToHtml(b.dataset.raw || "");
+  decorateHtmlPreviews(b);
+  linkifyNodes(b);
+  b.querySelectorAll('a[href^="http"]').forEach(a => { a.target = "_blank"; a.rel = "noopener noreferrer"; });
+  if (cursorEl && curAns && b === curAns.querySelector(".bubble")) b.appendChild(cursorEl);
+}
+let _mdRaf = null;
+function appendAnswer(t) {
+  const b = ensureAnswer();
+  b.dataset.raw = (b.dataset.raw || "") + t;
+  if (_mdRaf) return;
+  _mdRaf = requestAnimationFrame(() => { _mdRaf = null; renderAnswerBubble(b); scroll(); });
+}
+/* Turn file paths + URLs into clickable links, walking text nodes so it also
+   works on already-rendered (markdown) HTML. Idempotent (skips <a>/<code>/<pre>). */
+function linkifyNodes(root) {
+  if (!root) return;
   const re = new RegExp("(" + URL_RE.source + ")|(" + READABLE_RE.source + ")", "gi");
-  if (!re.test(raw)) return;
-  re.lastIndex = 0;
-  let out = "", last = 0, m;
-  while ((m = re.exec(raw)) !== null) {
-    out += esc(raw.slice(last, m.index));
-    if (m[1]) {  // http(s) URL: site -> new tab, image -> in-app preview
-      let u = m[1];
-      const trail = u.match(/[.,;:!?]+$/);
-      if (trail) u = u.slice(0, -trail[0].length);
-      out += _isImage(u)
-        ? '<a href="#" class="imglink" data-u="' + _attr(u) + '">' + esc(u) + "</a>"
-        : '<a href="' + _attr(u) + '" target="_blank" rel="noopener noreferrer" class="weblink">' + esc(u) + "</a>";
-      last = m.index + u.length;
-    } else {  // local file path -> open in the Files editor
-      out += '<a href="#" class="filelink" data-p="' + _attr(m[2]) + '">' + esc(m[2]) + "</a>";
-      last = m.index + m[0].length;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      const p = n.parentElement;
+      if (p && p.closest("a, pre")) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
     }
-  }
-  out += esc(raw.slice(last));
-  bubble.dataset.linked = "1";
-  bubble.innerHTML = out;
-  bubble.querySelectorAll("a.filelink").forEach(a =>
+  });
+  const nodes = []; let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  nodes.forEach(node => {
+    const raw = node.nodeValue || "";
+    re.lastIndex = 0;
+    if (!re.test(raw)) return;
+    re.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0, m;
+    while ((m = re.exec(raw)) !== null) {
+      if (m.index > last) frag.appendChild(document.createTextNode(raw.slice(last, m.index)));
+      if (m[1]) {
+        let u = m[1];
+        const trail = u.match(/[.,;:!?]+$/);
+        if (trail) u = u.slice(0, -trail[0].length);
+        const a = document.createElement("a");
+        if (_isImage(u)) { a.href = "#"; a.className = "imglink"; a.dataset.u = u; }
+        else { a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer"; a.className = "weblink"; }
+        a.textContent = u; frag.appendChild(a);
+        last = m.index + u.length;
+      } else {
+        const a = document.createElement("a");
+        a.href = "#"; a.className = "filelink"; a.dataset.p = m[2]; a.textContent = m[2];
+        frag.appendChild(a);
+        last = m.index + m[0].length;
+      }
+    }
+    if (last < raw.length) frag.appendChild(document.createTextNode(raw.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  });
+  root.querySelectorAll("a.filelink").forEach(a =>
     a.onclick = e => { e.preventDefault(); openInEditor(a.dataset.p); });
-  bubble.querySelectorAll("a.imglink").forEach(a =>
+  root.querySelectorAll("a.imglink").forEach(a =>
     a.onclick = e => { e.preventDefault(); showImage(a.dataset.u); });
 }
+function linkifyFiles(bubble) { linkifyNodes(bubble); }
 function linkifyAll() {
   document.querySelectorAll("#log .msg .bubble").forEach(linkifyFiles);
 }
