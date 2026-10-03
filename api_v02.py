@@ -875,6 +875,10 @@ def handle(handler, method, path, qs, body):
         if path == "/api/mcp/reload":
             _lazy('mcp_client')
             return _r(handler, 200, _MCP_CLIENT.reload())
+        if path == "/api/mcp/local-file":
+            # JAG-158: ensure the hand-editable local mcp.json exists, return its path.
+            _lazy('mcp_client')
+            return _r(handler, 200, {"ok": True, "path": _MCP_CLIENT.ensure_local_file()})
         if path == "/api/agent/run":
             goal = body.get("goal", "")
             if not goal:

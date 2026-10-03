@@ -358,18 +358,63 @@ def _read_doc(path):
         return {}
 
 
+def _servers_to_clients(servers):
+    """Trae-style `mcpServers` dict -> internal `clients` dict (JAG-158)."""
+    out = {}
+    for name, s in (servers or {}).items():
+        if not isinstance(s, dict):
+            continue
+        c = {}
+        if s.get("url") or s.get("serverUrl") or s.get("type") == "http":
+            c["url"] = s.get("url") or s.get("serverUrl") or ""
+            if isinstance(s.get("headers"), dict):
+                c["headers"] = s["headers"]
+        else:
+            c["command"] = s.get("command") or ""
+            args = s.get("args")
+            c["args"] = args if isinstance(args, list) else ([args] if args else [])
+            if isinstance(s.get("env"), dict):
+                c["env"] = s["env"]
+        if "enabled" in s:
+            c["enabled"] = bool(s["enabled"])
+        if s.get("cwd"):
+            c["cwd"] = s["cwd"]
+        out[name] = c
+    return out
+
+
+def _clients_to_servers(clients):
+    """Internal `clients` dict -> Trae-style `mcpServers` (for hand editing)."""
+    out = {}
+    for name, c in (clients or {}).items():
+        if not isinstance(c, dict):
+            continue
+        if c.get("url"):
+            s = {"url": c.get("url") or ""}
+            if isinstance(c.get("headers"), dict) and c["headers"]:
+                s["headers"] = c["headers"]
+        else:
+            s = {"command": c.get("command") or "", "args": list(c.get("args") or [])}
+            if isinstance(c.get("env"), dict) and c["env"]:
+                s["env"] = c["env"]
+        if c.get("cwd"):
+            s["cwd"] = c["cwd"]
+        s["enabled"] = bool(c.get("enabled", True))
+        out[name] = s
+    return out
+
+
 def load_doc():
     """Merged config: tracked base file + local (gitignored) user overrides.
 
-    Local entries override base ones by name; `env_files` are unioned. This is
-    the single place the effective MCP configuration is assembled.
+    The local file is `config/mcp_clients.local.json` in Trae-style
+    `{"mcpServers": {...}}` format; a legacy local YAML (clients schema) is
+    still read for migration. Local entries override base ones by name.
     """
     base = _read_doc(CONFIG_PATH)
     if not base and os.path.exists(CONFIG_JSON_PATH):
         base = _read_doc(CONFIG_JSON_PATH)
-    local = _read_doc(CONFIG_LOCAL_PATH)
-    if not local and os.path.exists(CONFIG_LOCAL_JSON_PATH):
-        local = _read_doc(CONFIG_LOCAL_JSON_PATH)
+    local = _load_local_doc()
     env_files = list(base.get("env_files") or [])
     for p in (local.get("env_files") or []):
         if p not in env_files:
@@ -380,29 +425,43 @@ def load_doc():
 
 
 def _load_local_doc():
-    """Raw local-only document (the file user edits are persisted into)."""
-    doc = _read_doc(CONFIG_LOCAL_PATH)
-    if not doc and os.path.exists(CONFIG_LOCAL_JSON_PATH):
-        doc = _read_doc(CONFIG_LOCAL_JSON_PATH)
-    if not isinstance(doc, dict):
-        doc = {}
-    doc.setdefault("clients", {})
-    return doc
+    """The user document (internal form). Canonical file = local JSON with
+    `mcpServers`; entries from a legacy local YAML are merged underneath so an
+    existing config is never lost, and the JSON wins on name clashes."""
+    out = {"clients": {}}
+    legacy = _read_doc(CONFIG_LOCAL_PATH)
+    if isinstance(legacy, dict):
+        if isinstance(legacy.get("clients"), dict):
+            out["clients"].update(legacy["clients"])
+        if legacy.get("env_files"):
+            out["env_files"] = list(legacy["env_files"])
+    doc = _read_doc(CONFIG_LOCAL_JSON_PATH)
+    if isinstance(doc, dict):
+        if isinstance(doc.get("mcpServers"), dict):
+            out["clients"].update(_servers_to_clients(doc["mcpServers"]))
+        elif isinstance(doc.get("clients"), dict):
+            out["clients"].update(doc["clients"])
+        if doc.get("env_files"):
+            out["env_files"] = list(doc["env_files"])
+    return out
 
 
 def _save_local_doc(doc):
-    """Persist the user document to the gitignored local file (YAML or JSON)."""
-    os.makedirs(os.path.dirname(CONFIG_LOCAL_PATH), exist_ok=True)
-    try:
-        import yaml
-        with open(CONFIG_LOCAL_PATH, "w", encoding="utf-8") as f:
-            yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True,
-                           default_flow_style=False)
-        return CONFIG_LOCAL_PATH
-    except ImportError:
-        with open(CONFIG_LOCAL_JSON_PATH, "w", encoding="utf-8") as f:
-            json.dump(doc, f, indent=2, ensure_ascii=False)
-        return CONFIG_LOCAL_JSON_PATH
+    """Persist the user document to the gitignored local JSON, mcpServers form."""
+    payload = {"mcpServers": _clients_to_servers(doc.get("clients") or {})}
+    if doc.get("env_files"):
+        payload["env_files"] = doc["env_files"]
+    os.makedirs(os.path.dirname(CONFIG_LOCAL_JSON_PATH), exist_ok=True)
+    with open(CONFIG_LOCAL_JSON_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+    return CONFIG_LOCAL_JSON_PATH
+
+
+def ensure_local_file():
+    """Create the local mcp.json (gitignored) if missing; return its path (JAG-158)."""
+    if not os.path.isfile(CONFIG_LOCAL_JSON_PATH):
+        _save_local_doc({"clients": {}})
+    return CONFIG_LOCAL_JSON_PATH
 
 
 def _load_config():
@@ -580,7 +639,7 @@ class MCPClientManager:
                 if s._connect_time else 0,
                 "enabled": True, "transport": "?"})
         return {"clients": clients, "external_tools": len(_EXTERNAL_TOOLS),
-                "config": CONFIG_PATH, "local_config": CONFIG_LOCAL_PATH}
+                "config": CONFIG_PATH, "local_config": CONFIG_LOCAL_JSON_PATH}
 
 
 # Module-level registry of external tools (populated by the manager)

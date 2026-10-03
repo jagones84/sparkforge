@@ -403,7 +403,6 @@
   <span class="sub">agent harness · self-hosted · any OS</span>
   <span style="flex:1"></span>
   <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
-  <button class="ghost" id="compactBtn" title="compact the session transcript now">🗜 compact</button>
   <button class="pill model-btn" id="model-btn" title="LLM model">model: … <span class="mc">▾</span></button>
   <div id="modelMenu" hidden></div>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
@@ -497,6 +496,9 @@
           <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span></div>
           <div class="ctxrow"><span>budget</span><span id="ctxBudget">–</span></div>
         </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="ghost" id="compactBtn" title="riassumi ora il transcript di questa sessione per liberare contesto">🗜 compact</button>
+        </div>
         </div>
       </section>
       <section data-insp="feed" class="insp-open">
@@ -507,41 +509,46 @@
       </section>
       <div class="sw-cat" data-cat="tools" hidden>
         <h2>Tools &amp; policy</h2>
-        <div class="card"><b>Runtime / long-horizon</b>
-          <label>giri di continuazione <input id="rtKgMax" type="number" min="0" value="8"></label>
-          <label>no-progress rounds <input id="rtNoProg" type="number" min="0" value="2"></label>
-          <label>tetto tempo (s) <input id="rtWall" type="number" min="0" value="3600"></label>
-          <label>profondità subagent <input id="rtDepth" type="number" min="0" value="2"></label>
-          <button class="ghost" onclick="saveRuntime()">salva runtime</button>
+        <div class="card"><b>Runtime · giri di continuazione</b>
+          <div class="remaining" style="margin:2px 0 6px">Quante volte l'agente può continuare da solo prima di fermarsi: tiene in vita i lavori lunghi senza restare bloccato per sempre.</div>
+          <label title="Numero massimo di continuazioni automatiche dopo la prima risposta (0 = disattivato).">continuazioni massime <input id="rtKgMax" type="number" min="0" value="8"></label>
+          <label title="Dopo quanti giri consecutivi senza progressi l'agente si ferma (0 = mai).">giri senza progressi <input id="rtNoProg" type="number" min="0" value="2"></label>
+          <label title="Tempo massimo per l'intero run, in secondi (0 = nessun limite).">limite tempo (s) <input id="rtWall" type="number" min="0" value="3600"></label>
+          <label title="Quanti livelli di sub-agent può generare un agente (0 = nessuno).">livelli di sub-agent <input id="rtDepth" type="number" min="0" value="2"></label>
+          <button class="ghost" onclick="saveRuntime()" title="salva le impostazioni del runtime">salva runtime</button>
         </div>
-        <div class="card"><b>Verifier · apply-only-if-green</b>
-          <label>attivo <input id="vfOn" type="checkbox"></label>
-          <label>comando di verifica <input id="vfCmd" type="text" placeholder="python3 -m pytest -q"></label>
-          <label>timeout (s) <input id="vfTimeout" type="number" min="0" value="120"></label>
-          <label>path scope (virgole) <input id="vfPaths" type="text" placeholder="opzionale"></label>
-          <button class="ghost" onclick="saveVerifier()">salva verifier</button>
+        <div class="card"><b>Verifier · applica solo se verde</b>
+          <div class="remaining" style="margin:2px 0 6px">Dopo le modifiche esegue un comando di verifica (es. i test) e le applica solo se passa: se fallisce, annulla.</div>
+          <label title="Attiva il controllo prima di applicare le modifiche dell'agente.">attivo <input id="vfOn" type="checkbox"></label>
+          <label title="Comando eseguito per verificare (es. python3 -m pytest -q).">comando di verifica <input id="vfCmd" type="text" placeholder="python3 -m pytest -q"></label>
+          <label title="Secondi massimi di attesa per il comando di verifica.">timeout (s) <input id="vfTimeout" type="number" min="0" value="120"></label>
+          <label title="Limita la verifica a questi percorsi, separati da virgola (vuoto = tutto il workspace).">path controllati <input id="vfPaths" type="text" placeholder="opzionale"></label>
+          <button class="ghost" onclick="saveVerifier()" title="salva le impostazioni del verifier">salva verifier</button>
         </div>
-        <div class="card"><b>Best-of-N · test-time compute</b>
-          <label>attivo <input id="bnOn" type="checkbox"></label>
-          <label>campioni N <input id="bnN" type="number" min="1" max="16" value="1"></label>
-          <label>soglia minima <input id="bnMin" type="number" step="0.05" value="0"></label>
-          <button class="ghost" onclick="saveBestofn()">salva best-of-N</button>
+        <div class="card"><b>Best-of-N · più risposte, la migliore</b>
+          <div class="remaining" style="margin:2px 0 6px">Genera N risposte indipendenti e tiene la migliore: più affidabile, ma più lento e costoso.</div>
+          <label title="Attiva il campionamento di più risposte.">attivo <input id="bnOn" type="checkbox"></label>
+          <label title="Quante risposte generare (1 = nessun best-of-N).">numero risposte N <input id="bnN" type="number" min="1" max="16" value="1"></label>
+          <label title="Punteggio minimo (0..1) che una risposta deve avere per essere accettata.">punteggio minimo <input id="bnMin" type="number" step="0.05" value="0"></label>
+          <button class="ghost" onclick="saveBestofn()" title="salva le impostazioni del best-of-N">salva best-of-N</button>
         </div>
-        <div class="card"><b>Difficulty · budget adattivo</b>
-          <label>attivo <input id="dfOn" type="checkbox"></label>
-          <label>N facile <input id="dfEasy" type="number" min="1" max="16" value="1"></label>
-          <label>N medio <input id="dfMed" type="number" min="1" max="16" value="2"></label>
-          <label>N difficile <input id="dfHard" type="number" min="1" max="16" value="3"></label>
-          <label>soglia medio <input id="dfMedAt" type="number" step="0.05" value="0.35"></label>
-          <label>soglia difficile <input id="dfHardAt" type="number" step="0.05" value="0.65"></label>
-          <button class="ghost" onclick="saveDifficulty()">salva difficulty</button>
+        <div class="card"><b>Difficulty · sforzo adattivo</b>
+          <div class="remaining" style="margin:2px 0 6px">Adatta quanti tentativi fare in base a quanto è difficile il task: pochi se è facile, di più se è complesso.</div>
+          <label title="Attiva la stima automatica della difficoltà.">attivo <input id="dfOn" type="checkbox"></label>
+          <label title="Numero di tentativi per i task facili.">tentativi · facile <input id="dfEasy" type="number" min="1" max="16" value="1"></label>
+          <label title="Numero di tentativi per i task medi.">tentativi · medio <input id="dfMed" type="number" min="1" max="16" value="2"></label>
+          <label title="Numero di tentativi per i task difficili.">tentativi · difficile <input id="dfHard" type="number" min="1" max="16" value="3"></label>
+          <label title="Soglia di difficoltà (0..1) oltre la quale il task è considerato medio.">soglia → medio <input id="dfMedAt" type="number" step="0.05" value="0.35"></label>
+          <label title="Soglia di difficoltà (0..1) oltre la quale il task è considerato difficile.">soglia → difficile <input id="dfHardAt" type="number" step="0.05" value="0.65"></label>
+          <button class="ghost" onclick="saveDifficulty()" title="salva le impostazioni della difficoltà">salva difficulty</button>
         </div>
-        <div class="card"><b>Self-evolving · skill synthesis</b>
-          <label>min lunghezza <input id="seMinLen" type="number" min="1" value="2"></label>
-          <label>min occorrenze <input id="seMinCount" type="number" min="2" value="3"></label>
-          <label>max lunghezza <input id="seMaxLen" type="number" min="2" value="6"></label>
-          <label>categoria <input id="seCat" type="text" value="auto"></label>
-          <button class="ghost" onclick="saveSelfevolve()">salva selfevolve</button>
+        <div class="card"><b>Self-evolving · nuove skill</b>
+          <div class="remaining" style="margin:2px 0 6px">Riconosce i pattern ricorrenti nei tuoi task e propone di salvarli come skill riutilizzabili.</div>
+          <label title="Lunghezza minima (in righe) perché un pattern diventi una skill.">lunghezza minima <input id="seMinLen" type="number" min="1" value="2"></label>
+          <label title="Quante volte deve ricorrere un pattern prima di diventare una skill.">occorrenze minime <input id="seMinCount" type="number" min="2" value="3"></label>
+          <label title="Lunghezza massima (in righe) di una skill sintetizzata.">lunghezza massima <input id="seMaxLen" type="number" min="2" value="6"></label>
+          <label title="Categoria in cui salvare le skill generate (auto = decisa dall'agente).">categoria <input id="seCat" type="text" value="auto"></label>
+          <button class="ghost" onclick="saveSelfevolve()" title="salva le impostazioni del self-evolving">salva selfevolve</button>
         </div>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
       </div>
@@ -607,43 +614,20 @@
       <div class="sw-cat" data-cat="mcp" hidden>
         <h2>MCP · external servers</h2>
         <div class="card">
-          <div style="display:flex;align-items:center;gap:8px">
+          <div class="remaining" style="margin-bottom:6px">Il tuo file MCP è <code>config/mcp_clients.local.json</code> (formato <code>mcpServers</code>, fuori dal repo · nessun segreto committato). Puoi modificarlo a mano nell'editor, oppure incollare qui lo snippet di un server.</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div class="remaining" id="mcpSummary" style="flex:1">loading…</div>
-            <button class="ghost" onclick="openMcpJson()" title="show / edit the final mcpServers JSON (paste into any MCP client)">⧉ MCP JSON</button>
+            <button class="ghost" onclick="openMcpFile()" title="apri config/mcp_clients.local.json nell'editor e modificalo a mano">✎ Edit mcp.json</button>
+            <button class="ghost" onclick="openMcpJson()" title="incolla lo snippet mcpServers di un server e premi confirm">⧉ MCP JSON</button>
+            <button class="ghost" onclick="reloadMcp()" title="ricarica tutti i server MCP dal file">↻ reload</button>
           </div>
           <div id="mcpList" style="margin-top:8px"></div>
-        </div>
-        <h2>Catalog · add in one click</h2>
-        <div class="card">
-          <div class="remaining" style="margin-bottom:6px">Known, ready-to-use servers. <b>＋ add</b> installs immediately; <b>＋ prefill</b> fills the form below (complete path/token, then press <b>save</b>).</div>
-          <div id="mcpCatalog"></div>
-        </div>
-        <h2>Add manually</h2>
-        <div class="card">
-          <input id="mcpName" class="inp" placeholder="name (e.g. filesystem)" style="width:100%;padding:6px 10px;font-size:12px">
-          <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
-            <select id="mcpTransport" class="inp" style="flex:1;padding:6px 8px;font-size:12px" onchange="mcpTransportChanged()">
-              <option value="stdio">stdio (command)</option>
-              <option value="http">http (url)</option>
-            </select>
-            <label class="remaining" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="mcpEnabled" checked> enabled</label>
-          </div>
-          <div id="mcpStdio" style="margin-top:6px">
-            <input id="mcpCommand" class="inp" placeholder="command (e.g. npx)" style="width:100%;padding:6px 10px;font-size:12px">
-            <input id="mcpArgs" class="inp" placeholder="space-separated args (e.g. -y @modelcontextprotocol/server-filesystem /home/jagones)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-            <textarea id="mcpEnv" class="inp" placeholder="optional env, one per line: GITHUB_TOKEN=xxx" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px;min-height:48px;font-family:monospace"></textarea>
-          </div>
-          <div id="mcpHttp" style="margin-top:6px;display:none">
-            <input id="mcpUrl" class="inp" placeholder="url (e.g. http://127.0.0.1:8791/mcp)" style="width:100%;padding:6px 10px;font-size:12px">
-            <input id="mcpHeaders" class="inp" placeholder='headers JSON ({"Authorization":"Bearer ${TOKEN}"})' style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          </div>
-          <div style="display:flex;gap:6px;margin-top:8px">
-            <button class="ghost" onclick="testMcpClient()">test</button>
-            <button class="ghost" onclick="saveMcpClient()">save</button>
-            <button class="ghost" onclick="reloadMcp()">reload all</button>
-          </div>
           <div id="mcpResult" class="remaining" style="margin-top:6px"></div>
-          <div class="remaining" style="margin-top:6px">Saved automatically to <code>config/mcp_clients.local.yaml</code> (outside the repo · no committed secrets). You can also edit them by hand in that file if you prefer.</div>
+        </div>
+        <h2>Catalog · aggiunta in un click</h2>
+        <div class="card">
+          <div class="remaining" style="margin-bottom:6px">Server noti e pronti all'uso. <b>＋ add</b> installa subito; se serve un token o un percorso, apre lo <b>snippet</b> da completare e confermare.</div>
+          <div id="mcpCatalog"></div>
         </div>
       </div>
       <div class="sw-cat" data-cat="skills" hidden>
@@ -799,7 +783,7 @@
   <div class="mj-card">
     <div class="mj-head"><b>MCP JSON · configure manually</b><span style="flex:1"></span>
       <button class="ghost" onclick="closeMcpJson()" title="close (Esc)">✕</button></div>
-    <div class="remaining" style="margin:10px 0 8px">Final <code>mcpServers</code> config of this harness — copy it into any MCP client, or paste/edit your own and press <b>confirm</b> to add/update the servers you list (existing servers are updated, none are removed).</div>
+    <div class="remaining" style="margin:10px 0 8px">Config <code>mcpServers</code> del tuo file locale. Copialo in un altro client MCP, oppure incolla <b>solo il server</b> che vuoi aggiungere (o modifica i campi) e premi <b>confirm</b>: viene scritto in <code>config/mcp_clients.local.json</code> (aggiorna i nomi uguali, <b>non rimuove</b> nulla).</div>
     <textarea id="mcpJsonText" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
     <div id="mcpJsonMsg" class="remaining" style="margin-top:6px"></div>
     <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">
@@ -1979,62 +1963,49 @@ function renderMcpCatalog() {
     s.textContent = p.desc + (p.needs ? (" · requires: " + p.needs) : "");
     info.append(t, s);
     const b = document.createElement("button"); b.className = "ghost";
-    b.textContent = p.needs ? "＋ prefill" : "＋ add";
-    b.onclick = () => (p.needs ? mcpPrefill(i) : mcpAddPreset(i));
+    b.textContent = "＋ add";
+    b.onclick = () => mcpAddPreset(i);
     row.append(info, b);
     box.appendChild(row);
   });
 }
-function mcpFillPreset(p) {
-  $("mcpName").value = p.name;
-  $("mcpEnabled").checked = true;
-  $("mcpTransport").value = p.transport;
-  mcpTransportChanged();
-  if (p.transport === "stdio") {
-    $("mcpCommand").value = p.command || "";
-    $("mcpArgs").value = (p.args || []).join(" ");
-    $("mcpEnv").value = "";
-  } else { $("mcpUrl").value = p.url || ""; }
+function mcpPresetSnippet(p) {
+  const s = (p.transport === "http")
+    ? { url: p.url || "" }
+    : { command: p.command || "", args: p.args || [] };
+  const obj = { mcpServers: {} }; obj.mcpServers[p.name] = s;
+  return JSON.stringify(obj, null, 2);
+}
+function mcpOpenSnippet(text, hint) {
+  $("mcpJsonWin").hidden = false;
+  $("mcpJsonText").value = text || "";
+  $("mcpJsonMsg").textContent = hint || "";
+  $("mcpJsonText").focus();
 }
 function mcpPrefill(i) {
   const p = MCP_CATALOG[i];
-  mcpFillPreset(p);
-  $("mcpResult").textContent = "prefilled · " + (p.needs || "") + " · then press save";
-  (p.name === "github" ? $("mcpEnv") : $("mcpArgs")).focus();
+  mcpOpenSnippet(mcpPresetSnippet(p), p.needs ? ("da completare · " + p.needs) : "");
 }
 async function mcpAddPreset(i) {
   const p = MCP_CATALOG[i];
-  mcpFillPreset(p);
-  $("mcpResult").textContent = "installing " + p.name + "…";
-  await saveMcpClient();
+  if (p.needs) { mcpPrefill(i); return; }   // needs a token/path → complete the snippet
+  $("mcpResult").textContent = "installo " + p.name + "…";
+  const r = await api("POST", "/api/mcp/clients", mcpJsonSpec(p.name, p));
+  $("mcpResult").textContent = r.error ? ("error: " + r.error) : ("installato: " + p.name);
+  if (!r.error) loadMcpClients();
 }
-function mcpTransportChanged() {
-  const t = $("mcpTransport").value;
-  $("mcpStdio").style.display = t === "stdio" ? "" : "none";
-  $("mcpHttp").style.display = t === "http" ? "" : "none";
-}
-function mcpEnvFromForm() {
-  const out = {};
-  ($("mcpEnv").value || "").split(/\n+/).forEach(l => {
-    const i = l.indexOf("=");
-    if (i > 0) out[l.slice(0, i).trim()] = l.slice(i + 1).trim();
-  });
-  return out;
-}
-function mcpSpecFromForm() {
-  const spec = { name: $("mcpName").value.trim(), enabled: $("mcpEnabled").checked };
-  if ($("mcpTransport").value === "stdio") {
-    spec.command = $("mcpCommand").value.trim();
-    const a = $("mcpArgs").value.trim();
-    spec.args = a ? a.split(/\s+/) : [];
-    const env = mcpEnvFromForm();
-    if (Object.keys(env).length) spec.env = env;
-  } else {
-    spec.url = $("mcpUrl").value.trim();
-    const h = $("mcpHeaders").value.trim();
-    if (h) { try { spec.headers = JSON.parse(h); } catch (e) { throw new Error("invalid headers JSON"); } }
-  }
-  return spec;
+/* JAG-158: open the local mcp.json in the editor (hand-edit), else the JSON modal. */
+async function openMcpFile() {
+  try {
+    const r = await api("POST", "/api/mcp/local-file", {});
+    const p = r && r.path;
+    if (p && window.SparkEditor) {
+      if (SparkEditor.ensureOpen) SparkEditor.ensureOpen();
+      SparkEditor.open(p);
+      return;
+    }
+  } catch (e) { /* fall through */ }
+  openMcpJson();
 }
 async function loadMcpClients() {
   try {
@@ -2070,40 +2041,8 @@ async function loadMcpClients() {
     });
   } catch (e) { $("mcpSummary").textContent = "error: " + e; }
 }
-async function editMcp(name) {
-  $("mcpName").value = name;
-  try {
-    const d = await api("GET", "/api/mcp/clients");
-    const c = (d.clients || {})[name]; if (!c) return;
-    $("mcpEnabled").checked = !!c.enabled;
-    if (c.transport === "http") {
-      $("mcpTransport").value = "http"; $("mcpUrl").value = c.url || "";
-    } else {
-      $("mcpTransport").value = "stdio";
-      $("mcpCommand").value = c.command || "";
-      $("mcpArgs").value = (c.args || []).join(" ");
-      $("mcpEnv").value = c.env ? Object.keys(c.env).map(k => k + "=" + c.env[k]).join("\n") : "";
-    }
-    mcpTransportChanged();
-  } catch (e) { /* ignore */ }
-}
-async function testMcpClient() {
-  let spec; try { spec = mcpSpecFromForm(); } catch (e) { $("mcpResult").textContent = e.message; return; }
-  $("mcpResult").textContent = "provo…";
-  try {
-    const r = await api("POST", "/api/mcp/clients/test", spec);
-    $("mcpResult").textContent = r.ok
-      ? ("ok · " + r.count + " tool: " + (r.tools || []).slice(0, 8).join(", "))
-      : ("error: " + (r.error || "?"));
-  } catch (e) { $("mcpResult").textContent = "error: " + e; }
-}
-async function saveMcpClient() {
-  let spec; try { spec = mcpSpecFromForm(); } catch (e) { $("mcpResult").textContent = e.message; return; }
-  if (!spec.name) { $("mcpResult").textContent = "name required"; return; }
-  const r = await api("POST", "/api/mcp/clients", spec);
-  $("mcpResult").textContent = r.error ? ("error: " + r.error) : ("saved: " + spec.name);
-  if (!r.error) loadMcpClients();
-}
+/* JAG-158: the row "✎" opens the local mcp.json in the editor (no more form). */
+function editMcp() { openMcpFile(); }
 async function removeMcpClient(name) {
   if (!(await confirmDelete("remove MCP server '" + name + "'?"))) return;
   const r = await api("POST", "/api/mcp/clients/remove", { name: name });
@@ -2550,7 +2489,7 @@ function settingsCategory(name) {
   document.querySelectorAll("#swNav button").forEach(b => b.classList.toggle("active", b.dataset.cat === name));
   document.querySelectorAll("#swMain .sw-cat").forEach(c => { c.hidden = c.dataset.cat !== name; });
   localStorage.setItem("sf_settings_cat", name);
-  if (name === "mcp") { mcpTransportChanged(); loadMcpClients(); if (typeof renderMcpCatalog === "function") renderMcpCatalog(); }
+  if (name === "mcp") { loadMcpClients(); if (typeof renderMcpCatalog === "function") renderMcpCatalog(); }
   else if (name === "skills") { loadSkills(); }
   else if (name === "rules") { loadRules(); loadMemories(); }
   else if (name === "tools") {

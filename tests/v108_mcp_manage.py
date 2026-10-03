@@ -61,7 +61,9 @@ r = mc.upsert_client("filesystem", {"command": "npx",
                                     "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home"],
                                     "enabled": True})
 check("upsert stdio ok", r.get("ok") is True, str(r.get("error", "")))
-check("local file written", os.path.isfile(local), local)
+check("local file written (json)", os.path.isfile(mc.CONFIG_LOCAL_JSON_PATH), mc.CONFIG_LOCAL_JSON_PATH)
+check("local file uses mcpServers",
+      "mcpServers" in json.dumps(json.load(open(mc.CONFIG_LOCAL_JSON_PATH, encoding="utf-8"))))
 doc = mc.load_doc()
 check("stdio client merged", doc["clients"].get("filesystem", {}).get("command") == "npx",
       str(doc["clients"].get("filesystem")))
