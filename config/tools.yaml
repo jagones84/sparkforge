@@ -56,6 +56,18 @@ bestofn:
   n: 1
   min_score: 0.0            # se il migliore resta sotto questa soglia -> nessuna scelta
 
+# ---- difficulty / budget adattivo (JAG-134) ---------------------------------
+# Compute-optimal test-time compute: stima la difficolta' del task (deterministica,
+# dai segnali che l'harness gia' ha) e scala di conseguenza N (best-of-N) e i giri
+# di continuazione (keepgoing_max). Con enabled: false tutto torna al budget fisso.
+difficulty:
+  enabled: true
+  easy_n: 1                 # candidati best-of-N per task facile
+  medium_n: 2
+  hard_n: 3
+  medium_at: 0.35           # punteggio >= -> "medium"
+  hard_at: 0.65             # punteggio >= -> "hard"
+
 # ---- tool registry -----------------------------------------------------------
 tools:
 

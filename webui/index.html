@@ -459,6 +459,15 @@
           <label>soglia minima <input id="bnMin" type="number" step="0.05" value="0"></label>
           <button class="ghost" onclick="saveBestofn()">salva best-of-N</button>
         </div>
+        <div class="card"><b>Difficulty · budget adattivo</b>
+          <label>attivo <input id="dfOn" type="checkbox"></label>
+          <label>N facile <input id="dfEasy" type="number" min="1" max="16" value="1"></label>
+          <label>N medio <input id="dfMed" type="number" min="1" max="16" value="2"></label>
+          <label>N difficile <input id="dfHard" type="number" min="1" max="16" value="3"></label>
+          <label>soglia medio <input id="dfMedAt" type="number" step="0.05" value="0.35"></label>
+          <label>soglia difficile <input id="dfHardAt" type="number" step="0.05" value="0.65"></label>
+          <button class="ghost" onclick="saveDifficulty()">salva difficulty</button>
+        </div>
         <div class="card" id="configPanel"><div class="remaining">loading…</div></div>
       </section>
       <section data-section="settings" hidden>
@@ -2019,6 +2028,27 @@ async function saveBestofn() {
   }});
   who("ai", "✅ best-of-N aggiornato");
 }
+async function loadDifficulty() {
+  const d = await api("GET", "/api/tools");
+  const x = (d && d.difficulty) || {};
+  if ($("dfOn")) $("dfOn").checked = x.enabled !== false;
+  if ($("dfEasy")) $("dfEasy").value = x.easy_n ?? 1;
+  if ($("dfMed")) $("dfMed").value = x.medium_n ?? 2;
+  if ($("dfHard")) $("dfHard").value = x.hard_n ?? 3;
+  if ($("dfMedAt")) $("dfMedAt").value = x.medium_at ?? 0.35;
+  if ($("dfHardAt")) $("dfHardAt").value = x.hard_at ?? 0.65;
+}
+async function saveDifficulty() {
+  await api("POST", "/api/tools", { difficulty: {
+    enabled: !!$("dfOn").checked,
+    easy_n: +$("dfEasy").value,
+    medium_n: +$("dfMed").value,
+    hard_n: +$("dfHard").value,
+    medium_at: +$("dfMedAt").value,
+    hard_at: +$("dfHardAt").value,
+  }});
+  who("ai", "✅ difficulty aggiornato");
+}
 async function saveProvider() {
   const id = $("provId").value.trim();
   if (!id) { $("provResult").textContent = "id required"; return; }
@@ -2149,7 +2179,7 @@ function openPanel(name) {
   else if (name === "skills") { loadSkills(); }
   else if (name === "rules") { loadRules(); }
   else if (name === "files") { loadFiles(); loadEdits(); }
-  else if (name === "config") { loadRuntime(); loadVerifier(); loadBestofn(); api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
+  else if (name === "config") { loadRuntime(); loadVerifier(); loadBestofn(); loadDifficulty(); api("GET", "/api/tools").then(d => renderTools($("configPanel"), d)).catch(e => json_pre($("configPanel"), {error: String(e)})); }
   else if (name === "settings") {
     // JAG-127: one Settings panel = Self + Providers + Keys + token (no more tabs).
     $("token-input").value = TOKEN || "";

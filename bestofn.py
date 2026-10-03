@@ -23,6 +23,7 @@ DEFAULTS = {
     "enabled": False,
     "n": 1,
     "min_score": 0.0,
+    "adaptive": True,   # JAG-134: la difficolta' del task puo' alzare N
 }
 
 
@@ -41,8 +42,12 @@ def cfg(override=None):
     return out
 
 
-def n_of(c=None):
-    """Numero di candidati da campionare (>=1). 1 = disattivato."""
+def n_of(c=None, signals=None):
+    """Numero di candidati da campionare (>=1). 1 = disattivato.
+
+    JAG-134: con `adaptive` attivo e i `signals` del task, N e' il massimo tra il
+    valore configurato e quello suggerito dalla stima di difficolta' (compute-optimal).
+    """
     c = c or cfg()
     if not c.get("enabled"):
         return 1
@@ -50,6 +55,12 @@ def n_of(c=None):
         n = int(c.get("n") or 1)
     except (TypeError, ValueError):
         n = 1
+    if c.get("adaptive", True) and signals is not None:
+        try:
+            import difficulty
+            n = max(n, difficulty.n_for(signals))
+        except Exception:  # noqa: BLE001
+            pass
     return max(1, min(n, 16))
 
 

@@ -674,6 +674,7 @@ def handle(handler, method, path, qs, body):
                                      "runtime": registry.load_config().get("runtime") or {},
                                      "verifier": registry.load_config().get("verifier") or {},
                                      "bestofn": registry.load_config().get("bestofn") or {},
+                                     "difficulty": registry.load_config().get("difficulty") or {},
                                      "approvals": approvals.stats()})
         if path == "/api/tools/running":
             return _r(handler, 200, {"running": sandbox.running()})
@@ -1105,6 +1106,22 @@ def update_policy(body):
         registry.load_config(reload=True)
         _publish("tools.update", bestofn=dict(b))
         return {"ok": True, "tools": registry.catalog(), "bestofn": dict(b)}
+    # JAG-134: difficulty / budget adattivo (enabled / easy_n / medium_n / hard_n / soglie)
+    if isinstance(body.get("difficulty"), dict):
+        d = cfg.setdefault("difficulty", {})
+        src = body["difficulty"]
+        if "enabled" in src:
+            d["enabled"] = bool(src["enabled"])
+        for k in ("easy_n", "medium_n", "hard_n"):
+            if src.get(k) is not None:
+                d[k] = max(1, min(int(src[k]), 16))
+        for k in ("medium_at", "hard_at"):
+            if src.get(k) is not None:
+                d[k] = max(0.0, min(float(src[k]), 1.0))
+        registry.save_config(cfg)
+        registry.load_config(reload=True)
+        _publish("tools.update", difficulty=dict(d))
+        return {"ok": True, "tools": registry.catalog(), "difficulty": dict(d)}
     name = body.get("tool") or body.get("name")
     if not name:
         return {"error": "tool required", "tools": registry.catalog()}

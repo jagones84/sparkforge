@@ -1918,6 +1918,16 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
     _kg_stale = 0
     _kg_started = time.time()
     _kg_last_tool = None
+    # JAG-134: la difficolta' stimata del task alza il budget di continuazione
+    # (compute-optimal) e viene riportata negli eventi per osservabilita'.
+    try:
+        import difficulty as _diff
+        _diff_est = _diff.estimate({"msg_words": len(str(message).split())})
+        _kg_override = {"keepgoing_max": _diff.rounds_for(
+            _kg.cfg()["keepgoing_max"], {"msg_words": len(str(message).split())})}
+        _diff_level = _diff_est["level"]
+    except Exception:  # noqa: BLE001
+        _kg_override, _diff_level = None, None
     while work_steps < max_steps and iters < CHAT_TOOL_MAX_ITERS:
         iters += 1
         # JAG-127b: inject any steering message typed while this turn was running.
@@ -1949,12 +1959,17 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             final_answer, think = (answer or "⏹ Interrotto dall'utente."), think
             _kg_stop_reason = "user_stop"
             break
-        # JAG-132: best-of-N adattivo. Solo quando il primo campione NON e' usabile
+        # JAG-132/134: best-of-N adattivo. Solo quando il primo campione NON e' usabile
         # (JSON di tool-call malformato) si spendono altri campioni e si sceglie il
-        # migliore col ranker deterministico (prm.rank_text). n=1 -> zero overhead.
+        # migliore col ranker deterministico (prm.rank_text). N cresce con la
+        # difficolta' stimata del task (compute-optimal). n=1 -> zero overhead.
         try:
             import bestofn as _bn
-            _bN = _bn.n_of()
+            _open_now = len([n for n in (taskgraph.load(sess["id"]) or {}).get("nodes", [])
+                             if n.get("status") in taskgraph.OPEN_STATUSES])
+            _bN = _bn.n_of(signals={"open_nodes": _open_now,
+                                    "msg_words": len(str(message).split()),
+                                    "tool_count": len(used_tools)})
         except Exception:  # noqa: BLE001
             _bN = 1
         if _bN > 1 and _looks_like_json_action(answer):
@@ -2106,7 +2121,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             _dec = _kg.decide(open_nodes=len(_open), rounds=_kg_rounds, stale=_kg_stale,
                               started=_kg_started, aborted=_is_aborted(sess["id"]),
                               blocked=any(n.get("status") == "blocked" for n in _nodes),
-                              steer=has_steer(sess["id"]))
+                              steer=has_steer(sess["id"]), override=_kg_override)
             if _dec["continue"]:
                 _kg_rounds += 1
                 _kg_prev = _cur
@@ -2115,7 +2130,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                                  "[user steering — take this into account now] " + _s})
                     on_event("chat.steer", session=sess["id"], text=_s, applied=True)
                 on_event("plan.continuing", session=sess["id"], round=_kg_rounds,
-                         open=len(_open), total=len(_nodes))
+                         open=len(_open), total=len(_nodes), difficulty=_diff_level)
                 msgs.append({"role": "assistant", "content": answer})
                 msgs.append({"role": "user", "content": (
                     "CONTINUA: la tua TASK LIST ha ancora %d passo/i aperto/i. NON "
@@ -2128,6 +2143,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
             _kg_stop_reason = _dec["reason"]
             on_event("plan.stopped", session=sess["id"], reason=_dec["reason"],
                      open=len(_open), total=len(_nodes), rounds=_kg_rounds,
+                     difficulty=_diff_level,
                      duration_s=round(time.time() - _kg_started, 1))
         for ch, t in collected:
             on_delta(ch, t)
