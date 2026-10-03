@@ -542,11 +542,13 @@
         </div>
         <h2>API token</h2>
         <div class="card">
-          <div style="display:flex;gap:6px">
-            <input id="token-input" class="inp" placeholder="SPARKFORGE_TOKEN" style="flex:1;padding:6px 10px;font-size:12px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <input id="token-input" class="inp" type="password" placeholder="SPARKFORGE_TOKEN" style="flex:1;padding:6px 10px;font-size:12px">
+            <button class="ghost" id="tokenEye" onclick="revealToken()" title="mostra/nascondi">👁</button>
+            <button class="ghost" onclick="copyToken()" title="copia">⧉ copia</button>
             <button class="ghost" onclick="saveToken()">save</button>
           </div>
-          <div class="remaining" style="margin-top:6px">saved in localStorage (key sf_token)</div>
+          <div class="remaining" style="margin-top:6px">Salvato in <code>localStorage</code> (key <code>sf_token</code>). Mascherato di default; <b>👁</b> per vederlo, <b>⧉</b> per copiarlo.</div>
         </div>
       </div>
       <section data-section="approvals" hidden>
@@ -2763,6 +2765,14 @@ function renderPalette(q) {
 }
 function openPalette() { $("palette").hidden = false; $("palette-input").value = ""; renderPalette(""); $("palette-input").focus(); }
 function closePalette() { $("palette").hidden = true; }
+function revealToken() { const i = $("token-input"); i.type = i.type === "password" ? "text" : "password"; }
+async function copyToken() {
+  const v = $("token-input").value || "";
+  try { await navigator.clipboard.writeText(v); }
+  catch (e) { const i = $("token-input"); i.select(); document.execCommand("copy"); }
+  const b = $("tokenEye");
+  if (b) { const t = b.textContent; b.textContent = "✓"; setTimeout(() => { b.textContent = t; }, 900); }
+}
 function saveToken() {
   const v = $("token-input").value.trim();
   if (v) { localStorage.setItem("sf_token", v); } else { localStorage.removeItem("sf_token"); }
