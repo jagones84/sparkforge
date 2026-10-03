@@ -159,9 +159,10 @@ and is **not** part of the gate.
 
 **Live tests** (need the running server, deliberately NOT in the deterministic gate)
 live in `tests/live/`: `v199_endpoint_sweep.py` (every cheap endpoint → no 5xx, auth
-401, unknown path 404, session create/history/delete round-trip) and
-`v200_concurrent_chat.py` (two turns on ONE session at once → no crash, no lost
-update, JAG-201).
+401, unknown path 404, session create/history/delete round-trip),
+`v200_concurrent_chat.py` (two blocking turns on ONE session at once → no crash, no
+lost update, JAG-201) and `v202_concurrent_stream.py` (the same over
+`/api/chat/stream`).
 
 > **Live/smart testing:** the battery is necessary but not sufficient — the real
 > bugs (truncated output, unreachable subagent, reload losing the chat) only showed

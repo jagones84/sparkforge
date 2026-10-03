@@ -3693,6 +3693,7 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
         publish("chat.delta", session=sess["id"], channel=channel, text=text)
 
     def worker():
+        nonlocal sess, since
         # JAG-201: serialise turns on this session (see _turn_lock).
         _turn_lock(sess["id"]).acquire()
         target = model
@@ -3704,6 +3705,17 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False):
             publish(kind, **d)
 
         try:
+            # JAG-201: the transcript read-modify-write happens INSIDE the lock —
+            # reload the session, then append this turn's user message. Doing it in
+            # the request thread (as before) let two concurrent streaming turns
+            # overwrite each other (lost update).
+            _fresh = load_session(sess["id"])
+            if _fresh:
+                sess = _fresh
+            sess = prepare_session_for_turn(sess, model or sess.get("model"))
+            since = session_mark(sess)
+            append_message(sess, "user", message)
+            publish("chat.user", session=sess["id"], text=message)
             # v0.5.1 warm-up: resolve the target alias and, if it is cold, emit
             # `model.loading` and load it *before* the first token instead of
             # letting the client stall silently on the router's autoload.
@@ -4403,12 +4415,9 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(sid)
-            # JAG-157: explicit ?model= wins, else the session's own model.
-            sess = prepare_session_for_turn(sess, qs.get("model") or sess.get("model"))  # JAG-70: auto-compact @75%
-            mark = session_mark(sess)  # JAG-51: boundary of this request
-            append_message(sess, "user", message)
-            publish("chat.user", session=sess["id"], text=message)
-            return sse_response(self, chat_stream_gen(sess, message, qs.get("model"), mark,
+            # JAG-201: prepare + append the user turn INSIDE the worker's turn lock
+            # (chat_stream_gen), not here — two concurrent turns must not overwrite.
+            return sse_response(self, chat_stream_gen(sess, message, qs.get("model"), None,
                                                       autonomous=qs.get("mode") == "goal"))
         if path == "/api/agent/run":
             goal = qs.get("goal", "")
@@ -4582,12 +4591,9 @@ class Handler(BaseHTTPRequestHandler):
             if not message:
                 return self._send(400, {"error": "message required"})
             sess = get_or_create_session(body.get("session") or qs.get("session"))
-            sess = prepare_session_for_turn(sess, body.get("model") or qs.get("model"))  # JAG-70: auto-compact @75%
-            mark = session_mark(sess)  # JAG-51: boundary of this request
-            append_message(sess, "user", message)
-            publish("chat.user", session=sess["id"], text=message)
+            # JAG-201: prepare + append inside the worker's turn lock (see GET path).
             return sse_response(self, chat_stream_gen(
-                sess, message, body.get("model") or qs.get("model"), mark,
+                sess, message, body.get("model") or qs.get("model"), None,
                 autonomous=(body.get("mode") or qs.get("mode")) == "goal"))
         if path == "/api/model/ensure":
             alias = body.get("model") or qs.get("model") or \

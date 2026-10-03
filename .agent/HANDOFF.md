@@ -71,7 +71,10 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   chiusa senza risposta → turno perso. Fix: nome temp unico per write + **lock per
   sessione** (`_turn_lock`, un turno alla volta) + reload della sessione DENTRO il
   lock (niente lost update). Test live `tests/live/v200_concurrent_chat.py` (7/7).
-  Commit (pendente).
+  Il path STREAMING aveva lo stesso lost update (append fuori dal lock nel
+  request thread): ora `chat_stream_gen` fa reload+prepare+append DENTRO il lock
+  del worker. Test `tests/live/v202_concurrent_stream.py` (4/4). Commit `a08857d` +
+  follow-up.
 
 ### Test LIVE (richiedono il server up) — cartella `tests/live/`
 - `v199_endpoint_sweep.py` — batte tutti gli endpoint cheap: nessun 5xx, auth 401,
