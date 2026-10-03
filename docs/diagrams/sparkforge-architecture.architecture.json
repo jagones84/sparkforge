@@ -2,85 +2,66 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "SparkForge — Architettura dell'harness agentico",
+    "title": "SparkForge — Architettura dell'harness agentico (IN/OUT completo)",
     "output": "docs/diagrams/sparkforge-architecture.html",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "repository": {
       "url": "https://github.com/jagones84/sparkforge.git",
       "revision": "ebf0a6bb5005819b84bd113815468339cd5865fb"
     },
     "views": [
-      {
-        "id": "request-path",
-        "label": "Richiesta end-to-end",
-        "focus": ["clients", "gateway", "agentloop", "router", "control", "registry", "tools", "sandbox"],
-        "note": "Dal client al modello, poi all'azione gated e all'esecuzione isolata: e' un anello, non una retta."
-      },
-      {
-        "id": "test-time",
-        "label": "Controllo test-time",
-        "focus": ["agentloop", "control", "router", "evolve"],
-        "note": "keepgoing, difficolta', best-of-N, verifier e subagent decidono quanta compute spendere."
-      },
-      {
-        "id": "security",
-        "label": "Sicurezza e isolamento",
-        "focus": ["registry", "tools", "sandbox"],
-        "note": "Allowlist, approval gate e sandbox: nessuna azione senza policy."
-      },
-      {
-        "id": "state-evolution",
-        "label": "Stato e auto-miglioramento",
-        "focus": ["store", "workspace", "evolve", "agentloop", "tools"],
-        "note": "Lo stato viene scritto E riletto: sessioni, task graph, memoria auto-iniettata nel turno dopo."
-      },
-      {
-        "id": "extensibility",
-        "label": "Estensibilita' MCP",
-        "focus": ["mcp", "registry", "evolve"],
-        "note": "Server MCP esterni entrano nel registro come <client>__<tool>."
-      }
+      { "id": "request-path", "label": "Richiesta end-to-end", "focus": ["clients", "gateway", "agentloop", "prompt", "router", "control", "registry", "tools", "sandbox"], "note": "Dal client al modello: il prompt e' assemblato dal harness." },
+      { "id": "test-time", "label": "Controllo test-time", "focus": ["agentloop", "control", "router", "evolve"], "note": "keepgoing, difficolta', best-of-N, verifier." },
+      { "id": "security", "label": "Sicurezza e isolamento", "focus": ["registry", "tools", "hooks", "sandbox"], "note": "Allowlist, approval, hooks, sandbox." },
+      { "id": "state-evolution", "label": "Stato e auto-miglioramento", "focus": ["store", "workspace", "evolve", "agentloop", "tools"], "note": "Stato scritto e riletto, memoria iniettata." },
+      { "id": "extensibility", "label": "Estensibilita' MCP", "focus": ["mcp", "registry", "evolve"], "note": "MCP bidirezionale: tool esterni dentro, harness come server." }
     ]
   },
   "components": [
-    { "id": "clients", "type": "external", "label": "Client", "sublabel": "WebUI · app · CLI", "pos": [20, 300], "size": [122, 60], "sources": [{ "path": "webui/index.html" }, { "path": "forge.py" }] },
-    { "id": "gateway", "type": "security", "label": "Gateway HTTP + SSE", "sublabel": ":8790 · Bearer token", "pos": [168, 300], "size": [122, 60], "sources": [{ "path": "server.py" }, { "path": "api_v02.py" }] },
-    { "id": "agentloop", "type": "backend", "label": "Agent Loop", "sublabel": "think → act → observe", "pos": [316, 300], "size": [122, 60], "sources": [{ "path": "server.py" }, { "path": "subagent.py" }] },
-    { "id": "control", "type": "backend", "label": "Harness Control", "sublabel": "budget · best-of-N", "pos": [464, 300], "size": [122, 60], "sources": [{ "path": "keepgoing.py" }, { "path": "bestofn.py" }, { "path": "verify.py" }] },
-    { "id": "registry", "type": "security", "label": "Tool Registry", "sublabel": "allowlist · approval", "pos": [612, 300], "size": [122, 60], "sources": [{ "path": "registry.py" }, { "path": "approvals.py" }, { "path": "config/tools.yaml" }] },
-    { "id": "tools", "type": "backend", "label": "Tool Executor", "sublabel": "fs · git · web · skills", "pos": [760, 300], "size": [122, 60], "sources": [{ "path": "tools.py" }] },
-    { "id": "sandbox", "type": "security", "label": "Sandbox", "sublabel": "docker · bwrap · host", "pos": [908, 300], "size": [122, 60], "sources": [{ "path": "sandbox.py" }] },
-    { "id": "observe", "type": "external", "label": "Osservabilita'", "sublabel": "hooks · metriche · OTel", "pos": [168, 136], "size": [122, 58], "sources": [{ "path": "hooks.py" }, { "path": "runmetrics.py" }, { "path": "otel_tracing.py" }] },
-    { "id": "router", "type": "cloud", "label": "LLM Router", "sublabel": ":8080 · local+hosted", "pos": [308, 136], "size": [140, 58], "sources": [{ "path": "routing.py" }, { "path": "providers.py" }] },
-    { "id": "store", "type": "database", "label": "Stato harness", "sublabel": "sessioni · graph · memoria", "pos": [316, 468], "size": [132, 60], "sources": [{ "path": "taskgraph.py" }, { "path": "memory.py" }] },
-    { "id": "evolve", "type": "backend", "label": "Self-Evolution", "sublabel": "improve · selfevolve · PRM", "pos": [480, 468], "size": [140, 60], "sources": [{ "path": "selfevolve.py" }, { "path": "improve.py" }, { "path": "prm.py" }] },
-    { "id": "mcp", "type": "messagebus", "label": "MCP Bridge", "sublabel": "tool esterni · stdio/HTTP", "pos": [640, 468], "size": [140, 60], "sources": [{ "path": "mcp_client.py" }, { "path": "mcp_server.py" }] },
-    { "id": "workspace", "type": "database", "label": "Workspace sessione", "sublabel": "cartella progetto · file", "pos": [800, 468], "size": [140, 60], "sources": [{ "path": "rules.py", "line": 138 }, { "path": "server.py", "line": 260 }, { "path": "tools.py" }] }
+    { "id": "clients", "type": "external", "label": "Client", "sublabel": "WebUI · app · CLI", "pos": [20, 340], "size": [122, 60], "sources": [{ "path": "webui/index.html" }, { "path": "forge.py" }] },
+    { "id": "gateway", "type": "security", "label": "Gateway HTTP + SSE", "sublabel": ":8790 · Bearer token", "pos": [168, 340], "size": [122, 60], "sources": [{ "path": "server.py" }, { "path": "api_v02.py" }] },
+    { "id": "agentloop", "type": "backend", "label": "Agent Loop", "sublabel": "think → act → observe", "pos": [316, 340], "size": [122, 60], "sources": [{ "path": "server.py" }, { "path": "subagent.py" }] },
+    { "id": "control", "type": "backend", "label": "Harness Control", "sublabel": "budget · best-of-N", "pos": [464, 340], "size": [122, 60], "sources": [{ "path": "keepgoing.py" }, { "path": "bestofn.py" }, { "path": "verify.py" }] },
+    { "id": "registry", "type": "security", "label": "Tool Registry", "sublabel": "allowlist · approval", "pos": [612, 340], "size": [122, 60], "sources": [{ "path": "registry.py" }, { "path": "approvals.py" }, { "path": "config/tools.yaml" }] },
+    { "id": "tools", "type": "backend", "label": "Tool Executor", "sublabel": "fs · git · web · skills", "pos": [760, 340], "size": [122, 60], "sources": [{ "path": "tools.py" }] },
+    { "id": "sandbox", "type": "security", "label": "Sandbox", "sublabel": "docker · bwrap · host", "pos": [908, 340], "size": [122, 60], "sources": [{ "path": "sandbox.py" }] },
+    { "id": "observe", "type": "external", "label": "Osservabilita'", "sublabel": "metriche · OTel · trace", "pos": [150, 110], "size": [122, 58], "sources": [{ "path": "runmetrics.py" }, { "path": "otel_tracing.py" }] },
+    { "id": "router", "type": "cloud", "label": "LLM Router", "sublabel": ":8080 · local+hosted", "pos": [300, 110], "size": [140, 58], "sources": [{ "path": "routing.py" }, { "path": "providers.py" }] },
+    { "id": "prompt", "type": "backend", "label": "Prompt Assembly", "sublabel": "self · tools · rules · skills · mem · todo", "pos": [500, 110], "size": [176, 58], "sources": [{ "path": "prompt.py" }, { "path": "server.py", "line": 2026 }, { "path": "context_engine.py" }] },
+    { "id": "hooks", "type": "security", "label": "Hooks gate", "sublabel": "Pre/PostToolUse · Stop", "pos": [880, 110], "size": [136, 58], "sources": [{ "path": "hooks.py" }, { "path": "config/hooks.yaml" }] },
+    { "id": "store", "type": "database", "label": "Stato harness", "sublabel": "sessioni · graph · memoria", "pos": [316, 540], "size": [132, 60], "sources": [{ "path": "taskgraph.py" }, { "path": "memory.py" }] },
+    { "id": "evolve", "type": "backend", "label": "Self-Evolution", "sublabel": "improve · selfevolve · PRM", "pos": [480, 540], "size": [140, 60], "sources": [{ "path": "selfevolve.py" }, { "path": "improve.py" }, { "path": "prm.py" }] },
+    { "id": "mcp", "type": "messagebus", "label": "MCP Bridge", "sublabel": "server esterni ↔ harness", "pos": [640, 540], "size": [140, 60], "sources": [{ "path": "mcp_client.py" }, { "path": "mcp_server.py" }] },
+    { "id": "workspace", "type": "database", "label": "Workspace sessione", "sublabel": "cartella progetto · file", "pos": [800, 540], "size": [140, 60], "sources": [{ "path": "rules.py", "line": 138 }, { "path": "server.py", "line": 260 }, { "path": "tools.py" }] }
   ],
   "boundaries": [
-    { "kind": "region", "label": "DGX Spark · host singolo", "wraps": ["observe", "router", "gateway", "agentloop", "control", "registry", "tools", "sandbox", "store", "evolve", "mcp", "workspace"], "pad": 20 },
+    { "kind": "region", "label": "DGX Spark · host singolo", "wraps": ["observe", "router", "prompt", "hooks", "gateway", "agentloop", "control", "registry", "tools", "sandbox", "store", "evolve", "mcp", "workspace"], "pad": 20 },
     { "kind": "security-group", "label": "approval & policy gate", "wraps": ["registry"], "pad": 14 },
+    { "kind": "security-group", "label": "hooks gate", "wraps": ["hooks"], "pad": 14 },
     { "kind": "security-group", "label": "sandbox isolation", "wraps": ["sandbox"], "pad": 14 }
   ],
   "connections": [
-    { "from": "clients", "to": "gateway", "label": "HTTP richiesta", "labelDx": -60, "labelDy": -56 },
-    { "from": "gateway", "to": "clients", "label": "SSE risposta · done", "variant": "emphasis", "labelDy": 56 },
-    { "from": "gateway", "to": "agentloop", "label": "turno / goal", "labelDx": -40, "labelDy": 56 },
-    { "from": "agentloop", "to": "gateway", "label": "risposta SSE", "variant": "emphasis", "labelDx": 30, "labelDy": -56 },
-    { "from": "agentloop", "to": "control", "label": "contesto turno", "labelDy": 56 },
+    { "from": "clients", "to": "gateway", "label": "HTTP richiesta · steer · abort", "labelDx": -60, "labelDy": -56 },
+    { "from": "gateway", "to": "clients", "label": "SSE risposta · feed", "variant": "emphasis", "labelDy": 56 },
+    { "from": "gateway", "to": "agentloop", "label": "turno chat / goal", "labelDx": -40, "labelDy": 56 },
+    { "from": "agentloop", "to": "gateway", "label": "risposta SSE (stream)", "variant": "emphasis", "labelDx": 30, "labelDy": -56 },
+    { "from": "agentloop", "to": "control", "label": "contesto · budget", "labelDy": 56 },
     { "from": "control", "to": "registry", "label": "azione gated", "labelDy": 56 },
     { "from": "registry", "to": "tools", "label": "chiamata autorizzata", "labelDy": 56 },
     { "from": "tools", "to": "sandbox", "label": "esecuzione", "variant": "emphasis", "labelDy": 56 },
     { "from": "tools", "to": "workspace", "label": "fs · git · read/write", "fromSide": "bottom", "toSide": "top" },
-    { "from": "agentloop", "to": "router", "label": "prompt assemblato", "fromSide": "top", "toSide": "bottom", "labelDx": -80, "labelDy": 25 },
-    { "from": "router", "to": "agentloop", "label": "completion (stream)", "fromSide": "bottom", "toSide": "top", "labelDx": 80, "labelDy": 40 },
-    { "from": "gateway", "to": "observe", "label": "eventi (hooks · metriche)", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelDy": -30 },
+    { "from": "agentloop", "to": "prompt", "label": "assemble turno · inject (nudge · obs · steer)", "fromSide": "top", "toSide": "bottom", "labelDx": -110, "labelDy": 20 },
+    { "from": "prompt", "to": "router", "label": "prompt assemblato", "labelAt": [470, 182] },
+    { "from": "router", "to": "agentloop", "label": "completion (stream)", "fromSide": "bottom", "toSide": "top", "labelDx": 110, "labelDy": 55 },
+    { "from": "tools", "to": "hooks", "label": "hook.run (Pre/PostToolUse)", "fromSide": "top", "toSide": "bottom" },
+    { "from": "hooks", "to": "tools", "label": "blocca (exit 2)", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "from": "gateway", "to": "observe", "label": "eventi · metriche", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelDy": -30 },
     { "from": "observe", "to": "clients", "label": "feed · tracce (SSE)", "variant": "dashed" },
-    { "from": "agentloop", "to": "store", "label": "write stato", "fromSide": "bottom", "toSide": "top", "labelDx": -45, "labelDy": 20 },
-    { "from": "store", "to": "agentloop", "label": "read contesto", "fromSide": "top", "toSide": "bottom", "labelDx": 45 },
-    { "from": "sandbox", "to": "agentloop", "label": "osservazione · tool result", "fromSide": "top", "toSide": "top", "via": [[969, 210], [377, 210]], "labelDy": 18 },
-    { "from": "control", "to": "evolve", "label": "esito del run", "fromSide": "bottom", "toSide": "top", "labelDx": 80, "labelDy": 25 },
-    { "from": "evolve", "to": "store", "label": "skill · proposte", "fromSide": "left", "toSide": "right", "labelDy": 56 },
+    { "from": "agentloop", "to": "store", "label": "write stato (graph · memoria)", "fromSide": "bottom", "toSide": "top", "labelDx": -45, "labelDy": 20 },
+    { "from": "store", "to": "agentloop", "label": "read contesto (mem · todo)", "fromSide": "top", "toSide": "bottom", "labelDx": 45, "labelDy": 29 },
+    { "from": "sandbox", "to": "agentloop", "label": "osservazione · tool result", "fromSide": "top", "toSide": "top", "via": [[969, 256], [377, 256]], "labelDy": 18 },
+    { "from": "control", "to": "evolve", "label": "esito del run", "fromSide": "bottom", "toSide": "top", "labelDx": 60, "labelDy": 30 },
+    { "from": "evolve", "to": "store", "label": "skill · proposte", "fromSide": "left", "toSide": "right", "labelDy": 52 },
     { "from": "mcp", "to": "registry", "label": "tool esterni <client>__<tool>", "fromSide": "top", "toSide": "bottom" }
   ],
   "cards": [
@@ -89,48 +70,43 @@
       "title": "Richiesta e streaming",
       "items": [
         "WebUI, app Android e CLI parlano la stessa API su :8790 con Bearer token.",
-        "La risposta nasce nell'Agent Loop (completion dal router) e risale al Client via gateway: agentloop -> gateway -> client.",
-        "Ogni turno persiste un messaggio utente + una risposta (o un turno d'errore esplicito).",
-        "Lo stream SSE chiude subito dopo il 'done' e libera il socket: niente piu' busy bloccato.",
-        "Lo Stop interrompe davvero la generazione in corso, anche da un altro PC."
+        "Il client puo' anche steer/abortare un run vivo (POST /api/chat/steer, /api/agent/control).",
+        "Risposta: agentloop -> gateway -> client (SSE). Il feed eventi e' un secondo canale SSE.",
+        "Ogni turno persiste un messaggio utente + una risposta (o un turno d'errore esplicito)."
       ]
     },
     {
       "dot": "violet",
-      "title": "Loop agentico e controllo test-time (anello chiuso)",
+      "title": "Loop agentico e controllo test-time",
       "items": [
-        "Il prompt inviato al router e' ASSEMBLATO dal harness (self-summary, tool registry, rules, skills, memoria, todo di stato): non e' solo il messaggio utente.",
-        "Il harness INIETTA messaggi sintetici nell'LLM (nudge, osservazioni, 'continue', steer) via _inject: il modello li vede davvero, e gli stessi compaiono in chat come evento harness.inject.",
-        "think -> act -> observe: il modello emette write_todos/update_todos e chiama tool reali.",
-        "L'osservazione RIENTRA nel loop: il risultato del tool torna all'Agent Loop come nuovo contesto.",
-        "keepgoing decide se continuare: se restano passi aperti RIMBORSA il budget dei tool, re-inietta la lista e prosegue — non abbandona mai un piano aperto.",
-        "difficulty stima la difficolta' e scala N (best-of-N) e i giri di continuazione (compute-optimal).",
-        "best-of-N: Harness Control chiama il router N volte (control -> router, N campioni) e sceglie il migliore col ranker deterministico (prm.rank_text).",
-        "verifier applica 'apply-only-if-green': se il check in sandbox e' rosso la modifica e' annullata.",
-        "subagent: matrioska di run figli con depth cap, per delegare sotto-obiettivi."
+        "Prompt Assembly: il prompt NON e' solo il messaggio utente — e' self-summary + tool registry + rules + skills + memoria + todo di stato.",
+        "Il harness INIETTA messaggi sintetici nell'LLM (nudge, osservazioni, 'continue', steer) via _inject: il modello li vede, e compaiono in chat come harness.inject.",
+        "control -> router: best-of-N fa chiamare il router N volte e sceglie il migliore (prm.rank_text). N cresce con difficulty.",
+        "keepgoing: se restano passi aperti RIMBORSA il budget e re-inietta la lista; non abbandona mai un piano.",
+        "verifier: apply-only-if-green — check in sandbox rosso = modifica annullata.",
+        "subagent: run figli con depth cap."
       ]
     },
     {
       "dot": "amber",
-      "title": "Sicurezza: registro, policy, sandbox",
+      "title": "Sicurezza: registro, hooks, sandbox",
       "items": [
-        "registry.py carica config/tools.yaml + overlay e costruisce l'allowlist dichiarativa dei tool.",
-        "Approval gate: auto per i comandi read-only, required per le azioni che toccano il mondo, deny per le distruttive.",
-        "Sandbox: docker / bubblewrap / nsjail con --network none e rootfs read-only; fallback host 'none' esplicito.",
-        "hooks.py: PreToolUse (exit 2 blocca la chiamata del tool), PostToolUse e Stop, senza modello nel loop.",
-        "Il Tool Executor gira con la CARTELLA della SESSIONE come cwd (workspace), non con la scratch dir della sandbox: le azioni toccano il progetto giusto."
+        "registry.py carica config/tools.yaml + overlay: allowlist dichiarativa (auto | required | denied | disabled).",
+        "Approval gate: read-only auto, azioni che toccano il mondo required, distruttive deny.",
+        "Hooks gate: script deterministici, nessun modello. PreToolUse exit 2 BLOCCA il tool; PostToolUse riceve l'osservazione; Stop chiude il turno.",
+        "Sandbox: docker / bwrap / nsjail, --network none, rootfs read-only; fallback host 'none'.",
+        "Tool Executor gira con cwd = cartella sessione (workspace), non la scratch della sandbox."
       ]
     },
     {
       "dot": "emerald",
       "title": "Stato, auto-miglioramento, estensibilita'",
       "items": [
-        "Stato harness: sessioni, run graph persistente, memoria append-only. E' un ciclo: si SCRIVE ad ogni turno e si RILEGGE a quello dopo.",
-        "read contesto / memoria: la memoria pertinente e' AUTO-INJECTED nel prompt e il task graph e' ricaricato (taskgraph.load) come todo rimasti.",
-        "Self-evolution: selfevolve mina sequenze ripetute -> bozza skill -> synth/verify in sandbox -> archive (solo se verde).",
-        "improve instrada le proposte: memory=auto, skill/project/global=propose, code=forbidden.",
-        "MCP: i tool dei server esterni entrano nel registro come <client>__<tool>; il harness e' anche MCP server (stdio/HTTP).",
-        "Osservabilita': il harness emette eventi (hooks/runmetrics/OTel); il feed e le tracce TORNANO al Client, e un hook PreToolUse puo' bloccare la chiamata del tool. La telemetria NON entra nell'LLM."
+        "Stato harness: sessioni, graph, memoria append-only. Si SCRIVE e si RILEGGE ogni turno.",
+        "La memoria e il task graph sono AUTO-INJECTED nel prompt (read contesto).",
+        "Self-evolution: selfevolve mina sequenze -> bozza skill -> verify in sandbox -> archive solo se verde. improve: memory=auto, skill/project/global=propose, code=forbidden.",
+        "MCP bidirezionale: tool esterni entrano nel registro (mcp -> registry); il harness E' MCP server, un client esterno lo comanda (mcp -> gateway).",
+        "Osservabilita': metriche/OTel NON entrano nell'LLM. Feed e tracce tornano al client."
       ]
     }
   ]
