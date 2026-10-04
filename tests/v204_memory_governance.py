@@ -112,6 +112,23 @@ check("D3 health sees >=1 invalidated", h.get("invalidated", 0) >= 1,
 hh = tools._memory({"action": "health"}, "run-a")
 check("D4 memory{health} tool returns a report", hh.get("ok") and "report" in hh, "")
 
+# ---- E: front-matter TYPE fidelity (JAG-210 regression) ----
+# A hex `mid` can be all digits; the parser used to coerce it to int, so a lookup
+# by string id silently missed the record (~16% flake). Only numeric fields cast.
+with open(mem._path("memory.store"), "a", encoding="utf-8") as _f:
+    _f.write(mem._render_md({"mid": "33263015", "ts": 1.5, "kind": "memory.store",
+                             "session": "12345", "source": "agent",
+                             "content": "numeric-looking identity"}) + "\n")
+_e = [x for x in mem.query(None, "memory.store", 1000)
+      if x.get("content") == "numeric-looking identity"]
+check("E1 all-digit mid stays a STRING", bool(_e) and _e[0].get("mid") == "33263015",
+      repr(_e[0].get("mid")) if _e else "none")
+check("E2 numeric-looking session stays a STRING",
+      bool(_e) and _e[0].get("session") == "12345",
+      repr(_e[0].get("session")) if _e else "none")
+check("E3 numeric ts is still a float", bool(_e) and isinstance(_e[0].get("ts"), float),
+      repr(_e[0].get("ts")) if _e else "none")
+
 ok = sum(results)
 print("\nv204: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)

@@ -225,12 +225,26 @@ def _parse_md_file(path):
                 key, _, val = line.partition(":")
                 key = key.strip()
                 if key:
-                    rec[key] = _cast(val.strip())
+                    rec[key] = _cast_field(key, val.strip())
                 continue
             in_front = False  # front-matter ended without a closing delimiter
         buf.append(line)
     flush()
     return records
+
+
+# JAG-210 (v204 regression): front-matter fields that are GENUINELY numeric.
+# Everything else must stay a STRING. A hex `mid` can be all digits (e.g.
+# "33263015"); the old code ran int() on every value, so such an id came back as
+# an int and an identity check by string silently missed the record — a ~16%
+# flake in the memory suite (A2/B1/A5/C2). Only these fields are cast.
+_NUMERIC_FIELDS = frozenset(("ts", "expires_ts", "score"))
+
+
+def _cast_field(key, val):
+    if key in _NUMERIC_FIELDS:
+        return _cast(val)
+    return val
 
 
 def _cast(val):
