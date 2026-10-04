@@ -150,6 +150,31 @@
   .model .bar i{display:block; height:100%; background:linear-gradient(90deg,var(--cyan),var(--amber))}
   .model .mm{display:flex; justify-content:space-between; margin-top:6px; color:var(--faint); font-size:10px}
 
+  /* ---------- command console ---------- */
+  .cmd{grid-column:span 12}
+  .cmd-bar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .cmd-bar .inp{flex:1 1 340px; min-width:200px}
+  .cmd-bar .btn.primary{border-color:rgba(79,214,255,.6); box-shadow:var(--glow)}
+  .cmd-bar .btn.danger{border-color:rgba(255,93,108,.5); color:#ffd0d5}
+  .cmd-bar .hint{font-family:var(--mono); font-size:10px; letter-spacing:.12em; color:var(--faint); text-transform:uppercase}
+  .cmd-out{margin-top:10px; font-family:var(--mono); font-size:12px; line-height:1.6;
+    height:220px; overflow:auto; background:rgba(4,9,16,.55); border:1px solid var(--line);
+    border-radius:3px; padding:10px 12px; white-space:pre-wrap; word-break:break-word}
+  .cmd-out .you{color:var(--ice)}
+  .cmd-out .you::before{content:"\00bb "; color:var(--cyan)}
+  .cmd-out .ai{color:var(--ink)}
+  .cmd-out .think{color:var(--faint); font-style:italic}
+  .cmd-out .sys{color:var(--muted); font-size:11px; letter-spacing:.06em}
+  .cmd-out .err{color:var(--red)}
+  .cmd-out .tc{display:inline-block; margin:2px 6px 2px 0; padding:1px 8px; border-radius:2px;
+    font-size:10.5px; letter-spacing:.05em; border:1px solid rgba(79,214,255,.5); color:var(--cyan);
+    background:rgba(20,40,66,.4)}
+  .cmd-out .tc.ok{border-color:rgba(63,240,166,.5); color:var(--green)}
+  .cmd-out .tc.bad{border-color:rgba(255,93,108,.5); color:var(--red)}
+  .cmd-cursor{display:inline-block; width:7px; height:12px; background:var(--cyan);
+    vertical-align:-1px; animation:pulse 1s steps(1) infinite}
+  @media (prefers-reduced-motion: reduce){ .cmd-cursor{animation:none} }
+
   footer{margin-top:var(--gap); font-family:var(--mono); font-size:10px; letter-spacing:.16em;
     color:var(--faint); display:flex; gap:14px; flex-wrap:wrap; text-transform:uppercase}
 
@@ -248,11 +273,24 @@
       <h2 class="p-head" id="h-models"><span class="dot"></span>Model Bay <span class="tag" id="models-count"></span></h2>
       <div class="models-grid" id="modelGrid"></div>
     </section>
+
+    <section class="panel cmd" aria-labelledby="h-cmd">
+      <h2 class="p-head" id="h-cmd"><span class="dot"></span>Command Console <span class="tag" id="cmd-sess"></span></h2>
+      <div class="cmd-bar">
+        <label class="sr" for="cmdInput">Command</label>
+        <input id="cmdInput" class="inp" type="text" autocomplete="off" spellcheck="false"
+          placeholder="transmit a directive…   (/goal to auto-execute · Enter=send · Esc=abort)">
+        <button class="btn primary" id="cmdSend" type="button">Transmit</button>
+        <button class="btn danger" id="cmdAbort" type="button" disabled>Abort</button>
+        <span class="hint" id="cmdHint">idle</span>
+      </div>
+      <div class="cmd-out" id="cmdOut" role="log" aria-live="polite" aria-relevant="additions"></div>
+    </section>
   </main>
 
   <footer>
     <span id="footLeft">sparkforge command deck</span>
-    <span id="footMid">feed: /api/feed · vitals: /api/status</span>
+    <span id="footMid">feed: /api/feed · vitals: /api/status · console: /api/chat/stream</span>
     <span id="footRight">—</span>
   </footer>
 </div>
@@ -392,6 +430,7 @@
         + '<span class="meta">'+esc(s.messages||0)+' msg · '+esc(s.age||"")+'</span>'
         + '</div>';
     }).join("") || '<div class="gempty">no sessions</div>';
+    cmdSessionLabel();
   }
 
   /* ---------------- graph ---------------- */
@@ -474,6 +513,157 @@
     if (!parts.length){ const ks = Object.keys(ev).filter(k=>k!=="kind"&&k!=="ts").slice(0,4);
       ks.forEach(k=>parts.push(k+"="+JSON.stringify(ev[k]))); }
     return short(parts.join(" · "), 120);
+  }
+
+  /* ---------------- command console (JAG-210) ---------------- */
+  state.chat = { es: null, run: false, buf: null, cursor: null, think: null };
+  function cmdOutEl(){ return $("cmdOut"); }
+  function cmdScroll(){ const o = cmdOutEl(); o.scrollTop = o.scrollHeight; }
+  function cmdClearCursor(){ if (state.chat.cursor){ try{ state.chat.cursor.remove(); }catch(e){} state.chat.cursor = null; } }
+  function cmdSys(text, cls){
+    const o = cmdOutEl(); cmdClearCursor();
+    state.chat.buf = null; state.chat.think = null;
+    const d = document.createElement("div"); d.className = "sys " + (cls||""); d.textContent = text;
+    o.appendChild(d); cmdScroll();
+  }
+  function cmdUser(text){
+    const o = cmdOutEl(); cmdClearCursor();
+    state.chat.buf = null; state.chat.think = null;
+    const d = document.createElement("div"); d.className = "you"; d.textContent = text;
+    o.appendChild(d); cmdScroll();
+  }
+  function cmdEnsureAI(){
+    if (state.chat.buf) return state.chat.buf;
+    const o = cmdOutEl();
+    const d = document.createElement("div"); d.className = "ai";
+    const span = document.createElement("span"); d.appendChild(span);
+    const cur = document.createElement("span"); cur.className = "cmd-cursor"; d.appendChild(cur);
+    o.appendChild(d);
+    state.chat.buf = span; state.chat.cursor = cur;
+    return span;
+  }
+  function cmdDelta(channel, text){
+    if (channel === "think"){
+      const o = cmdOutEl();
+      if (!state.chat.think){
+        cmdClearCursor();
+        const d = document.createElement("div"); d.className = "think";
+        state.chat.think = document.createElement("span"); d.appendChild(state.chat.think);
+        o.appendChild(d);
+      }
+      state.chat.think.textContent += text;
+      cmdScroll(); return;
+    }
+    state.chat.think = null;
+    const span = cmdEnsureAI();
+    span.textContent += text;
+    if (state.chat.cursor){ try{ state.chat.cursor.remove(); }catch(e){} span.parentNode.appendChild(state.chat.cursor); }
+    cmdScroll();
+  }
+  function cmdTool(tool, ok){
+    const o = cmdOutEl(); cmdClearCursor();
+    state.chat.buf = null; state.chat.think = null;
+    const chip = document.createElement("span");
+    chip.className = "tc" + (ok === true ? " ok" : (ok === false ? " bad" : ""));
+    chip.textContent = "\u2699 " + tool + (ok === true ? " \u2713" : (ok === false ? " \u2717" : ""));
+    o.appendChild(chip); o.appendChild(document.createTextNode(" ")); cmdScroll();
+  }
+  function setCmdRunning(run){
+    state.chat.run = run;
+    $("cmdSend").disabled = run;
+    $("cmdAbort").disabled = !run;
+    $("cmdHint").textContent = run ? "transmitting…" : "idle";
+    $("cmdHint").style.color = run ? "var(--amber)" : "";
+  }
+  function cmdSessionLabel(){
+    $("cmd-sess").textContent = state.sid ? ("sess " + String(state.sid).slice(0,10)) : "";
+  }
+  function transmit(){
+    if (state.chat.run) return;
+    const inp = $("cmdInput");
+    let raw = (inp.value || "").trim();
+    if (!raw) return;
+    let mode = "";
+    if (/^\/goal\b/i.test(raw)){ mode = "&mode=goal"; raw = raw.replace(/^\/goal[\s:]*/i, "").trim(); }
+    inp.value = "";
+    if (state.offline){ demoTransmit(raw, mode); return; }
+    if (!state.token){ requireToken(); cmdSys("link required \u2014 enter the API token", "err"); return; }
+    cmdUser((mode ? "\ud83c\udfaf /goal " : "") + raw);
+    cmdSys("\u25b8 uplink open\u2026");
+    setCmdRunning(true);
+    const sid = state.sid || "";
+    const url = "/api/chat/stream?message=" + encodeURIComponent(raw)
+      + (sid ? "&session=" + encodeURIComponent(sid) : "")
+      + mode + (authQS() ? "&" + authQS() : "");
+    let es;
+    try { es = new EventSource(url); } catch(e){ cmdSys("uplink failed: " + e, "err"); setCmdRunning(false); return; }
+    state.chat.es = es;
+    const adopt = (s)=>{ if (s && !state.sid){ state.sid = s; renderSessions(); loadGraph(); loadContext(); } cmdSessionLabel(); };
+    es.addEventListener("chat.run", e=>{ try{ adopt(JSON.parse(e.data).session); }catch(_){} });
+    es.addEventListener("chat.delta", e=>{ try{ const d = JSON.parse(e.data); adopt(d.session); cmdDelta(d.channel, d.text); }catch(_){} });
+    es.addEventListener("tool.call", e=>{ try{ cmdTool(JSON.parse(e.data).tool); }catch(_){} });
+    es.addEventListener("tool.result", e=>{ try{ const d = JSON.parse(e.data); cmdTool(d.tool || "?", d.ok); }catch(_){} });
+    es.addEventListener("graph.node.added", ()=>{ loadGraph(); });
+    es.addEventListener("graph.node.updated", ()=>{ loadGraph(); });
+    es.addEventListener("plan.update", ()=>{ loadGraph(); });
+    es.addEventListener("chat.done", ()=>{ loadContext(); });
+    es.addEventListener("error", e=>{
+      if (e && typeof e.data === "string" && e.data){
+        let msg = "stream error"; try{ const d = JSON.parse(e.data); if (d && d.error) msg = d.error; }catch(_){}
+        cmdSys("\u2716 " + msg, "err");
+      }
+      endTurn(false);
+    });
+    es.addEventListener("done", ()=>{ endTurn(true); });
+  }
+  function endTurn(refresh){
+    if (!state.chat.run && !state.chat.es) return;
+    const es = state.chat.es; state.chat.es = null;
+    try { if (es) es.close(); } catch(e){}
+    cmdClearCursor();
+    if (state.chat.buf && !state.chat.buf.textContent){ try{ state.chat.buf.parentNode.remove(); }catch(e){} }
+    state.chat.buf = null; state.chat.think = null;
+    setCmdRunning(false);
+    cmdSys("\u25b8 uplink closed");
+    if (refresh){ loadGraph(); loadContext(); loadSessions(); }
+  }
+  function abortTurn(){
+    const sid = state.sid;
+    if (state.offline){ cmdSys("\u25b8 abort (demo)"); endTurn(false); return; }
+    if (!sid) return;
+    fetch(BASE + "/api/chat/abort?" + authQS(), {
+      method: "POST",
+      headers: state.token ? {Authorization:"Bearer " + state.token, "Content-Type":"application/json"} : {"Content-Type":"application/json"},
+      body: JSON.stringify({session: sid})
+    }).catch(()=>{});
+    cmdSys("\u25b8 abort transmitted");
+  }
+  let demoTyping = null;
+  function demoTransmit(raw, mode){
+    cmdUser((mode ? "\ud83c\udfaf /goal " : "") + raw);
+    setCmdRunning(true);
+    pushEvent({kind:"agent.run", ts:Date.now()/1000, session:"demo0001", message:"demo directive: " + raw});
+    const reply = "Acknowledged. Directive received and parsed \u2014 all subsystems nominal. Executing \u201c"
+      + raw.slice(0, 48) + "\u201d at full thrust. Telemetry is live on the Event Stream panel and the "
+      + "task graph has been updated. Awaiting your next command, Commander.";
+    let i = 0;
+    cmdSys("\u25b8 uplink open\u2026 (demo)");
+    demoTyping = setInterval(()=>{
+      if (i === 6) cmdSys("\u25b8 resolving intent\u2026");
+      if (i === 14){ cmdTool("fs.read"); cmdTool("memory"); pushEvent({kind:"tool.call", ts:Date.now()/1000, tool:"fs.read", session:"demo0001"}); }
+      if (i < reply.length){ cmdDelta("answer", reply[i]); i++; }
+      else { clearInterval(demoTyping); demoTyping = null; endTurn(false); }
+    }, 16);
+  }
+  function wireConsole(){
+    $("cmdSend").addEventListener("click", transmit);
+    $("cmdAbort").addEventListener("click", abortTurn);
+    $("cmdInput").addEventListener("keydown", (e)=>{
+      if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); transmit(); }
+      else if (e.key === "Escape"){ e.preventDefault(); abortTurn(); }
+    });
+    document.addEventListener("keydown", (e)=>{ if (e.key === "Escape" && state.chat.run) abortTurn(); });
+    cmdSessionLabel();
   }
 
   /* ---------------- offline demo ---------------- */
@@ -572,6 +762,7 @@
   $("linkBtn").addEventListener("click", ()=>{ $("linkbar").hidden = !$("linkbar").hidden; if(!$("linkbar").hidden) $("tok").focus(); });
   $("connect").addEventListener("click", connect);
   $("tok").addEventListener("keydown", (e)=>{ if (e.key==="Enter") connect(); });
+  wireConsole();
   $("sessList").addEventListener("click", (e)=>{ const el=e.target.closest(".sess"); if(el){ state.sid=el.dataset.id; renderSessions(); loadGraph(); loadContext(); } });
   $("sessList").addEventListener("keydown", (e)=>{ if((e.key==="Enter"||e.key===" ")&&e.target.closest(".sess")){ e.preventDefault(); e.target.closest(".sess").click(); } });
   $("graphSvg").addEventListener("click", (e)=>{ const g=e.target.closest(".gnode"); if(!g) return; const n=(state.graph&&state.graph.nodes||[]).find(x=>x.id===g.dataset.id); if(n) $("graphDetail").textContent = n.id+" · "+n.status+" · "+(n.label||""); });

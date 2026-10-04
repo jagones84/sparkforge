@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SparkForge regression battery — TEN tests, one command.
+# SparkForge regression battery — ELEVEN tests, one command.
 #
 # Properties:
 #   * isolated: every SPARKFORGE_* data dir points at a throwaway temp dir, so the
@@ -26,7 +26,7 @@ export SPARKFORGE_RUNS_DIR="$TMP/runs"
 mkdir -p "$SPARKFORGE_CONFIG_DIR" "$SPARKFORGE_SESSIONS_DIR" \
          "$SPARKFORGE_GRAPH_DIR" "$SPARKFORGE_EDITS_DIR" "$SPARKFORGE_RUNS_DIR"
 
-TESTS="v140_subagent_todos v177_session_delete_cascade v183_chat_core v195_hard v198_skills_tools_awareness v204_memory_governance v205_heldout_gate v206_task_auditor v207_abuse_hard v209_console_deck"
+TESTS="v140_subagent_todos v177_session_delete_cascade v183_chat_core v195_hard v198_skills_tools_awareness v204_memory_governance v205_heldout_gate v206_task_auditor v207_abuse_hard v209_console_deck v210_deck_command"
 fail=0
 for t in $TESTS; do
   echo "=== $t ==="
@@ -40,7 +40,7 @@ done
 rm -rf "$TMP"
 
 if [ "$fail" -eq 0 ]; then
-  echo "=== battery: 10/10 GREEN ==="
+  echo "=== battery: 11/11 GREEN ==="
 else
   echo "=== battery: FAILURES (see above) ==="
 fi
