@@ -192,8 +192,9 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
 
 ### Test LIVE (richiedono il server up) — cartella `tests/live/`
 - `v199_endpoint_sweep.py` (51/51), `v200_concurrent_chat.py` (7/7),
-  `v202_concurrent_stream.py` (4/4), `v208_chaos_http.py` (10/10, caos/abuso HTTP).
-  NON nel gate `battery.sh`.
+  `v202_concurrent_stream.py` (4/4), `v208_chaos_http.py` (10/10, caos/abuso HTTP),
+  `v213_deck_live.py` (11/11, smoke del deck deployato: /console pubblico + alias,
+  dati auth-gated, feed SSE). NON nel gate `battery.sh`.
 
 Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 23/23,
 v205 13/13, v206 10/10, v207 28/28, v209 18/18, v210 27/27, v212 19/19 → **12/12 GREEN**.
