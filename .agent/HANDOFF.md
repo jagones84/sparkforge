@@ -170,6 +170,16 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   tutto il resto resta stringa (`_cast_field`). Riprodotto con uno stress (4/25
   FAIL) e chiuso (0/25 dopo il fix). Regressione `v204` sezione E (E1 mid
   all-digit resta str, E2 session numerica resta str, E3 ts resta float) → 23/23.
+- **JAG-212** Abuse round 2 (tricky, "far crollare il sistema"): `tests/v212_abuse_hard2.py`
+  (19/19, deterministico, time-bounded). Attacca la *struttura* della persistenza, non
+  solo il crash: contenuto memoria con una riga `---`, contenuto che IMITA il
+  front-matter (`mid:`/`kind:`), 500 store + rebuild indice, 360 store concorrenti su
+  12 thread, 300 nodi taskgraph + deps cicliche + label 100k, `resolve_path` con
+  input ostili. Ha trovato **1 bug reale**: una riga `---` dentro il contenuto spezzava
+  il record in due (l'id restava solo sul primo troncone, contenuto perso). Fix in
+  `memory._render_md`/`_parse_md_file`: la riga `---` nel contenuto viene "guardata"
+  con un backslash e ripristinata in lettura (contenuto preservato byte-per-byte).
+  Battery **12/12 GREEN**.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -183,12 +193,12 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   NON nel gate `battery.sh`.
 
 Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 23/23,
-v205 13/13, v206 10/10, v207 28/28, v209 18/18, v210 27/27 → **11/11 GREEN**.
+v205 13/13, v206 10/10, v207 28/28, v209 18/18, v210 27/27, v212 19/19 → **12/12 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).
 - Gate ufficiale = `tests/battery.sh` (v140, v177, v183, v195, v198, v204, v205,
-  v206, v207, v209, v210). Usa `PYTHONPYCACHEPREFIX` su temp (niente bytecode stale).
+  v206, v207, v209, v210, v212). Usa `PYTHONPYCACHEPREFIX` su temp (niente bytecode stale).
 - Suite "hard/bastarde" = `v195_hard.py` (da riusare per regressione SOLO se c'è
   motivo concreto). Scenari etichettati A..I con `check("Xn ...")`.
 - `tests/legacy/` = accettazione storica, NON parte del gate.

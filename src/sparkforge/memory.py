@@ -127,8 +127,17 @@ def _render_md(rec):
         if val is not None:
             lines.append("%s: %s" % (key, val))
     lines.append("---")
-    lines.append(str(rec.get("content", "")).strip())
-    lines.append("")  # trailing blank line separators
+    # JAG-212 (v212): a content line equal to "---" would look like a record
+    # delimiter and tear THIS record in two (its id would survive only on the
+    # truncated first half). Guard it with a leading backslash; the parser strips
+    # it back on read, so the stored content is preserved byte-for-byte.
+    body = []
+    for cl in str(rec.get("content", "")).strip().split("\n"):
+        if cl.strip() == "---":
+            cl = "\\" + cl
+        body.append(cl)
+    lines.append("\n".join(body))
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -228,6 +237,8 @@ def _parse_md_file(path):
                     rec[key] = _cast_field(key, val.strip())
                 continue
             in_front = False  # front-matter ended without a closing delimiter
+        if line.startswith("\\") and line[1:].strip() == "---":
+            line = line[1:]  # JAG-212: unescape a guarded '---' content line
         buf.append(line)
     flush()
     return records
