@@ -147,6 +147,29 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   `tests/v209_console_deck.py` (18/18, AGGIUNTA al gate). Verificato in browser via
   chrome-devtools MCP: DEMO su file://, **LIVE** su `http://192.168.1.37:8790/console`
   (ONLINE, dati reali). Battery **10/10 GREEN**. Commit `32aa1e0`.
+- **JAG-210** Command Deck diventa una **vera app** (non solo telemetria):
+  pannello **Command Console** in `webui/console.html` — input + TRANSMIT/ABORT,
+  output live che streamma la risposta dell'harness. Usa `GET /api/chat/stream`
+  via `EventSource` (stessa rotta della WebUI principale): gestisce `chat.run`,
+  `chat.delta` (canale `think` in corsivo, `answer` in chiaro con cursore),
+  `tool.call`/`tool.result` (chip), `chat.done`, `error`, `done`. `/goal` →
+  `mode=goal` (autonomo). Abort via `POST /api/chat/abort`. Tastiera: Enter=invia,
+  Esc=abort. Demo `file://`/offline che "digita" la risposta (prova l'app senza
+  server). Il turno è legato alla sessione selezionata; se nuova, adotta l'id che
+  il server assegna. Suite `tests/v210_deck_command.py` (27/27) nel gate.
+  Verifica browser (chrome-devtools): DEMO interattivo OK; pagina LIVE
+  (`/console`, ONLINE, 0 errori console); contratto live provato su sessione
+  usa-e-getta `zzdeckprobe` → `chat.run`+`chat.delta`+`done`, abort ok, DELETE 200.
+- **JAG-211** *Bug reale* trovato dalla battery (flake ~16% di v204, non un falso
+  allarme): in `memory._parse_md_file` il front-matter passava OGNI valore per
+  `_cast`, che prova `int()`/`float()`: un **`mid` esadecimale tutto-cifre**
+  (es. `"33263015"`, prob. ~2.3% per record ma su più campi/record → ~16% per run)
+  tornava come **int**, quindi il confronto per identità stringa
+  (`x["mid"] == mid`) mancava il record → A2/B1/A5/C2 rossi a intermittenza.
+  Fix: solo i campi davvero numerici (`ts`, `expires_ts`, `score`) vengono castati;
+  tutto il resto resta stringa (`_cast_field`). Riprodotto con uno stress (4/25
+  FAIL) e chiuso (0/25 dopo il fix). Regressione `v204` sezione E (E1 mid
+  all-digit resta str, E2 session numerica resta str, E3 ts resta float) → 23/23.
 
 ### Memoria generica (Hindsight MCP)
 - Le lezioni *generiche* di ingegneria imparate qui sono state salvate via MCP
@@ -159,13 +182,13 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   `v202_concurrent_stream.py` (4/4), `v208_chaos_http.py` (10/10, caos/abuso HTTP).
   NON nel gate `battery.sh`.
 
-Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 20/20,
-v205 13/13, v206 10/10, v207 28/28, v209 18/18 → **10/10 GREEN**.
+Battery: v140 9/9, v177 OK, v183 28/28, v195 21/21, v198 26/26, v204 23/23,
+v205 13/13, v206 10/10, v207 28/28, v209 18/18, v210 27/27 → **11/11 GREEN**.
 
 ### Test: convenzione nomi (richiesta utente punto 0/4)
 - Cartella `tests/`, file `v<NNN>_<slug>.py` (numero = ticket JAG, slug descrittivo).
 - Gate ufficiale = `tests/battery.sh` (v140, v177, v183, v195, v198, v204, v205,
-  v206, v207, v209). Usa `PYTHONPYCACHEPREFIX` su temp (niente bytecode stale).
+  v206, v207, v209, v210). Usa `PYTHONPYCACHEPREFIX` su temp (niente bytecode stale).
 - Suite "hard/bastarde" = `v195_hard.py` (da riusare per regressione SOLO se c'è
   motivo concreto). Scenari etichettati A..I con `check("Xn ...")`.
 - `tests/legacy/` = accettazione storica, NON parte del gate.
