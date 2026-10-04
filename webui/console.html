@@ -706,7 +706,11 @@
   /* ---------------- data loops ---------------- */
   async function loadStatus(){
     try {
-      state.status = await api("/api/status"); exitDemo(); renderHeader(); renderVitals();
+      state.status = await api("/api/status"); exitDemo();
+      // JAG-210: a transient 401 (e.g. right after a server restart) shows the
+      // link bar; once the link is healthy again, hide it.
+      $("linkbar").hidden = true;
+      renderHeader(); renderVitals();
     } catch(e){ if (e.status===401) requireToken(); else enterDemo(); }
   }
   async function loadModels(){ try{ state.models = (state.status && state.status.models) || state.models; if (state.status && state.status.models) renderModels(); }catch(e){} }

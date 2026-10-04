@@ -160,6 +160,9 @@ blocchi, verificare sempre (comando + output + numero), committare + push.
   Verifica browser (chrome-devtools): DEMO interattivo OK; pagina LIVE
   (`/console`, ONLINE, 0 errori console); contratto live provato su sessione
   usa-e-getta `zzdeckprobe` → `chat.run`+`chat.delta`+`done`, abort ok, DELETE 200.
+  *Polish (notte):* la link-bar del deck ora si nasconde quando il link torna ONLINE
+  (un 401 transitorio al restart la lasciava visibile); README aggiornato con la voce
+  Command Deck. Verificato in browser: ONLINE + link-bar nascosta.
 - **JAG-211** *Bug reale* trovato dalla battery (flake ~16% di v204, non un falso
   allarme): in `memory._parse_md_file` il front-matter passava OGNI valore per
   `_cast`, che prova `int()`/`float()`: un **`mid` esadecimale tutto-cifre**
