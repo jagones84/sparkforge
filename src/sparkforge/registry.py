@@ -145,6 +145,27 @@ TOOL_SCHEMAS = {
             "name": {"type": "string", "description": "skill name (for action=read)"},
         },
     },
+    "sessions": {
+        "description": ("Inspect OTHER sessions' chats to understand why a "
+                        "teammate (e.g. 'coder 1') is failing, and help it. "
+                        "action=list -> sessions with agent name, title, age, "
+                        "running. action=read -> one session's FULL transcript "
+                        "(session=<id>): messages, tool calls + results, harness "
+                        "injections, in order. Read-only."),
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["list", "read"], "default": "list"},
+            "session": {"type": "string", "description": "session id (action=read)"},
+            "query": {"type": "string",
+                      "description": "filter by agent name/title/id (action=list)"},
+            "limit": {"type": "integer", "default": 30,
+                      "description": "max transcript entries (action=read)"},
+            "tail": {"type": "boolean", "default": False,
+                     "description": "read the LAST <limit> entries (action=read)"},
+        },
+        "required": [],
+        "subject": "session",
+    },
     "memory": {
         "description": ("Persistent memory across sessions. action=store saves a "
                         "durable fact/preference/decision (ttl_secs expires it; "

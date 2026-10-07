@@ -41,8 +41,21 @@ All notable changes to SparkForge are documented here. The format follows
   the failure JAG-61 fixed in the chat loop but never here. The turn now carries the recent
   `(action -> observation)` history (`_agent_history`). Guarded by
   `tests/acceptance/v349_agent_loop_history.py`. Battery 108 → 109.
+- **The coordinator could not look into a teammate's session (SEVERE).** Told
+  "coder 1 is failing a lot — understand why and help him", the Master had NO way to
+  see that teammate's chat: no DISCOVERY (which session is "coder 1"?) and no readable
+  transcript (the raw `data/sessions/<id>.json` is unusable in context). Guiding the
+  agent is the harness's whole point, so this was a first-class gap. New read-only
+  `sessions` tool: `action=list` maps sessions to agent names, `action=read` renders
+  the full transcript (messages + every tool call/result + harness injections,
+  time-ordered). The delegation record now also carries each teammate's session id
+  and points the master at the tool. Guarded by
+  `tests/acceptance/v350_session_inspect.py`. Battery 109 → 110.
 
 ### Added
+- **`sessions` tool** (read-only): let any agent — above all the coordinator — inspect
+  another session's transcript to understand why a teammate is failing and help it.
+  Wired in `registry.TOOL_SCHEMAS` + `tools.py`, enabled in `config/tools.yaml`.
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate
   for `server.extract_json` (400 randomized wrapped values + edge cases + malformed
   input). This closes a real coverage gap: `extract_json` previously had no runnable

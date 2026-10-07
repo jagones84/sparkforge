@@ -854,13 +854,18 @@ class JobRegistry:
             a = roster.get(s["agent"], {})
             # JAG-330: show the DECLARED order in the master's chat (who waits for whom).
             dep = (" [after %s]" % ", ".join(s.get("deps") or [])) if s.get("deps") else ""
-            lines.append("%s → %s (%s): %s%s" % (s["id"], s["agent"], a.get("name") or "",
-                                                 (s["assignment"] or "").strip()[:160], dep))
+            lines.append("%s → %s (%s) [session %s]: %s%s"
+                         % (s["id"], s["agent"], a.get("name") or "",
+                            a.get("session") or "?", (s["assignment"] or "").strip()[:160], dep))
         try:
             csess = srv.get_or_create_session(coord_sid)
-            srv.persist_inject(csess, "delegation",
-                               "↳ Delegated %d subjob(s) of %s:\n%s"
-                               % (len(subs), jid, "\n".join(lines)))
+            srv.persist_inject(
+                csess, "delegation",
+                "↳ Delegated %d subjob(s) of %s:\n%s\n"
+                "Inspect any teammate's transcript with the `sessions` tool "
+                "(sessions{action:'list'}, then sessions{action:'read', "
+                "session:'<id>'}) to see why one is failing and help it."
+                % (len(subs), jid, "\n".join(lines)))
         except Exception:  # noqa: BLE001 — the record must never break the run
             pass
 

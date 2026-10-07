@@ -88,7 +88,9 @@ check("F5 search without a query fails gracefully",
       isinstance(bad, dict) and bad.get("ok") is False, str(bad)[:80])
 
 # ---- G: prompt budget — no truncated dump, no disabled-tools wall (JAG-202) ----
-check("G1 composed system prompt is bounded (<17k chars)", len(sp) < 17000, "chars=%d" % len(sp))
+# JAG-350: the registry gained a native tool (`sessions`), so the ceiling moved
+# from 17k to 18k. It still guards against a runaway dump / disabled-tools wall.
+check("G1 composed system prompt is bounded (<18k chars)", len(sp) < 18000, "chars=%d" % len(sp))
 _idx = skills.skills_context(max_chars=2600)
 check("G2 the always-on skills index is bounded", len(_idx) <= 2760, "len=%d" % len(_idx))
 check("G3 the disabled-tools wall is compact",

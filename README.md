@@ -3,7 +3,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![stdlib-only](https://img.shields.io/badge/dependencies-none%20(stdlib)-brightgreen.svg)](#install--run)
-[![tests](https://img.shields.io/badge/battery-109%2F109%20green-success.svg)](#the-quality-gate)
+[![tests](https://img.shields.io/badge/battery-110%2F110%20green-success.svg)](#the-quality-gate)
 [![CI](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml/badge.svg)](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml)
 
 **SparkForge is not another meta-harness that just spawns sub-agents.** It is a
@@ -71,7 +71,7 @@ cloud models, and the strongest (still cheap) cloud goes to the leads.
 - 💬 Streaming chat with a visible **Chain-of-Thought** timeline (`reasoning_content` / `<think>`).
 - 🧩 **LLM-authored, evidence-gated task graph** — the model writes its own todos inline; `done` requires proof.
 - 🔁 **Completion loop** with typed stops (`goal_reached · no_progress · budget · blocked`) — the list decides when work is done, not the model's mood.
-- 🛠️ **Real tools**: `shell`, `fs.read/write/edit`, `git`, `http`, `web`, `memory`, `skills`, MCP tools — all through the approval gate.
+- 🛠️ **Real tools**: `shell`, `fs.read/write/edit`, `git`, `http`, `web`, `memory`, `skills`, `sessions` (inspect another session's transcript), MCP tools — all through the approval gate.
 - 🧠 **Memory** (store/recall/recent) auto-injected each turn; ⚠️ **checkpoints** + rollback.
 - 📏 **Honest context meter** — the real prompt vs the model's real window, auto-compaction at 75%.
 - ▶️ **HITL** pause/resume/abort; ⏹️ Stop kills the actual tool process, not just the socket.
@@ -82,6 +82,7 @@ cloud models, and the strongest (still cheap) cloud goes to the leads.
 - 🔗 **Enforced dependency waves** — a dependent subjob waits for its prerequisites.
 - 🧾 **Bounded retry + escalation** — a `STATUS: BLOCKED` worker is retried a bounded number of times, then marked **failed** and surfaced to the master.
 - 📡 **Both chats carry the hand-off** — the delegation appears in the coordinator's transcript *and* the worker's.
+- 🔎 **Teammate inspection** — the master reads any teammate's full transcript (`sessions` tool: list → read) to understand *why* one is failing and help it.
 - 🎛️ **Model policy per team** — ≤1 local/machine, cheap cloud for members, best cheap cloud for leads.
 - 🧬 **Subagents** (in-loop delegation), **swarm/blackboard**, **ACP** interop — experimental.
 
@@ -150,7 +151,7 @@ The **only** regression gate is one deterministic, fully-isolated battery — it
 every `SPARKFORGE_*` data dir at a throwaway temp dir, so it never touches live state:
 
 ```bash
-bash tests/battery.sh        # → === battery: 109/109 GREEN ===
+bash tests/battery.sh        # → === battery: 110/110 GREEN ===
 ```
 
 CI runs the same battery on every push/PR ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

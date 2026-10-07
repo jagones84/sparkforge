@@ -796,11 +796,117 @@ def _reconcile(args, run_id):
         return {"ok": False, "error": "reconcile failed: %s" % e}
 
 
+def _hms(ts):
+    """Clock label (HH:MM:SS) for a stored epoch timestamp; '--:--:--' if invalid."""
+    try:
+        return time.strftime("%H:%M:%S", time.localtime(float(ts)))
+    except (TypeError, ValueError, OSError):
+        return "--:--:--"
+
+
+def _render_transcript(sess, limit=30, tail=False):
+    """Flatten one session into an ordered, model-readable log.
+
+    Merges the three side stores by timestamp: `messages` (the real turns),
+    `tool_cards` (every tool call + result) and `injects` (harness steering that
+    never reaches the model). Without this the coordinator could only see raw
+    JSON — unusable in context — so "why is coder 1 failing" stayed unanswerable.
+    """
+    evs = []
+    for m in sess.get("messages", []) or []:
+        evs.append((m.get("ts") or 0,
+                    "%s: %s" % (str(m.get("role", "?")).upper(),
+                                _truncate(str(m.get("content", "")).strip(), 2000))))
+    for c in sess.get("tool_cards", []) or []:
+        body = c.get("error") or c.get("result") or ""
+        evs.append((c.get("ts") or 0,
+                    "TOOL %s(%s) -> %s\n    %s"
+                    % (c.get("tool"), _truncate(str(c.get("args", "")), 200),
+                       "ok" if c.get("ok") else "FAIL",
+                       _truncate(str(body).strip(), 700))))
+    for j in sess.get("injects", []) or []:
+        evs.append((j.get("ts") or 0,
+                    "HARNESS(%s): %s" % (j.get("kind"),
+                                         _truncate(str(j.get("text", "")).strip(), 600))))
+    evs.sort(key=lambda x: x[0])
+    evs = (evs[-limit:] if tail else evs[:limit])
+    head = ("session %s | job=%s | workspace=%s | %d message(s), %d tool card(s), "
+            "%d harness note(s)\n"
+            % (sess.get("id"), sess.get("job") or "-", sess.get("workspace") or "-",
+               len(sess.get("messages", []) or []), len(sess.get("tool_cards", []) or []),
+               len(sess.get("injects", []) or [])))
+    body = "\n".join("%s  %s" % (_hms(e[0]), e[1]) for e in evs) or "  (empty transcript)"
+    return _truncate(head + body, 24000)
+
+
+def _sessions(args, run_id):
+    """JAG-350: read-only view of OTHER sessions — the coordinator's missing eye.
+
+    The Master could delegate a subjob to a teammate but had NO tool to look at
+    that teammate's chat: no DISCOVERY (which session is 'coder 1'?) and no clean
+    transcript (raw `data/sessions/*.json` is unusable in context). So "understand
+    why coder 1 is failing and help it" was impossible. This tool closes both
+    gaps: `action=list` maps sessions to agent names, `action=read` renders the
+    full transcript (messages + tool calls + harness injections).
+    """
+    from . import server
+    action = str(args.get("action", "list") or "list").strip().lower()
+    if action in ("read", "get", "show", "transcript"):
+        sid = str(args.get("session") or args.get("id") or "").strip()
+        if not sid:
+            return {"ok": False, "stdout": "", "stderr": "",
+                    "error": "session id required for action=read (use action=list "
+                             "to find the session first)",
+                    "backend": "host", "sandboxed": False}
+        sess = server.load_session(sid)
+        if not sess:
+            return {"ok": False, "stdout": "", "stderr": "",
+                    "error": "no such session: %s" % sid,
+                    "backend": "host", "sandboxed": False}
+        try:
+            limit = int(args.get("limit") or 30)
+        except (TypeError, ValueError):
+            limit = 30
+        limit = max(1, min(limit, 400))
+        text = _render_transcript(sess, limit=limit, tail=bool(args.get("tail")))
+        return {"ok": True, "exit_code": 0, "stdout": text, "stderr": "",
+                "session": sid, "backend": "host", "sandboxed": False}
+    # action=list — every session, annotated with its agent name when it has one
+    try:
+        from . import agents as agents_mod
+        amap = {a.get("session"): (a.get("name") or a.get("id"))
+                for a in agents_mod.REGISTRY.list()["agents"] if a.get("session")}
+    except Exception:  # noqa: BLE001 — the list must survive a registry hiccup
+        amap = {}
+    q = str(args.get("query") or "").strip().lower()
+    rows = server.list_sessions()
+    if q:
+        rows = [r for r in rows
+                if q in str(r.get("id", "")).lower()
+                or q in str(r.get("title", "")).lower()
+                or q in str(amap.get(r.get("id")) or "").lower()]
+    try:
+        limit = int(args.get("limit") or 30)
+    except (TypeError, ValueError):
+        limit = 30
+    lines = []
+    for r in rows[:max(1, limit)]:
+        lines.append("  %s | agent=%s | %s | msgs=%s | %s%s"
+                     % (r.get("id"), amap.get(r.get("id")) or "-",
+                        (r.get("title") or "")[:48], r.get("messages"),
+                        r.get("age") or "", " | RUNNING" if r.get("running") else ""))
+    stdout = ("%d session(s)%s (read one with action=read, session=<id>):\n%s"
+              % (len(rows), (" matching %r" % q) if q else "",
+                 "\n".join(lines) or "  (none)"))
+    return {"ok": True, "exit_code": 0, "stdout": stdout, "stderr": "",
+            "count": len(rows), "backend": "host", "sandboxed": False}
+
+
 _DISPATCH = {"shell": _shell, "fs.read": _fs_read, "fs.write": _fs_write,
              "fs.edit": _fs_edit, "diff": _diff,
              "git": _git, "http": _http, "browser": _browser, "self": _self,
              "skills": _skills, "memory": _memory, "web": _web, "improve": _improve,
-             "reconcile": _reconcile}
+             "reconcile": _reconcile, "sessions": _sessions}
 
 
 def _dispatch_execute(tool, args, run_id=None):

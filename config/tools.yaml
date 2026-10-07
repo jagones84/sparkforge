@@ -215,6 +215,13 @@ tools:
     enabled: true
     approval: auto
 
+  # session inspection (JAG-350): let the coordinator/Master READ other sessions'
+  # full transcripts (messages + tool calls + harness injections) to understand
+  # WHY a teammate is failing and help it. Read-only, safe.
+  sessions:
+    enabled: true
+    approval: auto
+
   # agent memory (JAG-73): store/recall durable notes across sessions; the file
   # writes are append-only under data/memory, so it is always safe.
   memory:
