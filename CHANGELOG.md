@@ -28,6 +28,12 @@ All notable changes to SparkForge are documented here. The format follows
   operator-facing `tool.result` events now also fall back to `content`, so file reads are
   no longer blank in the tool cards/feed. `self` reports the LIVE version (was stale
   `0.5.0`). Guarded by `tests/acceptance/v347_observation_payload.py`. Battery 106 → 107.
+- **Job dependencies can no longer deadlock (open loop).** A job `blocked_by` a job that
+  ended `partial` — a normal outcome when one worker failed — was neither released nor
+  failed, so it stayed `blocked` forever. `_blockers_state` now treats any terminal
+  blocker that is not `done` (`partial`/`error`) as a FAILED dependency, and `reconcile()`
+  now sweeps (`wake()`) the dependents of a restart-killed job instead of leaving them
+  blocked. Guarded by `tests/acceptance/v348_job_dep_no_deadlock.py`. Battery 107 → 108.
 
 ### Added
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate

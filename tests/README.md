@@ -42,4 +42,4 @@ or the events DB. A test may also set its own `tempfile.mkdtemp()`.
 ## Current count
 
 Run `bash tests/battery.sh` and read the last line (`=== battery: N/N GREEN ===`).
-As of the v347 harness-review pass: **107/107**.
+As of the v348 loop-audit pass: **108/108**.

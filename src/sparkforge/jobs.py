@@ -349,7 +349,14 @@ class JobRegistry:
 
     @staticmethod
     def _blockers_state(job, d):
-        """(all_done, failed) for a job's blocked_by set, read from a loaded store."""
+        """(all_done, failed) for a job's blocked_by set, read from a loaded store.
+
+        JAG-348: a blocker in ANY terminal state other than `done` (`partial` or
+        `error`) is a FAILED dependency. Before, only `error` counted, so a
+        dependent of a job that ended `partial` — a NORMAL outcome (one worker
+        failed) — was neither released nor failed: it stayed `blocked` FOREVER
+        (open loop). Terminal-and-not-done must fail the dependent loudly.
+        """
         all_done, failed = True, []
         for b in job.get("blocked_by") or []:
             bj = d["jobs"].get(b)
@@ -360,7 +367,7 @@ class JobRegistry:
             st = bj.get("status")
             if st == "done":
                 continue
-            if st == "error":
+            if st in ("error", "partial"):
                 failed.append(b)
             all_done = False
         return all_done, failed
@@ -475,6 +482,11 @@ class JobRegistry:
                     n += 1
             if n:
                 _save(d)
+        if n:
+            # JAG-348: an interrupted blocker now ends `error` (not `running`);
+            # its dependents must be swept (failed) instead of waiting forever
+            # for a job that will never finish.
+            self.wake()
         return n
 
     def wake(self):
