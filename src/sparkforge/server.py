@@ -4349,6 +4349,25 @@ def _mirror_graph(run_id, act, observation, session=None):
     return observation
 
 
+def _agent_history(actions, limit=8):
+    """JAG-348: the agent loop's OWN recent steps as text for the next iteration.
+
+    The chat loop learned this the hard way (JAG-61): the observation produced at
+    step N MUST be visible at step N+1, or the model re-derives everything, never
+    learns a tool/subagent result, cannot correct a rejected action and loops
+    forever. The agent loop rebuilt its messages from scratch every iteration and
+    dropped every observation -> an open loop. This renders the recent history.
+    """
+    if not actions:
+        return ""
+    rows = []
+    for a in actions[-limit:]:
+        txt = (a.get("observation") or a.get("summary") or "").strip()
+        rows.append("  %s. %s -> %s" % (a.get("i", "-"), a.get("action", "?"), txt[:300]))
+    return ("\n\nYour previous steps (build on these; do NOT repeat a step that "
+            "already failed):\n" + "\n".join(rows))
+
+
 def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_state=None,
               workspace=None):
     """Sense-think-act loop. No shell, no filesystem writes except harness stores."""
@@ -4388,9 +4407,13 @@ def agent_run(goal, max_steps=6, model=None, on_event=None, trace=None, run_stat
                    + "\n\n" + system_prompt() + "\n\n" + self_summary() + "\n\n" + AGENT_PROMPT
                    + "\n\n" + RULES_POLICY + ("\n" + rb if rb else ""))
             # JAG-276: the live task list rides in the user turn, not the system prompt.
+            # JAG-348: ALSO carry the agent's own previous steps + observations, so the
+            # model learns from a tool/subagent result and can correct a rejected action
+            # instead of re-deriving the same mistake every iteration (open loop).
             msgs = [{"role": "system", "content": sys},
-                    {"role": "user", "content": "Goal: %s (iteration %d/%d)\n\n%s"
-                     % (goal, i + 1, max_steps, state_block(graph_key=trace.id))}]
+                    {"role": "user", "content": "Goal: %s (iteration %d/%d)\n\n%s%s"
+                     % (goal, i + 1, max_steps, state_block(graph_key=trace.id),
+                        _agent_history(actions))}]
             on_event("agent.iteration", i=i + 1, of=max_steps)
             answer, think = _router_stream(msgs, model, lambda ch, t: on_event("agent.think", channel=ch, text=t))
             _llm(msgs, answer + think)

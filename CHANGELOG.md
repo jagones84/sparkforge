@@ -34,6 +34,13 @@ All notable changes to SparkForge are documented here. The format follows
   blocker that is not `done` (`partial`/`error`) as a FAILED dependency, and `reconcile()`
   now sweeps (`wake()`) the dependents of a restart-killed job instead of leaving them
   blocked. Guarded by `tests/acceptance/v348_job_dep_no_deadlock.py`. Battery 107 → 108.
+- **The agent loop (`/api/agent/run`) never saw its own steps (open loop).** It rebuilt
+  its messages from scratch every iteration and injected only the task list, dropping every
+  observation. The model could not use a subagent's result nor correct a rejected action
+  (`unknown action` / `task not found`), so it re-derived the same mistake and could spin —
+  the failure JAG-61 fixed in the chat loop but never here. The turn now carries the recent
+  `(action -> observation)` history (`_agent_history`). Guarded by
+  `tests/acceptance/v349_agent_loop_history.py`. Battery 108 → 109.
 
 ### Added
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate
