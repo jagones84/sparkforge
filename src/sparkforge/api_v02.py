@@ -220,19 +220,23 @@ def tool_action(st, tool, args, on_event, workspace=None):
     _publish("tool.call", run=run_id, tool=tool, args=args, approval=rec["id"])
     on_event("tool.call", run=run_id, tool=tool, args=args, approval=rec["id"])
     res = toolmod.execute(tool, args, run_id=run_id)
+    # JAG-347: the operator-facing event must carry the payload too — fs.read puts
+    # it in `content`, so without this fallback the tool card / feed showed an
+    # empty result for every file read.
+    _payload = res.get("stdout") or res.get("content") or ""
     meta = {"tool": tool, "approval_id": rec["id"], "approval_status": rec["status"],
             "approval_by": rec.get("decided_by"), "sandbox_backend": res.get("backend"),
             "sandboxed": res.get("sandboxed"), "exit_code": res.get("exit_code"),
-            "stdout": (res.get("stdout") or "")[:4000], "stderr": (res.get("stderr") or "")[:2000],
+            "stdout": _payload[:4000], "stderr": (res.get("stderr") or "")[:2000],
             "duration_ms": res.get("duration_ms"), "ok": res.get("ok")}
     _publish("tool.result", run=run_id, tool=tool, approval=rec["id"], ok=res.get("ok"),
              exit_code=res.get("exit_code"), backend=res.get("backend"),
              sandboxed=res.get("sandboxed"), duration_ms=res.get("duration_ms"),
-             stdout=(res.get("stdout") or "")[:2000], stderr=(res.get("stderr") or "")[:1000])
+             stdout=_payload[:2000], stderr=(res.get("stderr") or "")[:1000])
     on_event("tool.result", run=run_id, tool=tool, ok=res.get("ok"),
              exit_code=res.get("exit_code"), backend=res.get("backend"),
              sandboxed=res.get("sandboxed"), duration_ms=res.get("duration_ms"),
-             stdout=(res.get("stdout") or "")[:20000], stderr=(res.get("stderr") or "")[:8000])
+             stdout=_payload[:20000], stderr=(res.get("stderr") or "")[:8000])
     return toolmod.observation(res), meta
 
 

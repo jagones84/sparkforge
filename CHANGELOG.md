@@ -20,6 +20,14 @@ All notable changes to SparkForge are documented here. The format follows
   skill's device-fallback procedure and to the source it was editing. Content is now
   rendered (bounded by the budget); guarded by `tests/acceptance/v346_fs_read_observation.py`.
   Battery 105 → 106.
+- **Generalised: no tool may answer the model with nothing.** The same renderer also
+  dropped the payload of `fs.write`/`fs.edit` (counters), `self` (its whole self-knowledge
+  dict — a tool whose entire purpose is to guide the agent) and `improve`/`reconcile`.
+  `observation()` now renders `stdout`/`stderr`/`content`/`path`, then an explicit
+  `observation` string, and finally a JSON fallback of the remaining fields. The
+  operator-facing `tool.result` events now also fall back to `content`, so file reads are
+  no longer blank in the tool cards/feed. `self` reports the LIVE version (was stale
+  `0.5.0`). Guarded by `tests/acceptance/v347_observation_payload.py`. Battery 106 → 107.
 
 ### Added
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate

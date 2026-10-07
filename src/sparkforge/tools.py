@@ -486,9 +486,16 @@ def _skills(args, run_id):
 def _self(args, run_id):
     """v0.5 self-knowledge: paths, config, docs, systemd state, extension recipe."""
     import subprocess as sp
+    # JAG-347: report the LIVE version, not a stale hardcoded string - a wrong
+    # self-report is exactly the kind of misleading guidance this review targets.
+    try:
+        from . import server as _srv
+        _version = str(getattr(_srv, "VERSION", "unknown"))
+    except Exception:  # noqa: BLE001
+        _version = "unknown"
     info = {
         "ok": True, "backend": "host", "sandboxed": False, "exit_code": 0,
-        "name": "SparkForge", "version": "0.5.0",
+        "name": "SparkForge", "version": _version,
         "repo_path": REPO,
         "data_dir": os.path.join(REPO, "data"),
         "sessions_dir": os.path.join(REPO, "data", "sessions"),
@@ -854,22 +861,45 @@ def execute(tool, args, run_id=None):
     return res
 
 
+# Transport/metadata keys that are never the payload the model needs.
+_OBS_NOISE = ("tool", "ok", "exit_code", "backend", "sandboxed", "duration_ms",
+              "status", "approval")
+
+
 def observation(res, max_chars=1600):
-    """Render a tool result as the agent's observation line."""
+    """Render a tool result as the agent's observation line.
+
+    JAG-347: the payload MUST always reach the model. The renderer used to emit
+    only stdout/stderr/path, so any tool whose payload lives elsewhere (fs.read ->
+    `content`; fs.write/fs.edit -> counters; self/improve -> structured dicts)
+    answered the model with an EMPTY observation (exit=0, no error) and the agent
+    acted blind. Now: stdout/stderr/content/path, then an explicit `observation`
+    string, and - when the tool produced none of those - a JSON fallback of its
+    remaining fields, so no tool can ever render as empty again.
+    """
     if not res.get("ok") and res.get("error"):
         return "[%s] ERROR: %s" % (res.get("tool"), res["error"])
     bits = ["[%s] exit=%s backend=%s sandboxed=%s"
             % (res.get("tool"), res.get("exit_code"), res.get("backend"), res.get("sandboxed"))]
+    has_body = False
     if res.get("stdout"):
-        bits.append("stdout: " + _truncate(res["stdout"].strip(), max_chars))
+        bits.append("stdout: " + _truncate(str(res["stdout"]).strip(), max_chars))
+        has_body = True
     if res.get("stderr"):
-        bits.append("stderr: " + _truncate(res["stderr"].strip(), max_chars))
-    if res.get("content"):
-        # JAG-345: fs.read returns its payload in `content`; without this branch the
-        # observation carried only the PATH, so every fs.read reached the model
-        # EMPTY (exit=0, no error) — the agent was blind to every file it read,
-        # including the "read more with fs.read" offload files it was told to open.
+        bits.append("stderr: " + _truncate(str(res["stderr"]).strip(), max_chars))
+        has_body = True
+    if res.get("content") is not None and not res.get("stdout"):
         bits.append("content: " + _truncate(str(res["content"]).strip(), max_chars))
+        has_body = True
     if res.get("path"):
-        bits.append("path: " + res["path"])
+        bits.append("path: " + str(res["path"]))
+    if res.get("observation"):
+        bits.append(_truncate(str(res["observation"]).strip(), max_chars))
+        has_body = True
+    if not has_body:
+        extras = {k: v for k, v in res.items()
+                  if k not in _OBS_NOISE and k not in ("path", "content", "stdout", "stderr")}
+        if extras:
+            bits.append("result: " + _truncate(
+                json.dumps(extras, ensure_ascii=False, default=str), max_chars))
     return "\n".join(bits)
