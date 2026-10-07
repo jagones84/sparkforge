@@ -2959,3 +2959,30 @@ Documentato (spec piattaforme/arch):
   Linux arm64/aarch64 DGX Spark) + riga tabella "drives ANY model" + heading Windows x64.
 - `CONTRIBUTING.md`: regola cross-platform aggiornata con le 3 architetture.
 - `docs/ARCHITECTURE.md`: diagramma `(Linux x86_64/arm64 · Windows)`.
+
+## 2026-10-07 (cont.) — Bug-hunt sistematico (Debug_skill.txt + systematic-debugging)
+
+Metodo (Iron Law: root cause PRIMA del fix): baseline determinismo (battery x3), audit
+igiene test, scan statico (except silenziosi, mutable default, `== None`, TODO). Trovato e RISOLTO:
+
+1. **4 wall-clock race nella battery** — violano la regola scritta in `tests/README.md`
+   ("no sleep-loops, no wall-clock races") e la regola 1 del doc: v204 (scadenza TTL
+   memoria), v222 (late-write concorrente), v281 (output terminale HTTP), v287 (dispatch
+   routine) usavano `time.sleep()` FISSO per attendere un effetto asincrono. Ora:
+   polling della CONDIZIONE reale con timeout limitato (v204/v281/v287) o ordinamento
+   deterministico via `threading.Event` (v222). Nessuno sleep statico resta nella battery;
+   restano solo gli intervalli 0.02/0.05 DENTRO i loop di polling (pattern approvato).
+
+2. **Gate property MORTO + buco di copertura** — `server.extract_json` (parsing
+   prose->azione, usato da chat/agent loop) non aveva NESSUN test eseguibile: l'unico
+   guard era `tests/properties/test_pure_logic.py`, che richiede `hypothesis` (non
+   installato) e non gira in battery/CI. Aggiunto `tests/acceptance/v345_json_extract_props.py`
+   (property test stdlib, seeded: 400 casi random + edge + input malformato). 10/10 PASS.
+   battery **104 -> 105**.
+
+Verifica: battery **105/105 GREEN** x3 (~11-12s, 0 flaky). Contatori aggiornati
+(README badge+cmd, AGENTS, CONTRIBUTING, tests/README, bug_report) + CHANGELOG [Unreleased].
+
+Nota (NON risolta, solo segnalata): `tests/mega_test.sh` promette
+ruff+mypy+bandit+hypothesis+mutmut ma nessuno è installato -> la "ladder completa" è
+morta; la CI esegue solo la battery (stdlib). `setup.cfg` configura mutmut su taskgraph.py.

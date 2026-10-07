@@ -72,15 +72,19 @@ s2 = server.get_or_create_session(SID2, title="t2")
 server.clear_abort(SID2)
 
 
+_release = threading.Event()
+
+
 def late_worker():
-    time.sleep(0.25)
+    _release.wait(2.0)
     server.append_message(s2, "assistant", "reply after delete")
     server.save_session(s2)
 
 
 th = threading.Thread(target=late_worker)
 th.start()
-delete_like_handler(SID2)
+delete_like_handler(SID2)   # delete happens FIRST (no wall-clock race)
+_release.set()              # only now release the late worker to write
 th.join()
 check("C1 a concurrent late worker cannot resurrect the file",
       not os.path.isfile(spath(SID2)), "exists=%s" % os.path.isfile(spath(SID2)))

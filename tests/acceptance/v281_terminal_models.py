@@ -70,8 +70,14 @@ check("reset drops the shell", T.reset("v281") is True and T.peek("v281") is Non
 # --- 2) the HTTP surface -----------------------------------------------------
 r = A.term_exec({"session": "v281t", "cmd": "echo api-term"})
 check("term_exec accepts a command", r.get("ok") is True)
-time.sleep(0.4)
-pol = A.term_poll({"session": "v281t", "cursor": "0"})
+_deadline = time.time() + 5.0
+pol = {"events": []}
+while time.time() < _deadline:
+    pol = A.term_poll({"session": "v281t", "cursor": "0"})
+    if any(e.get("kind") == "out" and "api-term" in e.get("text", "")
+           for e in pol.get("events", [])):
+        break
+    time.sleep(0.05)
 check("term_poll returns the streamed output",
       any(e.get("kind") == "out" and "api-term" in e.get("text", "")
           for e in pol.get("events", [])))

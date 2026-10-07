@@ -4,6 +4,22 @@ All notable changes to SparkForge are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Determinism of the regression battery.** Four acceptance tests awaited async
+  side-effects with fixed `time.sleep()` calls (v204 memory TTL, v222 concurrent
+  late-write, v281 terminal output, v287 routine dispatch) — wall-clock races that
+  can fail under load. They now poll the real condition with a bounded timeout, or
+  order the threads with an `Event`, so the outcome is deterministic.
+
+### Added
+- **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate
+  for `server.extract_json` (400 randomized wrapped values + edge cases + malformed
+  input). This closes a real coverage gap: `extract_json` previously had no runnable
+  test — its only guard was `tests/properties/test_pure_logic.py`, which needs an
+  uninstalled `hypothesis` and never ran. Battery: 104 → 105.
+
 ## [1.0.0] — 2026-10-07
 
 The first tagged release. SparkForge is a local-first, stdlib-only agent harness that

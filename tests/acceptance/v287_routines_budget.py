@@ -61,7 +61,9 @@ check("not due before its time", R.due(now=made["routine"]["created"]) == [])
 future = time.time() + 100000
 fired = R.tick(now=future)
 check("tick fires a due routine", any(x.get("state") == "dispatched" for x in fired))
-time.sleep(0.3)
+_deadline = time.time() + 3.0
+while time.time() < _deadline and not calls:
+    time.sleep(0.02)
 check("the routine ran the agent's goal", bool(calls) and calls[0] == ("sess-x", "keep the lights on"))
 check("the routine advanced last_run + runs count",
       (R.get("R1")["runs"] >= 1) and R.get("R1")["last_run"] is not None)

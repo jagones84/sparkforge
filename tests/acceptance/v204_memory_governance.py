@@ -74,7 +74,9 @@ rec_t = [x for x in mem.query(None, "memory.store", 1000) if x.get("mid") == mid
 check("B1 ttl recorded as expires_ts", rec_t and rec_t[0].get("expires_ts"),
       str(rec_t[0].get("expires_ts")) if rec_t else "none")
 check("B2 not expired before deadline", rec_t and not mem.is_expired(rec_t[0]), "")
-time.sleep(0.6)
+_deadline = time.time() + 3.0
+while time.time() < _deadline and not (rec_t and mem.is_expired(rec_t[0])):
+    time.sleep(0.02)
 check("B3 expired after deadline", rec_t and mem.is_expired(rec_t[0]), "")
 gq = mem.governed_query(kind="memory.store", limit=50)
 check("B4 expired dropped from governed_query",
