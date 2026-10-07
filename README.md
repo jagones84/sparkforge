@@ -3,7 +3,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![stdlib-only](https://img.shields.io/badge/dependencies-none%20(stdlib)-brightgreen.svg)](#install--run)
-[![tests](https://img.shields.io/badge/battery-111%2F111%20green-success.svg)](#the-quality-gate)
+[![tests](https://img.shields.io/badge/battery-112%2F112%20green-success.svg)](#the-quality-gate)
 [![CI](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml/badge.svg)](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml)
 
 **SparkForge is not another meta-harness that just spawns sub-agents.** It is a
@@ -151,7 +151,7 @@ The **only** regression gate is one deterministic, fully-isolated battery — it
 every `SPARKFORGE_*` data dir at a throwaway temp dir, so it never touches live state:
 
 ```bash
-bash tests/battery.sh        # → === battery: 111/111 GREEN ===
+bash tests/battery.sh        # → === battery: 112/112 GREEN ===
 ```
 
 CI runs the same battery on every push/PR ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

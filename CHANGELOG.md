@@ -70,6 +70,17 @@ All notable changes to SparkForge are documented here. The format follows
 - **`tests/acceptance/v351_android_skill_adb.py`** — a guard that the Android
   build/deploy skill keeps the working DGX→phone ADB guidance (a direct
   `adb connect oneplus-15r:5555`) and the ARM64 `compileSdk 34` rule.
+- **Appearance settings (WebUI).** A new Settings → **Appearance** panel with three
+  themes — **Indigo** (the house blue/purple), **Dark** (neutral graphite) and
+  **Sabbia** (warm Egyptian sand & ochre) — applied pre-paint (no flash) and saved per
+  device, plus a **Bolder text** preference. The whole surface is token-driven (panels,
+  sidebars, popovers, tinted hovers, scrollbars, ambient gradients), so each theme is
+  coherent rather than a background swap. Guarded by
+  `tests/acceptance/v352_appearance_theme.py`.
+- **Compaction model in the chat model menu.** The topbar `model ▾` picker now carries a
+  `⛭ compaction` row: click it to switch the list into *compaction mode* and pin the model
+  that summarizes/compacts the transcript (the `summarizer` role, via `POST /api/routing`).
+  The same control remains under Settings → Models.
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate
   for `server.extract_json` (400 randomized wrapped values + edge cases + malformed
   input). This closes a real coverage gap: `extract_json` previously had no runnable

@@ -678,7 +678,96 @@
   .bubble.md-content img { max-width: 100%; border-radius: 8px; }
   .bubble .artprev { margin-top: 6px; }
   .bubble .artprev iframe { width: 100%; height: 320px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  /* ==== JAG-352 theme system: indigo (default) · dark · sabbia ============ */
+  :root {
+    --grad-a: #141a3a; --grad-b: #241638; --hdr: rgba(8,10,20,.6);
+    --bg2: #121722; --aside: rgba(8,10,20,.45);
+    --hover: rgba(120,140,255,.14); --sel: rgba(120,140,255,.2);
+    --hl: rgba(120,140,255,.22); --menubg: #0f1320;
+    --menuline: rgba(120,140,255,.28); --chipbg: rgba(120,140,255,.14);
+    --chipbd: rgba(130,150,255,.16); --scroll: rgba(139,123,240,.45);
+  }
+  html[data-theme="dark"] {
+    --bg: #0b0d12; --panel: rgba(24,27,34,.78); --panel2: rgba(17,19,25,.88);
+    --line: rgba(255,255,255,.09); --txt: #e9edf3; --dim: #8b93a3;
+    --acc: #8fa6c8; --acc2: #b9c6dc; --ok: #57d38a; --warn: #e6b455; --err: #e77b7b;
+    --accent: #9fb0cb; --you: #a9c2e8; --info: #6fc7e8;
+    --bg-2: #14171e; --bg-3: #181c24; --line-2: #232833; --ink: #c7ced9; --muted: #7e8697;
+    --bg2: #14171e; --grad-a: #1b2029; --grad-b: #121319; --hdr: rgba(11,13,18,.74);
+    --aside: rgba(8,10,14,.5);
+    --hover: rgba(159,176,203,.12); --sel: rgba(159,176,203,.18);
+    --hl: rgba(159,176,203,.2); --menubg: #0d1015;
+    --menuline: rgba(159,176,203,.24); --chipbg: rgba(159,176,203,.12);
+    --chipbd: rgba(159,176,203,.18); --scroll: rgba(159,176,203,.4);
+    color-scheme: dark;
+  }
+  html[data-theme="sand"] {
+    --bg: #f4ead7; --panel: rgba(255,252,245,.9); --panel2: rgba(250,244,232,.95);
+    --line: rgba(120,92,52,.26); --txt: #382f23; --dim: #6d5c43;
+    --acc: #b4763a; --acc2: #c9a24a; --ok: #3f8f5b; --warn: #b8862a; --err: #c0563f;
+    --accent: #b4763a; --you: #3d6a9e; --info: #3f7f86;
+    --bg-2: #efe4cf; --bg-3: #eadfc7; --line-2: #e0d2b6; --ink: #4a4034; --muted: #6d5c43;
+    --bg2: #efe4cf; --grad-a: #f8ebcf; --grad-b: #efe0e6; --hdr: rgba(247,239,224,.9);
+    --aside: rgba(255,252,245,.6);
+    --hover: rgba(180,118,58,.12); --sel: rgba(180,118,58,.18);
+    --hl: rgba(180,118,58,.2); --menubg: #fbf5e8;
+    --menuline: rgba(180,118,58,.28); --chipbg: rgba(180,118,58,.10);
+    --chipbd: rgba(180,118,58,.22); --scroll: rgba(180,118,58,.4);
+    color-scheme: light;
+  }
+  /* theme polish: re-point the tinted hotspots at the tokens (later rules win) */
+  body { background: radial-gradient(1200px 800px at 80% -10%, var(--grad-a) 0%, var(--bg) 55%),
+                    radial-gradient(900px 700px at -10% 110%, var(--grad-b) 0%, transparent 60%); }
+  header { background: var(--hdr); }
+  aside { background: var(--aside); }
+  .step:hover, .task:hover { background: var(--hover); }
+  * { scrollbar-color: var(--scroll) transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--scroll); background-clip: padding-box; }
+  #qmode option { background: var(--bg2); color: var(--txt); }
+  .model-btn { border-color: var(--menuline); background: var(--chipbg); }
+  .model-btn:hover { background: var(--sel); }
+  #modelMenu { background: var(--menubg); border-color: var(--menuline); }
+  #modelMenu .mi:hover, #plusMenu .mi:hover, .skillrow:hover { background: var(--hover); }
+  #modelMenu .mi.active { background: var(--sel); }
+  #modelMenu .mi.hl { background: var(--hl); outline-color: var(--accent); }
+  .attchip, .chatatt { background: var(--chipbg); border-color: var(--chipbd); }
+  .sf-toast { background: var(--menubg); color: var(--txt); }
+  #settingsWin .sw-nav button.active { background: var(--sel); }
+  /* JAG-352: the compaction-model control inside the chat model menu */
+  #modelMenu .mm-bar { display: flex; align-items: center; gap: 8px; padding: 7px 8px; margin: 2px 2px 4px;
+    border: 1px solid var(--menuline); border-radius: 9px; cursor: pointer; font-size: 11.5px;
+    color: var(--txt); background: var(--chipbg); }
+  #modelMenu .mm-bar:hover { border-color: var(--accent); }
+  #modelMenu .mm-bar .lbl { color: var(--dim); text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
+  #modelMenu .mm-bar .val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  #modelMenu .mm-bar .bg { color: var(--dim); font-size: 10px; }
+  /* appearance panel */
+  .themegrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 560px) { .themegrid { grid-template-columns: 1fr; } }
+  .themecard { display: flex; flex-direction: column; gap: 8px; text-align: left; cursor: pointer;
+    padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); color: var(--txt); }
+  .themecard:hover { border-color: var(--accent); }
+  .themecard.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .themecard .sw { height: 40px; border-radius: 8px; border: 1px solid var(--line); }
+  .themecard .nm { font-weight: 600; font-size: 12.5px; }
+  .themecard .ds { color: var(--dim); font-size: 11px; }
+  /* bolder text preference (default on) */
+  html.bold-text body { font-weight: 500; }
+  html.bold-text .bubble, html.bold-text .card, html.bold-text .sw-main,
+  html.bold-text #modelMenu .mi, html.bold-text .themecard { font-weight: 500; }
+  html.bold-text .remaining, html.bold-text .pill, html.bold-text .sub,
+  html.bold-text .mh, html.bold-text #modelMenu .mh { font-weight: 600; }
+  html.bold-text header .logo { font-weight: 800; }
+  html.bold-text h2 { font-weight: 700; }
 </style>
+<script>
+/* JAG-352: apply the saved theme + text-weight before first paint (no flash). */
+(function () {
+  var t = localStorage.getItem("sf_theme") || "indigo";
+  document.documentElement.dataset.theme = t;
+  if ((localStorage.getItem("sf_bold") || "1") === "1") document.documentElement.classList.add("bold-text");
+})();
+</script>
 </head>
 <body>
 <header id="topbar">
@@ -1132,6 +1221,20 @@
           </div>
           <button class="ghost" onclick="saveReasoning()" title="save the thinking-effort setting">save thinking effort</button>
           <div class="remaining" id="reResult" style="margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="sw-cat" data-cat="appearance" hidden>
+        <h2>Theme</h2>
+        <div class="card">
+          <div class="remaining" style="margin-bottom:8px">Choose how SparkForge looks. Saved on this device, applied instantly.</div>
+          <div class="themegrid" id="themeGrid"></div>
+        </div>
+        <h2>Text</h2>
+        <div class="card">
+          <label class="hrow" style="gap:8px;cursor:pointer">
+            <input type="checkbox" id="boldText" onchange="applyBold(this.checked)">
+            <span>Bolder text — heavier weights on messages, labels and headings, easier to scan.</span>
+          </label>
         </div>
       </div>
     </div>
@@ -2928,12 +3031,48 @@ async function loadModels() {
     modelLabel(); renderModelMenu();
   } catch (e) { /* selector must never break the app */ }
 }
+/* JAG-352: the chat model menu doubles as the compaction-model picker.
+   `_mmMode` toggles the two lists; `_compactRef` mirrors the pinned summarizer. */
+let _mmMode = "chat", _compactRef = "";
+async function loadCompactionRef() {
+  try {
+    const d = await api("GET", "/api/routing");
+    _compactRef = (((d.config || {}).roles || {}).summarizer || {}).model || "";
+    renderModelMenu();
+  } catch (e) { /* the menu must never break on a routing hiccup */ }
+}
+async function chooseCompactionModel(ref) {
+  _compactRef = ref;
+  try {
+    await api("POST", "/api/routing", { roles: { summarizer: { model: ref } } });
+    toast("compaction model: " + _modelShort(ref));
+  } catch (e) { toast("could not save compaction model", "err"); }
+  _mmMode = "chat";
+  const m = $("modelMenu"); if (m) m.hidden = true;
+  if (typeof loadRouting === "function") loadRouting();
+  renderModelMenu();
+}
 function renderModelMenu(q) {
   const box = $("modelMenu"); if (!box) return;
-  const cur = currentModel();
+  const compact = _mmMode === "compact";
+  const cur = compact ? (_compactRef || "") : currentModel();
   const query = (q || "").toLowerCase();
-  box.innerHTML = '<input id="modelSearch" class="inp" placeholder="search models…  (↑↓ · ⏎ · esc)" ' +
-    'style="width:calc(100% - 16px);margin:6px 8px;padding:6px 8px;font-size:12px" value="' + _attr(query) + '">';
+  box.innerHTML = "";
+  const bar = document.createElement("div");
+  bar.className = "mm-bar";
+  bar.title = compact ? "back to chat models"
+    : "choose the model that summarizes the transcript on compact";
+  bar.innerHTML = '<span class="lbl">⛭ compaction</span><span class="val">' +
+    esc(_compactRef ? _modelShort(_compactRef) : "auto (by pattern)") + '</span><span class="bg">' +
+    (compact ? "← chat models" : "change ▸") + '</span>';
+  bar.onclick = (e) => { e.stopPropagation(); _mmMode = compact ? "chat" : "compact"; renderModelMenu(); };
+  box.appendChild(bar);
+  const inp = document.createElement("input");
+  inp.id = "modelSearch"; inp.className = "inp";
+  inp.placeholder = (compact ? "search compaction models…  " : "search models…  ") + "(↑↓ · ⏎ · esc)";
+  inp.style.cssText = "width:calc(100% - 16px);margin:2px 8px 6px;padding:6px 8px;font-size:12px";
+  inp.value = q || "";
+  box.appendChild(inp);
   _modelItems = [];
   const groups = {};
   _modelsCache.forEach(m => {
@@ -2959,7 +3098,7 @@ function renderModelMenu(q) {
         bg.textContent = m.loaded ? "loaded" : (m.ctx ? Math.round(m.ctx / 1024) + "k ctx" : "");
         it.append(dot, nm, bg);
         it.title = m.ref;
-        it.onclick = () => chooseModel(m.ref);
+        it.onclick = () => (compact ? chooseCompactionModel(m.ref) : chooseModel(m.ref));
         it.onmouseenter = () => { _modelHi = _modelItems.indexOf(m); paintModelHi(); };
         _modelItems.push(m);
         box.appendChild(it);
@@ -2968,8 +3107,9 @@ function renderModelMenu(q) {
   if (!_modelItems.length) box.insertAdjacentHTML("beforeend", '<div class="mi">no model</div>');
   _modelHi = Math.max(0, _modelItems.findIndex(m => m.ref === cur));
   paintModelHi();
-  const inp = $("modelSearch");
-  if (inp) { inp.oninput = () => renderModelMenu(inp.value); inp.onkeydown = modelKey; inp.focus(); }
+  inp.oninput = () => renderModelMenu(inp.value);
+  inp.onkeydown = modelKey;
+  inp.focus();
 }
 function paintModelHi() {
   const box = $("modelMenu"); if (!box) return;
@@ -2998,7 +3138,7 @@ function chooseModel(ref) {
   // bar and the auto-compaction trigger stay on the same budget.
   loadCtx();
 }
-$("model-btn").onclick = (e) => { e.stopPropagation(); const m = $("modelMenu"); const open = m.hidden; m.hidden = !open; if (open) renderModelMenu(); };
+$("model-btn").onclick = (e) => { e.stopPropagation(); const m = $("modelMenu"); const open = m.hidden; m.hidden = !open; if (open) { _mmMode = "chat"; renderModelMenu(); } };
 document.addEventListener("click", e => {
   const m = $("modelMenu");
   if (m && !m.hidden && !m.contains(e.target) && e.target.id !== "model-btn") m.hidden = true;
@@ -4180,9 +4320,39 @@ function skillsAutocomplete() {
 
 /* JAG-150: movable settings window (non-blocking). */
 const SETTINGS_CATS = [
-  ["models", "Models"], ["keys", "Keys & Token"], ["mcp", "MCP"], ["skills", "Skills"],
+  ["appearance", "Appearance"], ["models", "Models"], ["keys", "Keys & Token"],
+  ["mcp", "MCP"], ["skills", "Skills"],
   ["rules", "Rules"], ["harness", "Harness"], ["tools", "Tool policy"], ["info", "\u24D8 Info"],
 ];
+/* JAG-352: theme + text-weight. Persisted per device; theme is applied pre-paint
+   by the inline boot script above, these helpers just re-render and save. */
+const THEMES = [
+  { id: "indigo", name: "Indigo", desc: "Blue & purple — the house style",
+    sw: "linear-gradient(120deg,#141a3a,#241638 58%,#8b7bf0)" },
+  { id: "dark", name: "Dark", desc: "Neutral graphite, flat & quiet",
+    sw: "linear-gradient(120deg,#0e1116,#1a1f28 58%,#9fb0cb)" },
+  { id: "sand", name: "Sabbia", desc: "Warm Egyptian sand & ochre",
+    sw: "linear-gradient(120deg,#f8ebcf,#e7d3ab 58%,#b4763a)" },
+];
+function renderThemeGrid() {
+  const g = $("themeGrid"); if (!g) return;
+  const cur = document.documentElement.dataset.theme || "indigo";
+  g.innerHTML = THEMES.map(t =>
+    '<button type="button" class="themecard' + (t.id === cur ? " active" : "") +
+    '" onclick="applyTheme(\'' + t.id + '\')" aria-pressed="' + (t.id === cur) + '">' +
+    '<span class="sw" style="background:' + t.sw + '"></span>' +
+    '<span class="nm">' + t.name + '</span><span class="ds">' + t.desc + '</span></button>').join("");
+}
+function applyTheme(id) {
+  document.documentElement.dataset.theme = id;
+  localStorage.setItem("sf_theme", id);
+  renderThemeGrid();
+}
+function applyBold(on) {
+  document.documentElement.classList.toggle("bold-text", !!on);
+  localStorage.setItem("sf_bold", on ? "1" : "0");
+  const c = $("boldText"); if (c) c.checked = !!on;
+}
 function settingsWin() { return $("settingsWin"); }
 function settingsCategory(name) {
   document.querySelectorAll("#swNav button").forEach(b => b.classList.toggle("active", b.dataset.cat === name));
@@ -4200,6 +4370,11 @@ function settingsCategory(name) {
   else if (name === "models") {
     if (typeof loadRouting === "function") loadRouting();
     if (typeof loadProviders === "function") loadProviders();
+  }
+  else if (name === "appearance") {
+    renderThemeGrid();
+    const bc = $("boldText");
+    if (bc) bc.checked = (localStorage.getItem("sf_bold") || "1") === "1";
   }
   else if (name === "keys") { $("token-input").value = TOKEN || ""; loadKeys(); }
   else if (name === "info") {
@@ -4273,6 +4448,7 @@ async function loadRouting() {
     }
     const cur = ((d.config || {}).roles || {}).summarizer || {};
     const curRef = cur.model || "";
+    _compactRef = curRef;
     const groups = {};
     models.forEach(m => { (groups[m.provider] = groups[m.provider] || { name: m.pname, items: [] }).items.push(m); });
     sel.innerHTML = Object.keys(groups).map(pid => {
@@ -4296,6 +4472,7 @@ async function saveCompactionModel() {
   const m = $("compactionModel").value;
   if (!m) { const el0 = $("compactionResult"); if (el0) el0.textContent = "no model selected"; return; }
   const r = await api("POST", "/api/routing", { roles: { summarizer: { model: m } } });
+  _compactRef = m;
   const el = $("compactionResult");
   if (el) el.textContent = r.error ? ("error: " + r.error) : ("saved: summarizer = " + m);
 }
@@ -5053,7 +5230,7 @@ $("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progres
 $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
-  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadRole(); loadHistory(); connectFeed(); loadSkills();
+  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadRole(); loadHistory(); connectFeed(); loadSkills(); loadCompactionRef();
   attachIfRunning(sessionId);   // JAG-181: a refresh must not lose a running turn
 });
 setInterval(loadStatus, 5000);
