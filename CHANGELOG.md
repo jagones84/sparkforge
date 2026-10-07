@@ -51,11 +51,25 @@ All notable changes to SparkForge are documented here. The format follows
   time-ordered). The delegation record now also carries each teammate's session id
   and points the master at the tool. Guarded by
   `tests/acceptance/v350_session_inspect.py`. Battery 109 → 110.
+- **The Android build/deploy skill steered the agent into failure (SEVERE).** The
+  Jago team could not finish, and it was the harness's *guidance*, not the agent or
+  the infra: `android-app-build-deploy` step 3 prescribed `compileSdk = 36`, but its
+  own reference (`build-on-arm64.md`) proves the ARM64 Debian aapt2 (`2.19`) cannot
+  parse `android-35/36` → the build dies. And step 1 told the agent to *read* the ADB
+  port from `adb devices -l` (empty on the DGX) or from the PC — never to run the
+  trivial, working `adb connect oneplus-15r:5555`. Verified: `adb` over Tailscale
+  works from the DGX (connected, phone authorized) yet **0 `adb connect` executions**
+  exist across ALL sessions, so "install on device" could never succeed. Both steps
+  now lead with the working DGX path (direct `adb connect` + the ARM64 `compileSdk 34`
+  rule). Guarded by `tests/acceptance/v351_android_skill_adb.py`. Battery 110 → 111.
 
 ### Added
 - **`sessions` tool** (read-only): let any agent — above all the coordinator — inspect
   another session's transcript to understand why a teammate is failing and help it.
   Wired in `registry.TOOL_SCHEMAS` + `tools.py`, enabled in `config/tools.yaml`.
+- **`tests/acceptance/v351_android_skill_adb.py`** — a guard that the Android
+  build/deploy skill keeps the working DGX→phone ADB guidance (a direct
+  `adb connect oneplus-15r:5555`) and the ARM64 `compileSdk 34` rule.
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate
   for `server.extract_json` (400 randomized wrapped values + edge cases + malformed
   input). This closes a real coverage gap: `extract_json` previously had no runnable
