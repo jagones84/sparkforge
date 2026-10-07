@@ -819,11 +819,15 @@ def _render_transcript(sess, limit=30, tail=False):
                                 _truncate(str(m.get("content", "")).strip(), 2000))))
     for c in sess.get("tool_cards", []) or []:
         body = c.get("error") or c.get("result") or ""
+        ec = c.get("exit_code")
+        bad = (not c.get("ok")) or (isinstance(ec, int) and ec != 0)
+        label = "FAIL" if bad else "ok"
+        if isinstance(ec, int):
+            label += " exit=%d" % ec
         evs.append((c.get("ts") or 0,
                     "TOOL %s(%s) -> %s\n    %s"
                     % (c.get("tool"), _truncate(str(c.get("args", "")), 200),
-                       "ok" if c.get("ok") else "FAIL",
-                       _truncate(str(body).strip(), 700))))
+                       label, _truncate(str(body).strip(), 700))))
     for j in sess.get("injects", []) or []:
         evs.append((j.get("ts") or 0,
                     "HARNESS(%s): %s" % (j.get("kind"),

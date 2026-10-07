@@ -81,6 +81,19 @@ check("C5 transcript shows the harness injection", "HARNESS(delegation)" in out,
 check("C6 entries are time-ordered (inject ts=1 before user ts=3)",
       out.index("HARNESS(delegation)") < out.index("build the app"), "")
 
+# A failed COMMAND carries ok=True at the tool layer but exit_code=1 — the
+# transcript must show FAIL, or the coordinator mis-reads a broken build as fine.
+sess2 = dict(base)
+sess2["id"] = "sess2"
+sess2["messages"] = []
+sess2["injects"] = []
+sess2["tool_cards"] = [{"tool": "shell", "ok": True, "args": "{}", "result": "boom",
+                        "error": "", "exit_code": 1, "ts": 1}]
+server.save_session(sess2)
+r = tools._sessions({"action": "read", "session": "sess2"}, None)
+check("C7 a non-zero exit renders FAIL (not a bare ok)",
+      "FAIL exit=1" in r.get("stdout", ""), r.get("stdout", "")[:120])
+
 # --- D: explicit errors at the boundary -------------------------------------
 r = tools._sessions({"action": "read", "session": "nope"}, None)
 check("D1 unknown session -> error",
