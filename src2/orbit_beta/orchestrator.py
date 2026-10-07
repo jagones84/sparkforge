@@ -1,0 +1,79 @@
+"""Orchestrator — dispatch a goal to one or many sessions, in the background.
+
+This is the "run a team of agents" core that the stock deck never had: a session
+can be sent a goal with no browser attached. The turn runs server-side by draining
+the SAME generator the SSE chat route uses (`server.chat_stream_gen`), so every
+guarantee of a normal turn still holds — per-session turn lock, transcript
+persistence, task-graph events and feed publishes.
+"""
+import threading
+import time
+
+
+def _server():
+    from sparkforge import server
+    return server
+
+
+class Orchestrator:
+    """Starts background turns on sessions and tracks their jobs."""
+
+    def __init__(self, keep=200):
+        self.keep = keep
+        self._lock = threading.Lock()
+        self._jobs = {}
+
+    def dispatch(self, targets, goal, model=None, mode="goal"):
+        goal = (goal or "").strip()
+        if not goal:
+            return {"ok": False, "error": "goal required", "jobs": []}
+        targets = [t for t in (targets or []) if t]
+        if not targets:
+            return {"ok": False, "error": "no target session", "jobs": []}
+        jobs = [self._start(sid, goal, model, mode) for sid in targets]
+        return {"ok": True, "jobs": jobs, "count": len(jobs)}
+
+    def _start(self, sid, goal, model, mode):
+        srv = _server()
+        sess = srv.get_or_create_session(sid)
+        rec = {
+            "job": "%s:%d" % (sid, int(time.time() * 1000)),
+            "session": sid,
+            "title": sess.get("title"),
+            "goal": goal[:160],
+            "model": model or sess.get("model"),
+            "mode": mode,
+            "started": round(time.time(), 3),
+            "state": "running",
+        }
+        with self._lock:
+            self._jobs[rec["job"]] = rec
+            self._trim()
+
+        def _run():
+            try:
+                gen = srv.chat_stream_gen(sess, goal, model, None,
+                                          autonomous=(mode == "goal"))
+                for _ in gen:      # drain the SSE generator: runs the whole turn
+                    pass
+                rec["state"] = "done"
+            except Exception as exc:  # noqa: BLE001
+                rec["state"] = "error"
+                rec["error"] = str(exc)
+            finally:
+                rec["ended"] = round(time.time(), 3)
+
+        threading.Thread(target=_run, name="orbit-job-" + sid, daemon=True).start()
+        return {"job": rec["job"], "session": sid, "state": "running"}
+
+    def _trim(self):
+        if len(self._jobs) <= self.keep:
+            return
+        for jid in sorted(self._jobs, key=lambda k: self._jobs[k].get("started", 0))[:-self.keep]:
+            self._jobs.pop(jid, None)
+
+    def jobs(self, limit=60):
+        with self._lock:
+            rows = sorted(self._jobs.values(), key=lambda r: r.get("started", 0),
+                          reverse=True)[:limit]
+        return {"jobs": rows}

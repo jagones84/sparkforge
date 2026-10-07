@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""v285 — the detachable Orbit beta console (src2/orbit_beta).
+
+JAG-285 (user): rebuild the /console deck as a coherent, OOP, DETACHABLE beta that
+orchestrates several sessions and can create them ahead of time; the Model Bay must
+show EVERY provider, not only the DGX router.
+
+Locked here:
+  * the beta is importable from `src2/` and exposes `serve_page` + `handle`;
+  * the Model Bay reads the full `providers.catalog` (all providers), not just the
+    local router roster, and maps each model with its context window;
+  * the SessionRegistry can pre-create a session and bind a model;
+  * the Orchestrator refuses an empty goal / no targets (and only then starts work);
+  * the server reaches the beta ONLY through guarded, swallowing hooks, and never
+    imports it at the top level — so deleting `src2/` leaves the app untouched;
+  * the beta routes never shadow a non-orbit path.
+
+Deterministic, no live server. Run: python3 tests/v285_orbit_beta.py
+"""
+import os
+import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
+
+results = []
+
+
+def check(name, ok, detail=""):
+    results.append(bool(ok))
+    print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
+
+
+class FakeHandler:
+    def __init__(self):
+        self.sent = None
+
+    def _send(self, code, obj, ctype=None):
+        self.sent = {"code": code, "obj": obj, "ctype": ctype}
+        return True
+
+
+# --- 0) importable from src2/ -------------------------------------------------
+try:
+    import orbit_beta
+    check("the beta imports from src2/ and exposes the two hooks",
+          callable(getattr(orbit_beta, "serve_page", None))
+          and callable(getattr(orbit_beta, "handle", None)))
+except Exception as exc:  # noqa: BLE001
+    check("the beta imports from src2/ and exposes the two hooks", False, repr(exc))
+    orbit_beta = None
+
+# --- 1) Model Bay = full catalogue -------------------------------------------
+with open(os.path.join(REPO, "src2", "orbit_beta", "bay.py"), encoding="utf-8") as f:
+    bay_src = f.read()
+check("the Model Bay reads the FULL provider catalogue (not the DGX router only)",
+      "catalog(loaded_aliases=" in bay_src and "providers" in bay_src)
+if orbit_beta:
+    from orbit_beta.bay import ModelBay
+    snap = ModelBay().snapshot()
+    check("the snapshot has the expected shape",
+          isinstance(snap.get("providers"), list) and isinstance(snap.get("count"), int)
+          and "default" in snap)
+    p = ModelBay._provider({"id": "x", "name": "X", "kind": "openrouter", "local": False,
+                            "available": True, "base_url": "u", "key_env": "K",
+                            "models": [{"id": "m", "ref": "x:m", "context_length": 128000,
+                                        "loaded": None}]})
+    check("a provider maps models with id/ref/context_length",
+          p["models"][0]["ref"] == "x:m" and p["models"][0]["context_length"] == 128000
+          and p["available"] is True and p["local"] is False)
+
+# --- 2) Session registry: list + pre-create ----------------------------------
+if orbit_beta:
+    from orbit_beta.registry import SessionRegistry
+    reg = SessionRegistry()
+    listed = reg.list()
+    check("the roster lists sessions with a running flag",
+          isinstance(listed.get("sessions"), list) and "active" in listed
+          and all("running" in s for s in listed["sessions"]))
+    made = reg.create(title="orbit-test", model="dgx:test")
+    check("a session can be pre-created and bound to a model",
+          made.get("ok") is True and made.get("session") and made.get("model") == "dgx:test")
+
+# --- 3) Orchestrator guards ---------------------------------------------------
+if orbit_beta:
+    from orbit_beta.orchestrator import Orchestrator
+    orch = Orchestrator()
+    check("dispatch with no goal is refused", orch.dispatch(["s1"], "").get("ok") is False)
+    check("dispatch with no target is refused", orch.dispatch([], "do it").get("ok") is False)
+
+# --- 3b) Attention feed ("what needs me", Paperclip-style) -------------------
+if orbit_beta:
+    from orbit_beta.attention import AttentionFeed
+    from orbit_beta.registry import SessionRegistry as _Reg
+    feed = AttentionFeed(_Reg(), lambda: [{"job": "j1", "session": "s1", "state": "error",
+                                           "error": "boom", "started": 1}])
+    snap = feed.snapshot()
+    check("the attention feed ranks items and exposes the four sources",
+          isinstance(snap.get("items"), list) and "by_severity" in snap
+          and snap["sources"] == ["approval", "failed_run", "blocked_session", "budget_alert"])
+    check("a failed dispatch job becomes a failed_run item",
+          any(i["kind"] == "failed_run" and i["severity"] == "high" for i in snap["items"]))
+    board = AttentionFeed.board(
+        [{"id": "a", "running": True}, {"id": "b", "running": False}, {"id": "c", "running": False}],
+        [{"session": "b"}])
+    check("the board groups sessions into working / needs / idle",
+          len(board["working"]) == 1 and len(board["needs"]) == 1 and len(board["idle"]) == 1)
+
+# --- 4) API surface: routing + page ------------------------------------------
+if orbit_beta:
+    from orbit_beta import api
+    fh = FakeHandler()
+    check("serve_page answers /orbit", api.serve_page(fh, "/orbit") is True
+          and "Orbit" in (fh.sent or {}).get("obj", ""))
+    fh2 = FakeHandler()
+    check("serve_page ignores a non-orbit path", api.serve_page(fh2, "/console") is False)
+    fh3 = FakeHandler()
+    ok = api.handle(fh3, "GET", "/api/orbit/sessions", {}, None)
+    check("GET /api/orbit/sessions answers 200", ok is True and fh3.sent["code"] == 200)
+    fh4 = FakeHandler()
+    ok = api.handle(fh4, "GET", "/api/orbit/models", {}, None)
+    check("GET /api/orbit/models answers 200", ok is True and fh4.sent["code"] == 200)
+    fh4b = FakeHandler()
+    ok = api.handle(fh4b, "GET", "/api/orbit/attention", {}, None)
+    check("GET /api/orbit/attention answers 200 with a board",
+          ok is True and fh4b.sent["code"] == 200 and "board" in fh4b.sent["obj"])
+    fh5 = FakeHandler()
+    check("the beta NEVER shadows a non-orbit path",
+          api.handle(fh5, "GET", "/api/status", {}, None) is False and fh5.sent is None)
+    fh6 = FakeHandler()
+    ok = api.handle(fh6, "POST", "/api/orbit/dispatch", {}, {"goal": ""})
+    check("POST dispatch with no goal is a clean 200 + ok:false",
+          ok is True and fh6.sent["obj"].get("ok") is False)
+
+# --- 5) detachability: server reaches the beta only via guarded hooks ---------
+with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+    srv = f.read()
+check("the server never imports the beta at the top level (no hard dependency)",
+      "\nimport orbit_beta" not in srv)
+check("the server exposes a swallowing _orbit_module()",
+      "def _orbit_module(" in srv and "except Exception:" in srv
+      and "_orbit_cache[\"mod\"] = None" in srv)
+check("the server serves the beta page only behind a guarded hook",
+      "if _orbit_page(self, path):" in srv)
+check("the server delegates beta API routes on every method",
+      all(("_orbit_handle(self, %r" % m).replace("'", '"') in srv
+          for m in ("GET", "POST", "PATCH", "DELETE")))
+
+# --- 6) the UI is OOP + self-contained ---------------------------------------
+with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+    ui = f.read()
+check("the Orbit UI is object-oriented (classes)",
+      all(("class %s" % c) in ui for c in ("Api", "AgentsView", "OrgChartView",
+                                           "JobsView", "RoutinesView", "FeedView", "OrbitApp")))
+check("the UI drives the beta + orchestration endpoints",
+      "/api/orbit/models" in ui and "/api/orbit/sessions" in ui
+      and "/api/agents/tree" in ui and "/api/jobs" in ui)
+check("the UI renders a graphical org chart with node boxes + connectors",
+      'id="orgtree"' in ui and 'class="node"' in ui and ".orgwrap li::before" in ui)
+
+print("---")
+passed = sum(results)
+print("%d/%d PASS" % (passed, len(results)))
+sys.exit(0 if passed == len(results) else 1)

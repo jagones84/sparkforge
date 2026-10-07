@@ -1,0 +1,22 @@
+{
+  "tasks": [
+    {
+      "id": "plan-hello",
+      "goal": "Create a plan with one step titled 'say hello' and then finish.",
+      "expected_actions": ["plan_step", "finish"],
+      "notes": "tests basic planner action + finish"
+    },
+    {
+      "id": "task-triage",
+      "goal": "Add a task called 'water the plants', then mark the current plan progress in a note, then finish.",
+      "expected_actions": ["add_task", "note", "finish"],
+      "notes": "tests task action + note + finish ordering"
+    },
+    {
+      "id": "status-check",
+      "goal": "Check the harness state, add a plan step 'review tasks', and finish with a summary of open work.",
+      "expected_actions": ["plan_step", "finish"],
+      "notes": "tests state awareness + finish summary"
+    }
+  ]
+}

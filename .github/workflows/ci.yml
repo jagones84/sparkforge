@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+# Read-only: the battery is deterministic and isolated (it points every
+# SPARKFORGE_* data dir at a temp dir), so no secrets or network are required.
+permissions:
+  contents: read
+
+jobs:
+  battery:
+    name: Regression battery
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the deterministic battery
+        run: bash tests/battery.sh

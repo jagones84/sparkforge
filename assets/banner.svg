@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="SparkForge — the harness that drives the LLM">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0e1a"/>
+      <stop offset="0.55" stop-color="#111a33"/>
+      <stop offset="1" stop-color="#0b1424"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7cf6ff"/>
+      <stop offset="0.5" stop-color="#6ea8ff"/>
+      <stop offset="1" stop-color="#b388ff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.18" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#3b6bff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#3b6bff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1280" height="320" rx="22" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="22" fill="url(#glow)"/>
+  <rect x="1" y="1" width="1278" height="318" rx="21" fill="none" stroke="#2a3a63" stroke-width="2"/>
+
+  <!-- subtle node-graph motif -->
+  <g stroke="#2f4577" stroke-width="1.4" opacity="0.55" fill="none">
+    <path d="M980 70 L1090 120 L1010 190 L1130 240"/>
+    <path d="M1090 120 L1180 170 L1130 240"/>
+    <path d="M980 70 L1130 240"/>
+  </g>
+  <g fill="#7cf6ff" opacity="0.9">
+    <circle cx="980" cy="70" r="5"/><circle cx="1090" cy="120" r="6"/>
+    <circle cx="1010" cy="190" r="5"/><circle cx="1180" cy="170" r="5"/>
+    <circle cx="1130" cy="240" r="6"/>
+  </g>
+
+  <!-- bolt -->
+  <path d="M96 60 L150 60 L118 140 L172 140 L92 262 L116 168 L70 168 Z"
+        fill="url(#spark)" stroke="none"/>
+
+  <text x="210" y="150" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="82" font-weight="800" fill="#eaf1ff" letter-spacing="1">SparkForge</text>
+  <text x="213" y="196" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="26" font-weight="600" fill="#9fc0ff">The agent harness built to DRIVE the LLM.</text>
+  <text x="213" y="238" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="21" font-weight="500" fill="#6f8ec4">Meta-agents · Teams of agents · Real tools, skills &amp; verification · stdlib-only</text>
+</svg>

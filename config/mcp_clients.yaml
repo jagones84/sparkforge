@@ -1,0 +1,25 @@
+# SparkForge external MCP clients — v0.7
+# Each entry: command+args (stdio) OR url (HTTP streamable). Optional headers
+# support ${VAR} expansion; env_files are loaded before expansion (KEY=VALUE).
+#
+# This TRACKED file ships EXAMPLES only and stays generic (no machine paths, no
+# tokens, no required server). Add your own clients, preferably from the WebUI
+# (Settings -> MCP -> "Edit mcp.json"), which writes the gitignored
+# config/mcp_clients.local.json in format {"mcpServers": {...}}.
+env_files:
+  - .env
+  - ~/.hermes/.env
+
+clients: {}
+
+# --- examples (copy into config/mcp_clients.local.json to use) --------------
+# clients:
+#   filesystem:
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/YOU"]
+#     enabled: true
+#   my-gateway:
+#     url: http://127.0.0.1:3344/mcp
+#     headers:
+#       Authorization: Bearer ${MY_GATEWAY_TOKEN}
+#     enabled: true

@@ -1,0 +1,255 @@
+# SparkForge tool registry — v0.2
+# Declarative allowlist + approval policy. Edit and POST /api/tools to reload
+# (or just restart the server). Nothing here is enabled for destructive use:
+# unknown tools are denied, and every mutating action needs an approval gate.
+version: "0.2"
+
+# ---- real sandbox (bubblewrap / nsjail / container) --------------------------
+sandbox:
+  # auto | docker | bwrap | nsjail | none
+  #   auto  -> first working backend of: docker, bwrap, nsjail
+  #   none  -> run on the host (NOT sandboxed; marked `sandboxed: false`)
+  #
+  # JAG-59: "tutto deve vivere sul DGX" — the shell tool must use the real DGX
+  # environment (JDK/Gradle/Android SDK/adb + the repo), which an alpine
+  # container cannot provide. So we run on the host. Mutating commands are
+  # still approval-gated and checked against the `deny` list below.
+  backend: none
+  image: alpine:latest          # container image for the docker backend
+  timeout_secs: 900             # per-command wall clock (APK builds take minutes)
+  network: true                 # host network (docker backend would use --network host)
+  memory_mb: 256
+  pids_limit: 128
+  cpus: "1.0"
+  workspace: data/sandbox       # per-run scratch dir bind-mounted as /work
+
+# ---- approvals ---------------------------------------------------------------
+approvals:
+  timeout_secs: 300             # how long a run waits for a human decision
+
+# ---- runtime / long-horizon (JAG-129) ---------------------------------------
+# Controlla il loop di completamento: l'harness non lascia chiudere il turno
+# finche' la TASK LIST ha passi aperti. Editabile anche dalla WebUI (Config).
+runtime:
+  keepgoing_max: 8          # giri di continuazione prima dello stop 'budget'
+  no_progress_rounds: 2     # giri senza progresso prima dello stop 'no_progress'
+  max_wall_secs: 3600       # tetto di tempo per run
+  subagent_max_depth: 2     # profondita' massima della matrioska
+
+# ---- verifier "apply-only-if-green" (JAG-131) -------------------------------
+# Quando attivo, dopo OGNI fs.write/fs.edit l'harness esegue `command` nella
+# sandbox: se NON passa, la modifica viene annullata (rollback) e il modello
+# riceve l'errore. Default DISATTIVO (command vuoto) per non sorprendere.
+# Esempio per un repo Python:  command: "python3 -m pytest -q"
+verifier:
+  enabled: false
+  command: ""               # comando di verifica (vuoto = nessuna verifica)
+  timeout_secs: 120         # timeout del check
+  paths: []                 # se non vuoto, verifica solo i path che contengono uno di questi
+
+# ---- best-of-N + rank (JAG-132) ---------------------------------------------
+# Test-time compute: per uno step non banale campiona N candidati e sceglie il
+# migliore con il ranker deterministico (prm.rank_text), invece del primo.
+# n: 1 = disattivato (comportamento attuale, nessun overhead).
+bestofn:
+  enabled: false
+  n: 1
+  min_score: 0.0            # se il migliore resta sotto questa soglia -> nessuna scelta
+
+# ---- difficulty / budget adattivo (JAG-134) ---------------------------------
+# Compute-optimal test-time compute: stima la difficolta' del task (deterministica,
+# dai segnali che l'harness gia' ha) e scala di conseguenza N (best-of-N) e i giri
+# di continuazione (keepgoing_max). Con enabled: false tutto torna al budget fisso.
+difficulty:
+  enabled: true
+  easy_n: 1                 # candidati best-of-N per task facile
+  medium_n: 2
+  hard_n: 3
+  medium_at: 0.35           # punteggio >= -> "medium"
+  hard_at: 0.65             # punteggio >= -> "hard"
+
+# ---- self-evolving skills (JAG-133/135) -------------------------------------
+# Se l'harness ripete la stessa sequenza di tool su run diversi, la impacchetta
+# come skill. Stadio 1 = bozza; stadio 2 = synth + verify in sandbox + archive
+# (solo se verde). min_len/min_count/max_len = soglie del miner.
+selfevolve:
+  min_len: 2                # lunghezza minima della sequenza (n. tool)
+  min_count: 3              # su quante run diverse deve ripetersi
+  max_len: 6                # lunghezza massima cercata
+  category: auto            # skills/<category>/<nome> alla promozione
+  verify_timeout: 60        # timeout del check in sandbox
+
+# ---- tool registry -----------------------------------------------------------
+tools:
+
+  # arbitrary command execution — always sandboxed, approval-gated
+  shell:
+    enabled: true
+    approval: required
+    # read-only / non-mutating commands are auto-approved (still recorded)
+    auto_approve:
+      - "^ls(\\s|$)"
+      - "^pwd$"
+      - "^whoami$"
+      - "^id(\\s|$)"
+      - "^date(\\s|$)"
+      - "^uname(\\s|$)"
+      - "^hostname$"
+      - "^cat(\\s|$)"
+      - "^head(\\s|$)"
+      - "^tail(\\s|$)"
+      - "^wc(\\s|$)"
+      - "^echo(\\s|$)"
+      - "^printf(\\s|$)"
+      - "^find(\\s|$)"
+      - "^rg(\\s|$)"
+      - "^grep(\\s|$)"
+      - "^env$"
+      - "^which(\\s|$)"
+    # hard blocks — never executed, even with approval
+    deny:
+      - "rm\\s+-rf\\s+/(\\s|$)"
+      - "\\bmkfs(\\s|$)"
+      - "\\bdd\\s+if=/dev/(zero|random)"
+      - ":\\s*\\(\\s*\\)\\s*\\{"
+      - "\\b(shutdown|reboot|poweroff)\\b"
+      - ">\\s*/dev/(sd|nvme|mmcblk)"
+
+  # read a file (host-side, constrained to allowed roots)
+  fs.read:
+    enabled: true
+    approval: auto
+    roots:
+      - "."
+      - "/home/jagones/Repositories"
+
+  # write a file (host-side, constrained to the allowed roots; JAG-59: the repo
+  # root so the agent can create/edit the DGX repos it works on)
+  # JAG-61: also allow the Repositories parent — "." resolves to REPO
+  # (sparkforge/), so without this the agent cannot write to sibling repos like
+  # tododemo (it would fall back to printf-through-shell).
+  fs.write:
+    enabled: true
+    approval: required
+    roots:
+      - "."
+      - "/home/jagones/Repositories"
+
+  # surgical edit: exact search/replace inside a file (safer than rewriting
+  # the whole file with fs.write); same roots as fs.write
+  fs.edit:
+    enabled: true
+    approval: required
+    roots:
+      - "."
+      - "/home/jagones/Repositories"
+
+  # git — read-only subcommands auto-approved, mutating ones need approval
+  git:
+    enabled: true
+    approval: required
+    roots:
+      - "."
+      - "/home/jagones/Repositories"
+    auto_approve:
+      - "^status(\\s|$)"
+      - "^log(\\s|$)"
+      - "^diff(\\s|$)"
+      - "^show(\\s|$)"
+      - "^branch(\\s|$)"
+      - "^remote(\\s|$)"
+      - "^rev-parse(\\s|$)"
+      - "^describe(\\s|$)"
+      - "^ls-files(\\s|$)"
+      - "^tag(\\s|$)"
+    deny:
+      - "^push(\\s|$)"
+
+  # HTTP fetch from the harness process (needs net, so not inside the sandbox)
+  http:
+    enabled: true
+    approval: required
+    auto_approve: []
+    allow_hosts:
+      - "127.0.0.1"
+      - "localhost"
+
+  # lightweight page fetcher/HTML->text (NOT a headless browser); off by default
+  browser:
+    enabled: false
+    approval: required
+    auto_approve: []
+    allow_hosts: []
+
+  # public-internet search + fetch (JAG-83): Tavily/Brave when a key is present
+  # (read from ~/.hermes/.env), else keyless DuckDuckGo; pages via r.jina.ai or
+  # direct HTML->text. Read-only, SSRF-guarded (public hosts only).
+  web:
+    enabled: true
+    approval: auto
+    auto_approve: []
+
+  # unified diff of two files or two texts (stdlib difflib) — read-only
+  diff:
+    enabled: true
+    approval: auto
+    roots:
+      - "."
+      - "/home/jagones/Repositories"
+
+  # self-knowledge: repo/config paths, skill/MCP install recipe, systemd state
+  self:
+    enabled: true
+    approval: auto
+
+  # recover sessions left with an unanswered user turn by a hard restart/crash
+  # (JAG-263): closes the orphan + releases 'doing' todos. Safe + idempotent, so
+  # the agent may call it on its own when a session looks stuck.
+  reconcile:
+    enabled: true
+    approval: auto
+
+  # skills registry (v0.7.1): list/search/audit/read agent skills from
+  # skills/<cat>/<name>/SKILL.md (symlinked skill distribution). Read-only, safe.
+  skills:
+    enabled: true
+    approval: auto
+
+  # agent memory (JAG-73): store/recall durable notes across sessions; the file
+  # writes are append-only under data/memory, so it is always safe.
+  memory:
+    enabled: true
+    approval: auto
+
+  improve:
+    enabled: true
+    approval: auto
+
+  # external MCP tools appear as <client>__<tool> (config/mcp_clients.yaml);
+  # default policy is approval=required. Read-only pmcp gateway probes are
+  # auto-approved so the agent can observe real MCP output.
+  pmcp__gateway.health:
+    enabled: true
+    approval: auto
+  pmcp__gateway.config_status:
+    enabled: true
+    approval: auto
+  pmcp__gateway.tasks_list:
+    enabled: true
+    approval: auto
+  pmcp__gateway.catalog_search:
+    enabled: true
+    approval: auto
+  pmcp__gateway.describe:
+    enabled: true
+    approval: auto
+  pmcp__gateway.invoke:
+    enabled: true
+    approval: required
+
+  # JAG-125: Python snippet runner (MCP client `python_sandbox`). Pyodide/WASM:
+  # no host filesystem, no shell, no network — safe to auto-approve so the model
+  # can actually compute/execute snippets instead of hunting the pmcp catalog.
+  python_sandbox__run_python_code:
+    enabled: true
+    approval: auto

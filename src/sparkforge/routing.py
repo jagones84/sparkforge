@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+"""SparkForge multi-model routing — v0.3 role-based model selection + fallback.
+
+The llama.cpp router on :8080 exposes a roster of models (some loaded, some
+unloaded). Routing picks the model per *role* (chat, planner, agent, subagent,
+summarizer) by matching configured alias patterns against the live roster,
+preferring loaded models, then falling back through a chain that ends with the
+DeepSeek alias.
+
+Config: `config/routing.yaml` (edited via POST /api/routing):
+
+    roles:
+      chat:     {pattern: "nex-n25-mini", fallbacks: ["qwen", "glm", "deepseek"]}
+      planner:  {pattern: "qwen", fallbacks: ["nex", "glm", "deepseek"]}
+      ...
+    default_fallbacks: ["nex", "qwen", "glm", "deepseek"]
+    deepseek_fallback: "deepseek"
+
+Matching is a case-insensitive substring match on the roster alias, in the
+order the patterns appear. `pick()` returns None only if the roster itself is
+unreachable — callers then keep their current default behaviour.
+"""
+
+import os
+import re
+import threading
+
+from . import registry
+
+REPO = registry.REPO
+CONFIG_PATH = os.path.join(REPO, "config", "routing.yaml")
+
+DEFAULT_CONFIG = {
+    "roles": {
+        "chat": {"pattern": "nex", "fallbacks": ["qwen", "glm", "deepseek"]},
+        "planner": {"pattern": "qwen", "fallbacks": ["nex", "glm", "deepseek"]},
+        "agent": {"pattern": "nex", "fallbacks": ["qwen", "glm", "deepseek"]},
+        "subagent": {"pattern": "glm", "fallbacks": ["nex", "qwen", "deepseek"]},
+        "summarizer": {"pattern": "glm", "fallbacks": ["nex", "qwen", "deepseek"]},
+    },
+    "default_fallbacks": ["nex", "qwen", "glm", "deepseek"],
+}
+
+_lock = threading.RLock()
+_cache = None
+
+
+def _srv():
+    from . import server
+    return server
+
+
+def _yaml_load(text):
+    try:
+        import yaml
+        return yaml.safe_load(text)
+    except Exception:
+        pass
+    # minimal fallback: JSON-lookalike configs also parse
+    import json
+    try:
+        return json.loads(text)
+    except Exception:
+        return dict(DEFAULT_CONFIG)
+
+
+def _yaml_dump(data):
+    try:
+        import yaml
+        return yaml.safe_dump(data, sort_keys=False)
+    except Exception:
+        import json
+        return json.dumps(data, indent=2)
+
+
+def load_config(reload=False):
+    global _cache
+    with _lock:
+        if _cache is not None and not reload:
+            return _cache
+        if os.path.isfile(CONFIG_PATH):
+            cfg = _yaml_load(open(CONFIG_PATH, encoding="utf-8").read()) or {}
+        else:
+            cfg = dict(DEFAULT_CONFIG)
+            save_config(cfg)
+        _cache = cfg
+        return cfg
+
+
+def save_config(cfg):
+    global _cache
+    with _lock:
+        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            f.write(_yaml_dump(cfg))
+        _cache = cfg
+
+
+def _roster():
+    try:
+        return _srv().router_models()
+    except Exception:
+        return []
+
+
+def _match(patterns, roster, loaded_only=True):
+    """First roster alias matching any pattern (substring, case-insensitive)."""
+    for pat in patterns:
+        rx = re.compile(re.escape(str(pat)), re.I)
+        for m in roster:
+            if loaded_only and not m.get("loaded"):
+                continue
+            if rx.search(m.get("alias") or ""):
+                return m["alias"]
+    if loaded_only:
+        # nothing loaded matched: fall back to any matching alias at all
+        return _match(patterns, roster, loaded_only=False)
+    return None
+
+
+def pick(role, preferred=None):
+    """Choose the model alias for a role.
+
+    Order: explicit `preferred` (if present in the roster) → role pattern
+    (loaded first) → role fallbacks → default fallbacks → any loaded model.
+    Returns None if the roster is empty (caller keeps its own default).
+    """
+    cfg = load_config()
+    roster = _roster()
+    if not roster:
+        return None
+    if preferred:
+        for m in roster:
+            if m.get("alias") == preferred:
+                return preferred
+    entry = (cfg.get("roles") or {}).get(role) or {}
+    chain = [entry.get("pattern")] + list(entry.get("fallbacks") or []) + \
+            list(cfg.get("default_fallbacks") or [])
+    chain = [c for c in chain if c]
+    return _match(chain, roster)
+
+
+def role_model(role):
+    """Explicit model ref configured for a role (e.g. roles.summarizer.model).
+
+    JAG-160: lets the WebUI pin an EXACT model (a local alias OR a
+    ``provider:model`` ref) instead of a substring pattern. Returns None when
+    unset, so callers keep the pattern/fallback behaviour of ``pick()``.
+    """
+    entry = (load_config().get("roles") or {}).get(role) or {}
+    return entry.get("model") or None
+
+
+def fallback_chain(role):
+    """Full alias candidates for a role, resolved against the roster.
+
+    Used for live-call fallback: when the primary model fails, the caller
+    retries down this chain. The DeepSeek alias always terminates the chain.
+    """
+    cfg = load_config()
+    roster = _roster()
+    entry = (cfg.get("roles") or {}).get(role) or {}
+    chain = [entry.get("pattern")] + list(entry.get("fallbacks") or []) + \
+            list(cfg.get("default_fallbacks") or [])
+    chain = [c for c in chain if c]
+    out, seen = [], set()
+    for pat in chain:
+        alias = _match([pat], roster, loaded_only=False)
+        if alias and alias not in seen:
+            out.append(alias)
+            seen.add(alias)
+    return out
+
+
+def status():
+    roster = _roster()
+    cfg = load_config()
+    roles = {}
+    for role in (cfg.get("roles") or {}):
+        roles[role] = {
+            "model": (cfg.get("roles", {}).get(role) or {}).get("model"),
+            "selected": pick(role),
+            "chain": fallback_chain(role),
+        }
+    return {"config": cfg, "roster": roster, "roles": roles,
+            "config_path": CONFIG_PATH}
+
+
+def update(body):
+    """POST /api/routing — update role patterns/fallbacks, persist to yaml."""
+    cfg = load_config()
+    roles = body.get("roles") or {}
+    for role, entry in roles.items():
+        cur = cfg.setdefault("roles", {}).setdefault(role, {})
+        if "model" in entry:
+            # JAG-160: explicit model ref (local alias or provider:model); an
+            # empty value clears the pin and restores pattern-based selection.
+            if entry.get("model"):
+                cur["model"] = str(entry["model"])
+            else:
+                cur.pop("model", None)
+        if "pattern" in entry:
+            cur["pattern"] = str(entry["pattern"])
+        if "fallbacks" in entry:
+            cur["fallbacks"] = [str(f) for f in entry["fallbacks"]]
+    if "default_fallbacks" in body:
+        cfg["default_fallbacks"] = [str(f) for f in body["default_fallbacks"]]
+    save_config(cfg)
+    return status()

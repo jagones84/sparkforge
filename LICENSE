@@ -1,0 +1,26 @@
+                    GNU AFFERO GENERAL PUBLIC LICENSE
+                       Version 3, 19 November 2007
+
+ Copyright (C) 2025-2026 Giovanni J. Agones / jagones84
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Affero General Public License for more details.
+
+ You should have received a copy of the GNU Affero General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+=== ADDITIONAL TERMS UNDER SECTION 7 OF AGPL-3.0 ===
+
+This software is a "harness" for AI agents. Any deployment as a service
+(SaaS, PaaS, or similar network interaction) MUST provide the Corresponding
+Source to all users interacting with the software through a computer network.
+
+Commercial use is permitted ONLY IF the Corresponding Source is made
+available under the same AGPL-3.0 license terms.

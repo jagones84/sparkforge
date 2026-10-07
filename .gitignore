@@ -1,0 +1,71 @@
+__pycache__/
+.pytest_cache/
+data/
+*.log
+.venv/
+eval/results/
+
+# JAG-180: editor/agent backup + temp files must never reach the repo.
+*.bak
+*.bak-*
+*.orig
+*.tmp
+
+# Secrets — NEVER commit API keys (JAG-71). Providers reference their key by
+# env-var name and the values live in a .env / ~/.hermes/.env, both ignored here.
+.env
+.env.*
+*/.env
+*/.env.*
+!.env.template
+
+# Ephemeral agent helpers / temp test harnesses (workspace rule: keep trash out
+# of the repo; official scripts live at the repo root or under scripts/).
+trash/
+
+# JAG-108: user-added external MCP clients are persisted here (commands, headers
+# and tokens must never reach the tracked repo).
+config/mcp_clients.local.yaml
+config/mcp_clients.local.json
+
+# JAG-109: user-installed skills (zip upload) — never in the repo.
+skills/local/
+
+# JAG-112: user-added/overridden providers land here (never the tracked base).
+config/providers.local.yaml
+
+.superpowers/
+
+# JAG-311: the e2e WebUI test project (Node). It consumes the sibling cloned
+# `tester-army/e2e` framework via file: links; its own .gitignore drops the
+# node_modules and .e2e/, and the whole folder is kept local (not part of the
+# Python package). Remove this line to version the tests.
+e2e/
+
+# refactor-20261006: generated, never track
+outputs/
+mutants/
+tests/.e2e/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.nightly_stop
+nohup.out
+
+# Hypothesis property-test database (tests/properties).
+.hypothesis/
+
+# Compiled Python that escapes a __pycache__ dir (e.g. hand-copied artifacts).
+*.pyc
+*.pyo
+
+# OS / editor cruft (never share a machine's local state).
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+

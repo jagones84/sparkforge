@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""v295 — bug-hunt fixes (JAG-298): WebUI + backend defects found in a live audit.
+
+Locked here:
+  * index.html: `copyText`/`copyBtn` are no longer shadowed (a later 1-arg
+    `copyText` used to hoist over the 2-arg button copy → "[object HTMLButtonElement]");
+  * index.html: renderTools escapes tool name/description (MCP-controlled strings);
+  * index.html: loadApprovals is guarded (polled every 4s, was an unhandled rejection);
+  * orbit.html: the 5s auto-poll no longer rebuilds the agent table mid-edit;
+  * console.html: the event stream subscribes to NAMED /api/feed frames (onmessage never fired);
+  * editor.js: closeTab keeps the right active tab; refreshAll warns before discarding edits;
+  * orbit_beta/api.py: POST routes map `{"ok": false}` to HTTP 400 (were always 200);
+  * server.publish: the payload's own `id`/`ts` are renamed BEFORE the DB insert, so replay
+    from SQLite no longer clobbers the integer envelope id;
+  * server: raw audio/zip uploads cap the Content-Length read (memory-DoS).
+
+Deterministic, no live model. Run: python3 tests/v295_bugfix.py
+"""
+import json
+import os
+import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(REPO, "src"))
+sys.path.insert(0, os.path.join(REPO, "src2"))
+
+results = []
+
+
+def check(name, ok, detail=""):
+    results.append(bool(ok))
+    print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
+
+
+def read(*parts):
+    with open(os.path.join(REPO, *parts), encoding="utf-8") as f:
+        return f.read()
+
+
+# ---------------------------------------------------------------- index.html
+gui = read("webui", "index.html")
+_gui_lines = gui.splitlines()
+check("copyText/copyBtn no longer shadowed",
+      any(l.startswith("function copyBtn(btn, text)") for l in _gui_lines)
+      and sum(1 for l in _gui_lines if l.startswith("function copyText(")) == 1)
+check("button copy call sites use copyBtn",
+      'copyBtn(d.querySelector(".copy")' in gui and "copyBtn(btn, r.value" in gui
+      and gui.count("copyBtn(") >= 3)  # definition + 2 call sites
+check("renderTools escapes description", "esc(t.description)" in gui and "${t.description}" not in gui)
+check("loadApprovals is guarded",
+      'try { out = await api("GET", "/api/approvals?status=pending"); }' in gui)
+
+# ---------------------------------------------------------------- orbit.html
+orbit = read("src2", "orbit_beta", "web", "orbit.html")
+check("agent-table rebuild is deferred while editing",
+      "const editing =" in orbit and "if (editing || roleDirty) return;" in orbit)
+
+# ---------------------------------------------------------------- console.html
+con = read("webui", "console.html")
+_con_lines = con.splitlines()
+check("event stream subscribes to named frames",
+      "const FEED_KINDS" in con
+      and not any(l.strip().startswith("es.onmessage") for l in _con_lines))
+check("feed handles the backlog frame", 'addEventListener("backlog"' in con)
+
+# ---------------------------------------------------------------- editor.js
+ed = read("webui", "assets", "editor.js")
+check("closeTab keeps the correct active tab",
+      "if (i < state.active) state.active -= 1;" in ed)
+check("refreshAll warns before discarding edits", "discard unsaved changes" in ed)
+
+# ------------------------------------------------------------- orbit_beta api
+from orbit_beta import api as oapi  # noqa: E402
+
+check("orbit api exposes _ok helper", hasattr(oapi, "_ok"))
+
+
+class _FakeHandler:
+    def __init__(self):
+        self.code = None
+
+    def _send(self, code, obj, **kw):
+        self.code = code
+
+
+h1 = _FakeHandler()
+oapi._ok(h1, {"ok": False, "error": "goal required"})
+h2 = _FakeHandler()
+oapi._ok(h2, {"ok": True, "job": "j1"})
+h3 = _FakeHandler()
+oapi._ok(h3, {"sessions": []})  # no `ok` key -> success
+check("orbit _ok maps ok=false to 400", h1.code == 400)
+check("orbit _ok keeps success at 200", h2.code == 200 and h3.code == 200)
+oapi_src = read("src2", "orbit_beta", "api.py")
+check("orbit POST routes use _ok", oapi_src.count("_ok(handler,") >= 3)
+
+# ------------------------------------------------------------- server.publish
+from sparkforge import server as srv  # noqa: E402
+
+ev = srv.publish("approval.request", id="ap_regress", tool="fs.write")
+check("in-memory event id is int", isinstance(ev.get("id"), int))
+check("payload id moved to id_id", ev.get("id_id") == "ap_regress")
+
+row = srv.db().execute("SELECT data FROM events WHERE kind='approval.request' ORDER BY id DESC LIMIT 1").fetchone()
+stored = json.loads(row[0])
+check("durable row does NOT store a payload `id`", "id" not in stored and stored.get("id_id") == "ap_regress")
+
+replayed = [e for e in srv.events_since(0) if e.get("kind") == "approval.request"]
+check("replayed event id stays int", bool(replayed) and isinstance(replayed[-1].get("id"), int),
+      "got %r" % (replayed[-1].get("id") if replayed else None))
+
+# ------------------------------------------------------------- raw upload cap
+s = read("src", "sparkforge", "server.py")
+check("raw uploads cap the Content-Length read", s.count("self.rfile.read(min(n, MAX_BODY_BYTES))") >= 2)
+
+# --------------------------------------------------- feed replay is bounded
+check("feed replay cap constant exists", isinstance(srv.FEED_REPLAY_MAX, int) and srv.FEED_REPLAY_MAX > 0)
+for i in range(8):
+    srv.publish("feed.regress", n=i)
+cap = srv.events_since(0, limit=5)
+check("events_since(limit) returns at most N", 0 < len(cap) <= 5)
+check("events_since(limit) keeps the NEWEST rows",
+      bool(cap) and cap[-1]["id"] == max(e["id"] for e in srv.events_since(0)))
+check("feed_gen caps the backlog", "events_since(since, limit=FEED_REPLAY_MAX)" in s)
+
+print("---")
+passed = sum(results)
+print("%d/%d PASS" % (passed, len(results)))
+sys.exit(0 if passed == len(results) else 1)
