@@ -25,7 +25,8 @@ mobile-ready HTTP API — all from one process on `:8790`.
                         ┌───────────────────┼───────────────────────┐
                         ▼                   ▼                       ▼
                  llama.cpp router      vLLM router            cloud providers
-                 (DGX / Windows)       (local)      OpenRouter · DeepSeek · OpenAI · Anthropic · Google
+                 (Linux x86_64/arm64   (local)      OpenRouter · DeepSeek · OpenAI · Anthropic · Google
+                  · Windows)
 ```
 
 ## The object model (five levels)

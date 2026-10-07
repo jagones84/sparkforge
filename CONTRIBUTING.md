@@ -8,8 +8,8 @@ deliberate and load-bearing, so please respect it.
 - **No third-party runtime dependencies.** The core (`src/sparkforge/`) imports only the
   Python standard library. New behaviour must not add a `pip` requirement to the core.
 - **Keep it cross-platform.** Platform-specific code lives in `src/sparkforge/osutil.py`.
-  No POSIX assumption may leak into the core — SparkForge runs on Linux (DGX Spark) and
-  Windows from the same code.
+  No POSIX assumption may leak into the core — SparkForge runs on Linux x86_64,
+  Linux arm64/aarch64 (NVIDIA DGX Spark) and Windows x64 from the same code.
 - **No secrets in the repo.** Keys live in a local `.env` / `~/.hermes/.env` (gitignored).
   `.env.template` is the only tracked env file.
 - **Evidence over belief.** Every claim in a PR should come with a number: a test count,

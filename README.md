@@ -14,8 +14,9 @@ full SparkForge instance: its own tools, skills, plan, memory and transcript. Th
 coordinator delegates; the team executes in enforced dependency order; the master
 synthesises the result.
 
-> **Local-first · stdlib-only (Python 3.10+) · zero pip dependencies · runs on the
-> NVIDIA DGX Spark and on Windows from the same code.**
+> **Local-first · stdlib-only (Python 3.10+) · zero pip dependencies.** One codebase runs on
+> **Linux x86_64**, **Linux arm64/aarch64** (NVIDIA **DGX Spark** / GB10 Grace Blackwell,
+> Ubuntu 24.04) and **Windows 10/11 (x64)**.
 
 ---
 
@@ -27,7 +28,7 @@ synthesises the result.
 | **TEAMS of meta-agents** | A 5-level object model — Team → Job → Subjob → Agent → Todo — with a coordinator that decomposes a goal and hands **dependencies** to the team. |
 | **Order is enforced** | `(after AX)` dependencies become a real DAG. A dependent agent does **not** start until its prerequisites finish. |
 | **Nothing is closed as fake-done** | A step can only reach `done` with evidence; a worker that fails is marked **failed**, the job becomes **partial**, and the coordinator is *told* — it can't pretend success. |
-| **It drives ANY model** | Local `llama.cpp` (DGX + Windows), vLLM, OpenRouter, DeepSeek, OpenAI, Anthropic, Google — one `<provider>:<model>` reference, automatic fallback chain. |
+| **It drives ANY model** | Local `llama.cpp` (Linux x86_64/arm64 + Windows), vLLM, OpenRouter, DeepSeek, OpenAI, Anthropic, Google — one `<provider>:<model>` reference, automatic fallback chain. |
 | **Safe by construction** | Allowlist registry + per-action approval gate + a real sandbox (`docker`/`bwrap`/`nsjail`, `--network none`) so the agent never touches the host. |
 | **Observable end to end** | Every delta, thought, tool call, delegation and todo change is streamed over SSE and persisted — you can *watch* the team work. |
 
@@ -98,6 +99,20 @@ cloud models, and the strongest (still cheap) cloud goes to the leads.
 You need an LLM: a local **llama.cpp router** (default `http://127.0.0.1:8080`) or a
 cloud key in `.env` (OpenRouter / DeepSeek / OpenAI / Anthropic / Google).
 
+### Platforms
+
+| Platform | Architecture | Status | Launcher |
+|---|---|---|---|
+| **Windows 10/11** | x64 | ✅ verified | `run.ps1` |
+| **Linux** (Ubuntu 22.04+ & similar) | x86_64 | ✅ supported | `run.sh` |
+| **Linux — NVIDIA DGX Spark** (GB10 Grace Blackwell, Ubuntu 24.04) | **arm64 / aarch64** | ✅ verified | `run.sh` |
+
+The core is **pure stdlib**, so there are no compiled wheels to build — any OS/architecture
+with **CPython 3.10+** runs it identically. The only OS-specific code lives in one place,
+[`src/sparkforge/osutil.py`](src/sparkforge/osutil.py): shell spawn
+(`/bin/sh -c` ↔ `cmd /c`), process-tree kill (`SIGTERM/SIGKILL` ↔ `taskkill /T /F`) and
+`PATH`/`PATHEXT` resolution (`npx` ↔ `npx.cmd`).
+
 ```bash
 git clone https://github.com/jagones84/sparkforge && cd sparkforge
 cp .env.template .env          # keys stay local (gitignored) — never commit them
@@ -105,7 +120,7 @@ cp .env.template .env          # keys stay local (gitignored) — never commit t
 ./run.sh --host 0.0.0.0        # expose on the Tailscale/LAN IP for your phone
 ```
 
-**Windows 10/11 (native, no WSL):**
+**Windows 10/11 (x64, native, no WSL):**
 
 ```powershell
 git clone https://github.com/jagones84/sparkforge; cd sparkforge

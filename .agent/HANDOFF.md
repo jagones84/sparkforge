@@ -2936,3 +2936,26 @@ Fatto:
   CHANGELOG/CONTRIBUTING/.github → docs archive+ARCHITECTURE → VERSION 1.0.0), `master`
   pushato (`11d740d..190ff4b`), tag annotato **v1.0.0** pushato, GitHub Release creata:
   https://github.com/jagones84/sparkforge/releases/tag/v1.0.0. Working tree pulito.
+
+## 2026-10-07 (cont.) — piattaforme/arch documentate + install test Windows da zero
+
+Richiesta utente: specificare che l'app gira su Windows E su DGX (arm64?) e testare un
+install "clean-room" su Windows (clone da zero, senza config preesistente/MCP), fixando
+se qualcosa non funziona.
+
+Verificato:
+- DGX Spark = **aarch64**, Ubuntu 24.04.5 LTS, Python 3.12.3 (`uname -m` = aarch64).
+- **Install da zero su Windows OK** (script `trash/win_clean_test.ps1`): clone pulito da
+  GitHub in `%TEMP%\sf-clean-test` → `Copy-Item .env.template .env` (nessuna chiave) →
+  `python server.py --port 8792` → **READY in ~1s**. Endpoint tutti **200**:
+  `/` (291768 B), `/orbit` (55084 B), `/console` (45155 B), `/api/self` (2011 B),
+  `/api/models` (9815 B), `/api/selfcheck?llm=0` (464 B), asset vendor (45461 B).
+  **Nessun bug** → nessun fix necessario. Nessun problema di quoting/POSIX su Windows.
+- Nota: `select.select` è usato solo su socket (ok su Windows); `signal`/`killpg` solo nel
+  ramo POSIX di `osutil.py`; `os.chmod(0o600/0o755)` non solleva su Windows.
+
+Documentato (spec piattaforme/arch):
+- `README.md`: blockquote + nuova sezione **Platforms** (tabella Windows x64 · Linux x86_64 ·
+  Linux arm64/aarch64 DGX Spark) + riga tabella "drives ANY model" + heading Windows x64.
+- `CONTRIBUTING.md`: regola cross-platform aggiornata con le 3 architetture.
+- `docs/ARCHITECTURE.md`: diagramma `(Linux x86_64/arm64 · Windows)`.
