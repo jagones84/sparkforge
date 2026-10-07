@@ -864,6 +864,12 @@ def observation(res, max_chars=1600):
         bits.append("stdout: " + _truncate(res["stdout"].strip(), max_chars))
     if res.get("stderr"):
         bits.append("stderr: " + _truncate(res["stderr"].strip(), max_chars))
+    if res.get("content"):
+        # JAG-345: fs.read returns its payload in `content`; without this branch the
+        # observation carried only the PATH, so every fs.read reached the model
+        # EMPTY (exit=0, no error) — the agent was blind to every file it read,
+        # including the "read more with fs.read" offload files it was told to open.
+        bits.append("content: " + _truncate(str(res["content"]).strip(), max_chars))
     if res.get("path"):
         bits.append("path: " + res["path"])
     return "\n".join(bits)

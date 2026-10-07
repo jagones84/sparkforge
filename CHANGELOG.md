@@ -12,6 +12,14 @@ All notable changes to SparkForge are documented here. The format follows
   late-write, v281 terminal output, v287 routine dispatch) — wall-clock races that
   can fail under load. They now poll the real condition with a bounded timeout, or
   order the threads with an `Event`, so the outcome is deterministic.
+- **`fs.read` returned an EMPTY observation — silently, harness-wide.** `tools.observation()`
+  rendered `stdout`/`stderr`/`path` but never `content`, and `fs.read` returns its payload
+  in `content`. So every `fs.read` (and the "read more with fs.read" offload files the
+  harness tells the agent to open) reached the model BLANK, with `exit=0` and no error.
+  This is the root cause of the "coder 1" job that could not proceed: it was blind to the
+  skill's device-fallback procedure and to the source it was editing. Content is now
+  rendered (bounded by the budget); guarded by `tests/acceptance/v346_fs_read_observation.py`.
+  Battery 105 → 106.
 
 ### Added
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate
