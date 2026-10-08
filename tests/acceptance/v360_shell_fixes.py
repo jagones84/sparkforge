@@ -55,16 +55,19 @@ check("B4 the press guard against the resize grip is kept",
       'h.onmousedown = e => { e.preventDefault(); e.stopPropagation(); };' in HTML, "")
 
 # --- C: the chat cannot be crushed -------------------------------------------
-check("C1 the centre column has a min-width floor",
-      '[data-col="chat"]     { flex: 1 1 auto; min-width: 420px;' in HTML, "")
-check("C2 the side panels are shrinkable and have their own floor",
-      'flex: 0 1 220px; width: 220px; min-width: 150px;' in HTML
-      and 'flex: 0 1 238px; width: 238px; min-width: 150px;' in HTML, "")
-check("C3 a saved width is restored shrinkable (never 0 0)",
-      'col.style.flex = "0 1 " + saved + "px";' in HTML, "")
+check("C1 the centre column has a min-width floor and a 0 basis (never steals the panels' space)",
+      '[data-col="chat"]     { flex: 1 1 0%; min-width: 420px;' in HTML, "")
+check("C2 the side panels are FIXED width with a floor",
+      'flex: 0 0 220px; width: 220px; min-width: 150px;' in HTML
+      and 'flex: 0 0 238px; width: 238px; min-width: 150px;' in HTML, "")
+check("C3 a saved width is restored fixed and then clamped to the chat floor",
+      'col.style.flex = "0 0 " + saved + "px";' in HTML and "_fitPanels();" in HTML, "")
 check("C4 the drag + the saved width use the CSS-px unit (page scale)",
       "col.getBoundingClientRect().width / z;" in HTML
       and "col.getBoundingClientRect().width / _pageScale()" in HTML, "")
+check("C5 a drag is bounded by the room the chat leaves (no flex redistribution)",
+      "const CHAT_MIN_W = 420;" in HTML and "function _fitPanels" in HTML
+      and "function _panelRoom" in HTML and "Math.min(room, startW + sign *" in HTML, "")
 
 # --- D: defaults -------------------------------------------------------------
 check("D1 the default theme is indigo",

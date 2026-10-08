@@ -150,7 +150,38 @@ All notable changes to SparkForge are documented here. The format follows
   the chat.
 - **Defaults (JAG-360):** the theme is indigo and bolder text is OFF out of the box.
 
+- **The side rail could no longer edit the rules (JAG-361).** The editable Rules panel lived
+  only in Settings, while the side rail had a Role-only pane with no file paths. There is now
+  ONE complete **Rules** section: the per-session role, the GLOBAL
+  `~/.config/sparkforge/RULES.md` and the PROJECT `<ws>/.sparkforge/RULES.md`, each with its
+  real absolute path, the `AGENTS.md` addenda that are ALSO loaded, and an in-place editor +
+  save. (`loadRole()` is kept as an alias so every call site still works.)
+- **Cost was only ever an estimate (JAG-361).** When the provider reports the charge itself it
+  is now used verbatim — OpenRouter returns the billed USD in `usage.cost` (with a
+  `cost_details` breakdown), so no arithmetic is involved (`src: "provider"`). Otherwise the
+  REAL token counts are priced with the full rate set: the cache-read rate for cached tokens
+  (instead of the full input rate) plus the fixed per-request fee. Each row states which it is
+  (the UI prefixes an estimate with `≈`, the panel header says "exact" / "estimated").
+- **Touching a panel's inner border shrank it (JAG-361).** The panels had become `flex: 0 1`
+  while the chat's `flex-basis: auto` still ate the free space, so the first pixel of a drag
+  redistributed a few px. The panels are fixed-width again and an explicit budget clamp
+  (`_panelRoom` / `_fitPanels`, chat floor 420px) protects the centre column instead: verified
+  a +20px drag moves the panel exactly 20px and a huge drag stops at the 420px floor.
+- **Duplicate `id="ctxPct"` (JAG-361).** The topbar element added in JAG-359 shadowed the
+  inspector's meter (`getElementById` returns the first), so the inspector % never updated. The
+  topbar one is now `#ctxPctTop`; the inspector reads its real percentage again.
+- **Interface polish (JAG-361):** a hidden `#nowbar` no longer keeps rendering; the
+  pick / paste-text / voice-help / skill / diff modals get the same border + radius + shadow as
+  the rest of the app; `a.ghost` is actually styled; buttons gain a hover and a real disabled
+  state; the dot-rail restores its focus ring; the undefined `--line2` token (which killed the
+  session-menu border) is fixed; `#qmode` no longer forces a dark native popup on light themes;
+  and the hardcoded light-blue id labels use `--acc2`.
+
 ### Added
+- **`tests/acceptance/v361_rules_cost_polish.py` (16 checks)** — the single complete Rules
+  panel (sources + paths + the right backend per scope), the exact-vs-estimated cost path
+  (provider cost verbatim, cache-read rate + per-request fee, unknown stays null), the richer
+  price cache, the `#ctxPct` duplicate-id fix and the polish guards. Battery 116 → 117.
 - **`tests/acceptance/v360_shell_fixes.py` (14 checks)** — no indigo literal survives
   (`#0b0f18` / `rgba(24,28,40` / the blue tints), the settings + popups + MCP textarea +
   scrollbars resolve through theme tokens, the handle toggles on pointer-up with a movement

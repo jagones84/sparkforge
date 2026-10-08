@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
-"""JAG-355: live cost ledger for model calls.
+"""Live cost ledger for model calls (JAG-355, tightened in JAG-361).
 
-The harness already captures the provider's REAL `usage` on every LLM call
-(prompt / completion / cached tokens). This module prices each call and keeps a
-per-session ledger, so the UI can show the session total AND the cost of every
-single API call while you work.
+The harness captures the provider's REAL `usage` on every LLM call. This module
+prices each call and keeps a per-session ledger, so the UI can show the session
+total AND the cost of every single API call while you work.
 
-Prices (USD per 1M tokens, `[input, output]`) are resolved, in order, from:
+How the cost is computed — EXACT first, estimate second:
+
+  1. EXACT — when the provider reports the charge itself, use it verbatim. Some
+     gateways do (OpenRouter puts the billed USD in `usage.cost`, plus a
+     `usage.cost_details` breakdown; the same number is re-fetchable from
+     ``GET /api/v1/generation?id=<generation_id>``). No estimation is involved.
+  2. ESTIMATE — otherwise price the REAL token counts against the rate table
+     (USD per 1M tokens). The table may carry the prompt, the completion, the
+     cache-read/cache-write rates and a fixed per-request fee, so a cache hit is
+     billed at the cache rate instead of the full input rate.
+
+Records carry ``src``: ``"provider"`` (exact) / ``"estimate"`` / ``None`` (no
+known price -> ``usd: null``, NEVER a fake zero; a model priced explicitly 0 is
+genuinely free).
+
+Prices are resolved, in order, from:
   1. the `SPARKFORGE_PRICES` env var (JSON: ``{"model": [in, out]}``),
   2. ``config/prices.yaml`` (or ``config/prices.json``),
   3. ``data/prices.json`` — the cache written by :func:`refresh_openrouter`, which
      pulls OpenRouter's PUBLIC models endpoint (no API key required).
-
-A model with no known price is reported with ``usd: null`` (UNKNOWN) — never a
-fake zero. A local model priced explicitly ``0`` is genuinely free.
 
 Ledger: ``data/costs/<session>.json`` (override dir with SPARKFORGE_COSTS_DIR).
 Stdlib only.
@@ -54,18 +65,49 @@ def _read_doc(path):
     return d if isinstance(d, dict) else None
 
 
-def _pair(v):
-    """Normalise one price entry to (input_per_1m, output_per_1m) floats."""
+def _f(v):
+    """float(v) or None — a price field may be a string, a number or absent."""
     try:
-        if isinstance(v, (list, tuple)) and len(v) >= 2:
-            return (float(v[0]), float(v[1]))
-        if isinstance(v, dict):
-            i = v.get("in", v.get("input", v.get("prompt")))
-            o = v.get("out", v.get("output", v.get("completion")))
-            if i is not None and o is not None:
-                return (float(i), float(o))
+        return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _f_or_zero(v):
+    x = _f(v)
+    return 0.0 if x is None else x
+
+
+def _pair(v):
+    """Normalise one price entry to (input_per_1m, output_per_1m) floats."""
+    r = _rates(v)
+    if r is None or r["in"] is None or r["out"] is None:
+        return None
+    return (r["in"], r["out"])
+
+
+def _rates(v):
+    """Full rate set (USD per 1M tokens) for one price entry, or None.
+
+    Accepts the compact ``[in, out]`` form or the rich form
+    ``{"in","out","cache_read","cache_write","request"}`` (``request`` is the
+    fixed USD cost of one API call, not a per-token rate). Unknown fields are
+    None so the caller can fall back sensibly.
+    """
+    if v is None:
+        return None
+    if isinstance(v, (list, tuple)) and len(v) >= 2:
+        return {"in": _f(v[0]), "out": _f(v[1]), "cache_read": None,
+                "cache_write": None, "request": None}
+    if isinstance(v, dict):
+        r = {
+            "in": _f(v.get("in", v.get("input", v.get("prompt")))),
+            "out": _f(v.get("out", v.get("output", v.get("completion")))),
+            "cache_read": _f(v.get("cache_read", v.get("input_cache_read"))),
+            "cache_write": _f(v.get("cache_write", v.get("input_cache_write"))),
+            "request": _f(v.get("request")),
+        }
+        return r if (r["in"] is not None or r["out"] is not None) else None
     return None
 
 
@@ -91,12 +133,13 @@ def _prices_table():
         return table
 
 
-def _lookup(table, model):
-    """Match a model ref against the price table, both directions (ci).
+def _lookup_raw(table, model):
+    """Raw price entry for a model, matched both directions (case-insensitive).
 
     Both the table key and the query are indexed by their full form AND their
-    last ``/``- or ``:``-segment, so ``deepseek/deepseek-chat``, ``openrouter:deepseek-chat``
-    and a bare ``deepseek-chat`` all resolve to the same price.
+    last ``/``- or ``:``-segment, so ``deepseek/deepseek-chat``,
+    ``openrouter:deepseek-chat`` and a bare ``deepseek-chat`` all resolve to the
+    same entry.
     """
     if not model:
         return None
@@ -109,13 +152,23 @@ def _lookup(table, model):
     for key in (m, m.split("/")[-1], m.split(":")[-1]):
         v = idx.get(key.lower())
         if v is not None:
-            return _pair(v)
+            return v
     return None
+
+
+def _lookup(table, model):
+    v = _lookup_raw(table, model)
+    return _pair(v) if v is not None else None
 
 
 def price_for(model):
     """(input, output) USD per 1M tokens, or None when the price is unknown."""
     return _lookup(_prices_table(), model)
+
+
+def rates_for(model):
+    """Full rate set (USD per 1M) for a model, or None when unknown."""
+    return _rates(_lookup_raw(_prices_table(), model))
 
 
 def _int(v):
@@ -135,6 +188,59 @@ def _usage_tokens(usage):
     if cached is None:
         cached = _int((u.get("timings") or {}).get("cache_n"))
     return pt, ct, cached
+
+
+def provider_cost(usage):
+    """The provider's OWN charge for this call, when it reports one (EXACT).
+
+    OpenRouter returns it as ``usage.cost`` (+ ``usage.cost_details``); some
+    gateways use ``total_cost``. Returns None when the provider says nothing, so
+    the caller can fall back to pricing the token counts itself.
+    """
+    u = usage or {}
+    for k in ("cost", "total_cost"):
+        x = _f(u.get(k))
+        if x is not None:
+            return x
+    cd = u.get("cost_details")
+    if isinstance(cd, dict):
+        for k in ("upstream_inference_cost", "total_cost"):
+            x = _f(cd.get(k))
+            if x is not None:
+                return x
+        total, seen = 0.0, False
+        for k in ("upstream_inference_prompt_cost",
+                  "upstream_inference_completions_cost", "server_tool_cost"):
+            x = _f(cd.get(k))
+            if x is not None:
+                total += x
+                seen = True
+        if seen:
+            return round(total, 6)
+    return None
+
+
+def cost_from_rates(rates, prompt, completion, cached):
+    """USD for one call from REAL token counts + a rate set (USD per 1M).
+
+    Cached prompt tokens are billed at the cache-read rate (falling back to the
+    normal input rate), the rest at the input rate, the completion at the output
+    rate, plus the fixed per-request fee when the provider charges one.
+    """
+    if rates is None:
+        return None
+    pin, pout = rates["in"], rates["out"]
+    if pin is None and pout is None:
+        return None
+    pt = int(prompt or 0)
+    ct = int(completion or 0)
+    cr = max(0, min(int(cached or 0), pt))
+    plain = max(0, pt - cr)
+    read_rate = rates["cache_read"] if rates["cache_read"] is not None else _f_or_zero(pin)
+    usd = (plain / 1e6 * _f_or_zero(pin)) + (cr / 1e6 * read_rate) + (ct / 1e6 * _f_or_zero(pout))
+    if rates["request"]:
+        usd += _f_or_zero(rates["request"])
+    return round(usd, 6)
 
 
 def _path(session):
@@ -190,18 +296,25 @@ def _summarise(led):
 def record(session, model, usage):
     """Price ONE LLM call from its real `usage` and append it to the ledger.
 
+    The provider's OWN charge wins when it reports one (``src: "provider"``,
+    exact); otherwise the real token counts are priced against the rate table
+    (``src: "estimate"``). An unknown price yields ``usd: null``.
+
     Returns the call record (with the running session total) or None when the
-    usage carried no token counts. An unknown price yields ``usd: null``.
+    usage carried no token counts.
     """
     pt, ct, cached = _usage_tokens(usage)
     if not pt and not ct:
         return None
-    pair = price_for(model)
-    usd = None
-    if pair is not None and pt is not None and ct is not None:
-        usd = round(pt / 1e6 * pair[0] + ct / 1e6 * pair[1], 6)
+    exact = provider_cost(usage)
+    if exact is not None:
+        usd, src = round(float(exact), 6), "provider"
+    else:
+        usd = cost_from_rates(rates_for(model), pt, ct, cached)
+        src = "estimate" if usd is not None else None
     rec = {"ts": round(time.time(), 3), "model": str(model or ""),
-           "prompt": pt or 0, "completion": ct or 0, "cached": cached or 0, "usd": usd}
+           "prompt": pt or 0, "completion": ct or 0, "cached": cached or 0,
+           "usd": usd, "src": src}
     with _lock:
         led = _load(session)
         led.append(rec)
@@ -232,11 +345,18 @@ def reset(session):
     return {"ok": True}
 
 
-def refresh_openrouter(url=None, timeout=12):
-    """Fetch OpenRouter's PUBLIC model list and cache USD-per-1M prices.
+def _per_1m(x):
+    v = _f(x)
+    return None if v is None else round(v * 1e6, 6)
 
-    No API key needed. Writes ``data/prices.json`` as ``{"model_id": [in, out]}``.
-    Returns ``{"ok", "count", "error"}``. Never raises.
+
+def refresh_openrouter(url=None, timeout=12):
+    """Fetch OpenRouter's PUBLIC model list and cache prices.
+
+    No API key needed. Writes ``data/prices.json`` as
+    ``{"model_id": {"in","out","cache_read","cache_write","request"}}`` (USD per
+    1M tokens; ``request`` is the fixed USD cost per API call). Returns
+    ``{"ok", "count", "error"}``. Never raises.
     """
     global _prices
     import urllib.request
@@ -252,12 +372,6 @@ def refresh_openrouter(url=None, timeout=12):
     if not isinstance(rows, list):
         return {"ok": False, "error": "unexpected models payload"}
 
-    def _per_1m(x):
-        try:
-            return round(float(x) * 1e6, 6)
-        except (TypeError, ValueError):
-            return None
-
     table = {}
     for m in rows:
         if not isinstance(m, dict):
@@ -267,8 +381,19 @@ def refresh_openrouter(url=None, timeout=12):
         if not mid:
             continue
         i, o = _per_1m(pr.get("prompt")), _per_1m(pr.get("completion"))
-        if i is not None and o is not None:
-            table[str(mid)] = [i, o]
+        if i is None or o is None:
+            continue
+        row = {"in": i, "out": o}
+        cr = _per_1m(pr.get("input_cache_read"))
+        if cr is not None:
+            row["cache_read"] = cr
+        cw = _per_1m(pr.get("input_cache_write"))
+        if cw is not None:
+            row["cache_write"] = cw
+        rq = _f(pr.get("request"))     # already USD per call, not per token
+        if rq is not None:
+            row["request"] = rq
+        table[str(mid)] = row
     try:
         os.makedirs(os.path.dirname(_CACHE_JSON), exist_ok=True)
         tmp = _CACHE_JSON + ".tmp"

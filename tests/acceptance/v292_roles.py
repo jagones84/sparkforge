@@ -8,7 +8,8 @@ Locked here:
     provider renders the session's role on top of the canonical prompt;
   * GET/POST/DELETE /api/roles — the single API both the primary WebUI and Orbit use;
   * agent names are unique across agents AND sessions (a duplicate is refused);
-  * the CLI exposes roles/agents/jobs and the primary WebUI has the Role section.
+  * the CLI exposes roles/agents/jobs and the primary WebUI has the complete Rules
+    panel (the per-session role + the global/project rules, JAG-361).
 
 Deterministic, no live model. Run: python3 tests/v292_roles.py
 """
@@ -100,8 +101,9 @@ check("the CLI exposes roles/agents/jobs",
       and 'add_parser("jobs")' in cli and "def cmd_roles" in cli)
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     gui = f.read()
-check("the primary WebUI has the Role section",
-      'data-insp="role"' in gui and "async function loadRole()" in gui and "/api/roles" in gui)
+check("the primary WebUI has the Rules panel (role + global/project rules)",
+      'data-insp="rules"' in gui and "async function loadRole()" in gui
+      and "/api/roles" in gui and "/api/rules" in gui)
 with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
     oui = f.read()
 check("the Orbit deck edits the same role API",

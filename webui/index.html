@@ -21,7 +21,7 @@
     color-scheme: dark;
   }
   /* the queue/steer picker next to "send" — dark popup, no white flash */
-  #qmode { color-scheme: dark; }
+  #qmode { color-scheme: inherit; }
   #qmode option { background: #121722; color: #dfe4ff; }
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
   /* JAG-127b: scrollbars themed to the blue/purple GUI (the native blue-grey
@@ -188,7 +188,7 @@
   .task .st.superseded { color: var(--dim); text-decoration: line-through; opacity: .7; }
   .task .dep { font-size: 9px; color: var(--dim); }
   .task .ev { font-size: 9px; color: var(--ok); }
-  .task .tcid { font-family: ui-monospace, monospace; font-size: 10px; color: #8ab4ff; flex-shrink: 0; }
+  .task .tcid { font-family: ui-monospace, monospace; font-size: 10px; color: var(--acc2); flex-shrink: 0; }
   .graphrow { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
   .task.fresh { animation: pop .5s ease; border: 1px dashed rgba(181,108,255,.4); }
   @keyframes pop { from { transform: scale(.96); opacity: .3; } }
@@ -224,7 +224,7 @@
   .sess .menu-btn { color: var(--dim); font-size: 14px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: 0; }
   .sess:hover .menu-btn, .sess.menu-open .menu-btn { opacity: .8; }
   .sess .menu-btn:hover { opacity: 1; background: var(--hover); }
-  .sess-menu { position: absolute; z-index: 50; background: var(--panel); border: 1px solid var(--line2); border-radius: 10px; padding: 4px; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .sess-menu { position: absolute; z-index: 50; background: var(--panel); border: 1px solid var(--line-2); border-radius: 10px; padding: 4px; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
   .sess-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--txt); padding: 7px 10px; border-radius: 7px; font-size: 12px; cursor: pointer; }
   .sess-menu button:hover { background: var(--hover); }
   .sess-menu button.danger { color: var(--err); }
@@ -238,7 +238,7 @@
     box-shadow: 0 8px 24px rgba(0,0,0,.5); }
   .done-toast:hover { border-color: rgba(250,204,21,.9); }
   /* JAG-169: the session's stable job id (JX) shown in the rail. */
-  .sess .jid { font-family: ui-monospace, monospace; font-size: 10px; color: #8ab4ff; flex-shrink: 0;
+  .sess .jid { font-family: ui-monospace, monospace; font-size: 10px; color: var(--acc2); flex-shrink: 0;
     background: var(--hover); border: 1px solid var(--accent);
     border-radius: 6px; padding: 1px 5px; }
 
@@ -341,7 +341,7 @@
   #nowbar { display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer;
     background: linear-gradient(90deg, rgba(108,140,255,.14), rgba(57,211,195,.08));
     border-top: 1px solid var(--line); font-size: 11px; color: var(--txt); z-index: 5; }
-  #nowbar .nid { font-family: ui-monospace, monospace; color: #8ab4ff; flex-shrink: 0; }
+  #nowbar .nid { font-family: ui-monospace, monospace; color: var(--acc2); flex-shrink: 0; }
   #nowbar .nst { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 6px;
     border-radius: 999px; border: 1px solid var(--line); flex-shrink: 0; }
   #nowbar .nst.doing { color: #ffcf6a; border-color: rgba(255,207,106,.5); }
@@ -383,7 +383,7 @@
   .tctree .st.superseded { color: #94a3b8; text-decoration: line-through; opacity: .7; }
   .tctree .tc-kids { margin: 6px 0 6px 16px; padding-left: 10px; border-left: 2px solid rgba(108,140,255,.25); }
   /* JAG-169: the todo id AX.nY, monospaced and visible in chat + panel. */
-  .tctree .tcid { font-family: ui-monospace, monospace; font-size: 10px; color: #8ab4ff; margin-right: 6px; }
+  .tctree .tcid { font-family: ui-monospace, monospace; font-size: 10px; color: var(--acc2); margin-right: 6px; }
   /* JAG-278: the 'superseded' reason inline, so a closed step is never unexplained. */
   .tctree .tcreason { font-size: 10px; color: var(--dim); font-style: italic; margin-left: 6px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -503,9 +503,9 @@
   /* JAG-360: the side panels may SHRINK (never grow) so the chat keeps a usable
      minimum: dragging a panel wide (or a narrow window) can no longer squeeze the
      centre column to a sliver. The chat floor is the flexbox hard limit. */
-  [data-col="sessions"] { flex: 0 1 220px; width: 220px; min-width: 150px; border-right: 1px solid var(--line); overflow-y: auto; }
-  [data-col="chat"]     { flex: 1 1 auto; min-width: 420px; display: flex; flex-direction: column; min-height: 0; }
-  [data-col="context"]  { flex: 0 1 238px; width: 238px; min-width: 150px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden; min-height: 0; }
+  [data-col="sessions"] { flex: 0 0 220px; width: 220px; min-width: 150px; border-right: 1px solid var(--line); overflow-y: auto; }
+  [data-col="chat"]     { flex: 1 1 0%; min-width: 420px; display: flex; flex-direction: column; min-height: 0; }
+  [data-col="context"]  { flex: 0 0 238px; width: 238px; min-width: 150px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden; min-height: 0; }
   /* JAG-150: the right rail is now a collapsible inspector (see #inspector) */
   .toolcard-head { cursor: pointer; }
   .toolcard.expanded .toolcard-body { display: block; }
@@ -900,6 +900,30 @@
   html:not(.bold-text) button.primary { font-weight: 500; }
   html:not(.bold-text) .costtot,
   html:not(.bold-text) .ctxpct { font-weight: 600; }
+
+  /* JAG-361: interface polish (audit H2/H4/H6 + M6/M7/L5). Placed last so these
+     win their specificity ties without re-ordering the sheet. */
+  #nowbar[hidden] { display: none; }                       /* H2: stale sticky bar */
+  .smodal, #skillView, #diffView { border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: 0 24px 70px rgba(0,0,0,.55); }             /* H4: matching modal chrome */
+  a.ghost { background: transparent; border: 1px solid var(--line); color: var(--dim);
+    padding: 8px 14px; border-radius: var(--radius); text-decoration: none; cursor: pointer; } /* H6 */
+  button:hover { filter: brightness(1.08); }               /* M6 */
+  button:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+  #dotrail button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } /* M7 */
+  #settingsWin .sw-nav button:hover { background: var(--hover); }   /* L5 */
+  /* JAG-361: the complete Rules panel rows. */
+  .rulesrc { border-bottom: 1px solid var(--line-2); padding: 5px 0; }
+  .rulesrc > summary { cursor: pointer; font-size: 12px; display: flex; align-items: center;
+    gap: 8px; list-style: none; }
+  .rulesrc > summary::-webkit-details-marker { display: none; }
+  .rulesrc > summary::before { content: "\25B8 "; color: var(--dim); }
+  .rulesrc[open] > summary::before { content: "\25BE "; }
+  .rbadge { margin-left: auto; font-size: 10px; color: var(--dim); max-width: 48%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rbadge.ok { color: var(--ok); }
+  .rpath { font-size: 10.5px; color: var(--dim); word-break: break-all; margin: 4px 0 5px; }
+  .rrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 </style>
 <script>
 /* JAG-352: apply the saved theme + text-weight before first paint (no flash). */
@@ -918,7 +942,7 @@
   <span style="flex:1"></span>
   <span class="pill meter" id="ctx-meter" title="context tokens / budget"><svg class="mring"
       viewBox="0 0 36 36" aria-hidden="true"><circle class="mtrk" cx="18" cy="18" r="15.9155"></circle><circle
-      class="mfill" id="ctxRing" cx="18" cy="18" r="15.9155"></circle></svg><b id="ctxPct">…</b></span>
+      class="mfill" id="ctxRing" cx="18" cy="18" r="15.9155"></circle></svg><b id="ctxPctTop">…</b></span>
   <span class="pill sbox" id="sbxPill" title="sandbox backend"><span class="sdot" id="sbxDot"></span><span
       id="sbxTxt">…</span></span>
   <button class="ghost" id="settingsBtn" title="settings" onclick="openSettings()">⚙</button>
@@ -1040,16 +1064,13 @@
         <div id="costList" class="costlist"></div>
         </div>
       </section>
-      <section data-insp="role" class="insp-open">
-        <button class="insp-hd" onclick="toggleInsp('role')">Role</button>
+      <section data-insp="rules" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('rules')">Rules</button>
         <div class="insp-body">
-        <h2>ROLE.md <span id="rolePath" class="remaining"></span></h2>
         <div class="card">
-          <textarea id="roleText" class="inp" placeholder="Role: API designer&#10;- answer with the endpoint list and JSON schema only" style="width:100%;min-height:110px;font-size:12px;font-family:ui-monospace,monospace"></textarea>
-          <div style="display:flex;gap:6px;margin-top:8px">
-            <button class="ghost" onclick="saveRole()" title="save this session's ROLE.md">save role</button>
-            <button class="ghost" onclick="clearRole()" title="remove the role file (reset)">clear</button>
-          </div>
+          <div class="remaining" style="margin-bottom:4px">Every file that feeds the system prompt, with its real path. The text
+            is already loaded, so edit it here. A later section wins on conflict.</div>
+          <div id="rulesList"></div>
         </div>
         </div>
       </section>
@@ -2770,29 +2791,68 @@ function ctxNa(reason) {
   $("ctxBudget").style.color = "var(--dim)";
   $("ctxBar").style.width = "0%"; $("ctxBar").style.minWidth = "0px"; $("ctxBar").className = "";
   const _cm = $("ctx-meter"); _cm.className = "pill meter"; _cm.title = "context tokens / budget";
-  const _cp = $("ctxPct"); if (_cp) _cp.textContent = "–";
+  const _cp = $("ctxPctTop"); if (_cp) _cp.textContent = "–";
   const _cr = $("ctxRing"); if (_cr) _cr.style.strokeDashoffset = "100";
 }
-/* JAG-294: the session's ROLE.md — a small role+behaviour patch merged into the
-   system prompt. Same file the Orbit deck edits (GET/POST /api/roles). */
-async function loadRole() {
-  if (!sessionId) { $("roleText").value = ""; $("rolePath").textContent = "no session"; return; }
+/* JAG-361: ONE complete Rules panel. Every prompt source is listed with its real
+   absolute path and edited in place — the per-session role (roles.py), the global
+   RULES.md (all projects) and the project RULES.md (this workspace). Within a scope
+   AGENTS.md is ALSO loaded (additive) and is shown next to the path. The identity
+   and the policy sections (server.py constants) are code, not files, so they are
+   not listed here; the order below is the order they enter the prompt. */
+async function loadRole() { return loadRulesPanel(); }   // JAG-361: kept as an alias
+async function loadRulesPanel() {
+  const box = $("rulesList"); if (!box) return;
+  const params = new URLSearchParams();
+  if (sessionId) params.set("session", sessionId);
+  if (TOKEN) params.set("token", TOKEN);
+  let d = null, role = null;
+  try { d = await api("GET", "/api/rules?" + params.toString()); } catch (e) { d = null; }
+  if (sessionId) {
+    try { role = await api("GET", "/api/roles?session=" + encodeURIComponent(sessionId)); }
+    catch (e) { role = null; }
+  }
+  if (!d) { box.innerHTML = '<div class="remaining">rules unavailable</div>'; return; }
+  const g = d.global || {}, p = d.project || {};
+  const rows = [];
+  if (sessionId) rows.push(_rulesRow("role", "session role", (role && role.path) || "(no session)",
+                                     (role && role.text) || "", "ROLE.md", !!(role && role.text), true));
+  rows.push(_rulesRow("global", "global rules (all projects)", g.path || "?",
+                      g.text || "", (g.files || []).join(" + ") || "(no file yet)", !!g.exists, false));
+  rows.push(_rulesRow("project", "project rules (this workspace)", p.path || "?",
+                      p.text || "", (p.files || []).join(" + ") || "(no file yet)", !!p.exists, false));
+  box.innerHTML = rows.join("");
+}
+function _rulesRow(kind, label, path, text, filesNote, ok, open) {
+  const id = "rule_" + kind;
+  return '<details class="rulesrc"' + (open ? " open" : "") + '>'
+    + '<summary><b>' + esc(label) + '</b><span class="rbadge' + (ok ? " ok" : "") + '">'
+    + esc(filesNote) + '</span></summary>'
+    + '<div class="rpath" title="' + esc(path) + '">' + esc(path) + '</div>'
+    + '<textarea class="inp" id="' + id + '" style="width:100%;min-height:120px;font-size:12px;'
+    + 'font-family:ui-monospace,monospace">' + esc(text) + '</textarea>'
+    + '<div class="rrow"><button class="ghost" onclick="saveRuleSource(\'' + kind
+    + '\')" title="write this file to disk now">save</button>'
+    + '<span class="remaining" id="' + id + '_res"></span></div></details>';
+}
+async function saveRuleSource(kind) {
+  const el = $("rule_" + kind); if (!el) return;
+  const res = $("rule_" + kind + "_res");
+  const text = el.value;
+  let r = null;
   try {
-    const r = await api("GET", "/api/roles?session=" + encodeURIComponent(sessionId));
-    $("roleText").value = (r && r.text) || "";
-    $("rolePath").textContent = (r && r.path) ? r.path.split("/").pop() : "";
-  } catch (e) { /* a missing role is fine */ }
-}
-async function saveRole() {
-  if (!sessionId) { toast("open a session first"); return; }
-  const r = await api("POST", "/api/roles", {session: sessionId, text: $("roleText").value});
-  if (r && r.ok) { toast("role saved"); loadRole(); }
-  else { toast((r && r.error) || "role save failed"); }
-}
-async function clearRole() {
-  if (!sessionId) return;
-  $("roleText").value = "";
-  await saveRole();
+    if (kind === "role") {
+      if (!sessionId) { toast("open a session first"); return; }
+      r = await api("POST", "/api/roles", { session: sessionId, text: text });
+    } else {
+      r = await api("POST", "/api/rules", { scope: kind, content: text, session: sessionId });
+    }
+  } catch (e) { r = { ok: false, error: String(e) }; }
+  const ok = !!(r && r.ok);
+  if (res) { res.textContent = ok ? "saved" : ((r && r.error) || "save failed");
+             res.style.color = ok ? "var(--ok)" : "var(--err)"; }
+  if (ok) toast(kind + " rules saved");
+  if (ok) loadRulesPanel();
 }
 
 async function loadCtx() {
@@ -2831,7 +2891,7 @@ async function loadCtx() {
     const pill = $("ctx-meter");
     pill.title = d.detail || d.short || "context tokens / budget";
     pill.className = "pill meter" + (pct >= 70 ? " hot" : "");
-    const pctEl = $("ctxPct"); if (pctEl) pctEl.textContent = pct + "%";
+    const pctEl = $("ctxPctTop"); if (pctEl) pctEl.textContent = pct + "%";
     const ring = $("ctxRing");
     if (ring) ring.style.strokeDashoffset = String(100 - Math.max(0, Math.min(100, pct)));
   } catch {
@@ -2967,8 +3027,13 @@ function renderCosts() {
   const total = $("costTotal"), sub = $("costSub");
   if (!c) { if (total) total.textContent = "$0"; if (sub) sub.textContent = ""; box.innerHTML = '<div class="remaining">no calls yet</div>'; return; }
   if (total) total.textContent = (c.priced || (c.calls && !c.unknown_calls)) ? _usd(c.total_usd) : (c.calls ? "\u2014" : "$0");
+  // JAG-361: state whether the money is EXACT (the provider reported the charge
+  // itself) or estimated from the real token counts x the rate table.
+  const _exact = (c.recent || []).filter(r => r.src === "provider").length;
   if (sub) sub.textContent = c.calls
-    ? (c.calls + " call" + (c.calls === 1 ? "" : "s") + (c.priced ? (c.unknown_calls ? " \u00b7 " + c.unknown_calls + " unpriced" : "") : " \u00b7 press \u21bb prices"))
+    ? (c.calls + " call" + (c.calls === 1 ? "" : "s")
+       + (_exact ? " \u00b7 exact" : (c.priced ? " \u00b7 estimated" : " \u00b7 press \u21bb prices"))
+       + (c.priced && c.unknown_calls ? " \u00b7 " + c.unknown_calls + " unpriced" : ""))
     : "";
   if ($("costCalls")) $("costCalls").textContent = (c.calls || 0) + " calls";
   if ($("costIn")) $("costIn").textContent = _fmtTok(c.tokens_in) + " in";
@@ -2977,7 +3042,9 @@ function renderCosts() {
     '<div class="costrow"><span class="cm" title="' + _attr(r.model || "") + '">' + esc(_shortModel(r.model)) + "</span>" +
     '<span class="ct">' + esc(_hhmmss(r.ts)) + "</span>" +
     '<span class="ct">' + _fmtTok(r.prompt) + "\u2192" + _fmtTok(r.completion) + "</span>" +
-    '<span class="cu">' + _usd(r.usd) + "</span></div>").join("");
+    '<span class="cu" title="' + (r.src === "provider" ? "exact \u2014 charged by the provider"
+      : (r.src === "estimate" ? "estimated from the real token counts \u00d7 rates" : "no price known for this model")) + '">'
+      + (r.src === "estimate" ? "\u2248" : "") + _usd(r.usd) + "</span></div>").join("");
   box.innerHTML = rows || '<div class="remaining">no calls yet</div>';
 }
 async function loadCosts() {
@@ -4735,7 +4802,7 @@ function focusInsp(name) {
   if (key === "plan") { loadPlan(); loadGraph(); }
   else if (key === "context") { loadCtx(); }
   else if (key === "cost") { loadCosts(); }
-  else if (key === "role") { loadRole(); }
+  else if (key === "rules") { loadRulesPanel(); }
   else if (key === "approvals") { loadApprovals(); }
   else if (key === "files") { loadFiles(); loadEdits(); }
 }
@@ -5321,7 +5388,7 @@ function paletteItems() {
     { label: "\u2699 Open settings", run: () => openSettings() },
   ];
   SETTINGS_CATS.forEach(([k, label]) => items.push({ label: "\u2699 Settings \u25B8 " + label, run: () => openSettings(k) }));
-  [["approvals", "Approvals"], ["plan", "Plan / Tasks"], ["context", "Context"], ["role", "Role"], ["files", "Files & changes"], ["browser", "Browser"], ["terminal", "Terminal"], ["feed", "Feed"]]
+  [["approvals", "Approvals"], ["plan", "Plan / Tasks"], ["context", "Context"], ["rules", "Rules"], ["files", "Files & changes"], ["browser", "Browser"], ["terminal", "Terminal"], ["feed", "Feed"]]
     .forEach(([k, label]) => items.push({ label: "\u25B8 Inspector \u00A7 " + label, run: () => focusInsp(k) }));
   return items;
 }
@@ -5382,26 +5449,72 @@ function saveToken() {
 $("palette-open").onclick = openPalette;
 
 /* ---- v0.8.1 resizable columns + panel toggles ---- */
+/* JAG-361: the centre column's floor, in CSS px. A side panel may never grow so
+   far that the chat drops below this. */
+const CHAT_MIN_W = 420;
+function _panelRoom(col) {
+  const z = _pageScale();
+  const app = document.getElementById("app");
+  const avail = ((app || document.body).getBoundingClientRect().width / z) - 10;  // 2 resizers
+  const other = document.querySelector('[data-col="sessions"]') === col
+    ? '[data-col="context"]' : '[data-col="sessions"]';
+  const oe = document.querySelector(other);
+  const ow = (oe && getComputedStyle(oe).display !== "none")
+    ? oe.getBoundingClientRect().width / z : 0;
+  return Math.max(150, Math.min(1200, avail - ow - CHAT_MIN_W));
+}
+/* Clamp BOTH panels so the chat keeps CHAT_MIN_W. Runs when a width is restored,
+   the window resizes or the zoom changes — never while you drag (so the drag is
+   exact), only when something else changed the available space. */
+function _fitPanels() {
+  const z = _pageScale();
+  const sess = document.querySelector('[data-col="sessions"]');
+  const ctx = document.querySelector('[data-col="context"]');
+  const shown = el => !!el && getComputedStyle(el).display !== "none";
+  const lv = shown(sess), rv = shown(ctx);
+  if (!lv && !rv) return;
+  const app = document.getElementById("app");
+  const avail = ((app || document.body).getBoundingClientRect().width / z) - 10;
+  let lw = lv ? sess.getBoundingClientRect().width / z : 0;
+  let rw = rv ? ctx.getBoundingClientRect().width / z : 0;
+  let over = (lw + rw) - (avail - CHAT_MIN_W);
+  if (over <= 0) return;
+  const order = (lv && rv)
+    ? (lw >= rw ? [[sess, "l"], [ctx, "r"]] : [[ctx, "r"], [sess, "l"]])
+    : (lv ? [[sess, "l"]] : [[ctx, "r"]]);
+  for (const pair of order) {
+    if (over <= 0) break;
+    const el = pair[0], tag = pair[1];
+    const cur = (tag === "l") ? lw : rw;
+    const take = Math.min(over, Math.max(0, cur - 150));
+    if (take <= 0) continue;
+    const w = Math.round(cur - take);
+    el.style.width = w + "px"; el.style.flex = "0 0 " + w + "px";
+    if (tag === "l") lw = w; else rw = w;
+    over -= take;
+  }
+  positionHandles();
+}
 function bindResizer(handle, colSel, sign, key) {
   const col = document.querySelector(colSel);
   if (!handle || !col) return;
   const saved = parseInt(localStorage.getItem(key) || "", 10);
-  // JAG-360: 0 1 (shrinkable) — a saved wide panel must not squeeze the chat; the
-  // centre column's min-width then pulls it back to a usable size.
-  if (saved) { col.style.width = saved + "px"; col.style.flex = "0 1 " + saved + "px"; }
+  // JAG-361: a FIXED width (0 0) so a drag moves the panel by exactly the pixels
+  // you drag; _fitPanels() then clamps it against the centre column's floor.
+  if (saved) { col.style.width = saved + "px"; col.style.flex = "0 0 " + saved + "px"; }
+  _fitPanels();
   handle.addEventListener("mousedown", e => {
     e.preventDefault(); handle.classList.add("active");
     // JAG-360: the drag maths run in CSS px (the unit of `style.width`), NOT in
     // already-zoomed rect pixels — otherwise the panel lags the cursor by the zoom.
     const z = _pageScale();
     const startX = e.clientX, startW = col.getBoundingClientRect().width / z;
+    const room = _panelRoom(col);   // JAG-361
     const move = ev => {
-      // JAG-127b: cap a side panel at ~72% of the window (max 1200px). JAG-360: the
-      // chat has its own min-width, so the flex layout also refuses to starve it —
-      // dragging past the limit simply stops growing the panel.
-      const maxW = Math.max(170, Math.min(1200, (window.innerWidth / z) * 0.72));
-      const w = Math.max(170, Math.min(maxW, startW + sign * (ev.clientX - startX) / z));
-      col.style.width = w + "px"; col.style.flex = "0 1 " + w + "px";
+      // JAG-361: bounded by the room the centre column leaves — so the panel stops
+      // growing at the floor instead of being redistributed by the flex algorithm.
+      const w = Math.max(150, Math.min(room, startW + sign * (ev.clientX - startX) / z));
+      col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
       positionHandles();   // JAG-357: keep the handle glued to the border we move
     };
     const up = () => {
@@ -5494,6 +5607,7 @@ function positionHandles() {
 /* JAG-358: re-glue for a few frames after anything that can move a panel (a
    toggle, a load, a CSS transition) — one call can land before layout settles. */
 function _settleHandles() {
+  _fitPanels();   // JAG-361: the panels must fit before the handles are glued
   let n = 0;
   const tick = () => { positionHandles(); if (++n < 24) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
