@@ -872,6 +872,10 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, edits_summary(qs))
         if path == "/api/edits/diff":  # JAG-127: side-by-side rows for one file
             return _r(handler, 200, edits_diff(qs))
+        if path == "/api/costs":  # JAG-355: per-session cost ledger + totals
+            from . import costs
+            return _r(handler, 200, costs.summary(qs.get("session"),
+                                                  _int(qs.get("tail", 60), 60)))
 
         return False
 
@@ -885,6 +889,12 @@ def handle(handler, method, path, qs, body):
             return _r(handler, 200, edits_undo(body))
         if path == "/api/edits/approve":  # JAG-275: ACCEPT changes, drop the pending diff
             return _r(handler, 200, edits_approve(body))
+        if path == "/api/costs/refresh":  # JAG-355: refresh cloud prices (OpenRouter, public)
+            from . import costs
+            return _r(handler, 200, costs.refresh_openrouter())
+        if path == "/api/costs/reset":  # JAG-355: clear this session's ledger
+            from . import costs
+            return _r(handler, 200, costs.reset((body or {}).get("session")))
         if path == "/api/term/exec":  # JAG-281: real terminal — send a command line
             return _r(handler, 200, term_exec(body))
         if path == "/api/term/reset":  # JAG-281: kill the session's shell

@@ -3,7 +3,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![deps](https://img.shields.io/badge/deps-stdlib%20%2B%20PyYAML-brightgreen.svg)](#install--run)
-[![tests](https://img.shields.io/badge/battery-113%2F113%20green-success.svg)](#the-quality-gate)
+[![tests](https://img.shields.io/badge/battery-114%2F114%20green-success.svg)](#the-quality-gate)
 [![CI](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml/badge.svg)](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml)
 
 **SparkForge is a single agent harness — one engine that drives one LLM
@@ -76,7 +76,8 @@ cloud models, and the strongest (still cheap) cloud goes to the leads.
 - 🔁 **Completion loop** with typed stops (`goal_reached · no_progress · budget · blocked`) — the list decides when work is done, not the model's mood.
 - 🛠️ **Real tools**: `shell`, `fs.read/write/edit`, `git`, `http`, `web`, `memory`, `skills`, `sessions` (inspect another session's transcript), MCP tools — all through the approval gate.
 - 🧠 **Memory** (store/recall/recent) auto-injected each turn; ⚠️ **checkpoints** + rollback.
-- 📏 **Honest context meter** — the real prompt vs the model's real window, auto-compaction at 75%.
+- 📏 **Honest context meter** — the real prompt vs the model's real window (a **donut** breakdown by section), auto-compaction at 75%.
+- 💰 **Live cost panel** — the provider's REAL per-call token usage priced per 1M: a running session total plus **one row per API call**. `↻ prices` pulls OpenRouter's public catalogue (no key); a local model reads as *unpriced*, never a fake zero.
 - ▶️ **HITL** pause/resume/abort; ⏹️ Stop kills the actual tool process, not just the socket.
 
 **Orchestration (drives a team)**
@@ -95,7 +96,7 @@ cloud models, and the strongest (still cheap) cloud goes to the leads.
 - ⌨️ **CLI** (`forge.py`) and a **mobile-ready HTTP API** — command the DGX from your phone over Tailscale.
 - 🔌 **Bidirectional MCP** — use SparkForge *from* any MCP client, and connect *external* MCP servers as native tools.
 
-All views share one theme: pick **Indigo / Dark / Midnight / Sand / Sepia** in ⚙ → Appearance.
+All views share one theme — pick **Indigo / Dark / Midnight / Forest / Sand / Sepia** in ⚙ → Appearance (six eye-saver palettes).
 
 ---
 
@@ -163,7 +164,7 @@ The **only** regression gate is one deterministic, fully-isolated battery — it
 every `SPARKFORGE_*` data dir at a throwaway temp dir, so it never touches live state:
 
 ```bash
-bash tests/battery.sh        # → === battery: 113/113 GREEN ===
+bash tests/battery.sh        # → === battery: 114/114 GREEN ===
 ```
 
 CI runs the same battery on every push/PR ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

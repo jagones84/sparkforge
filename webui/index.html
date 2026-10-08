@@ -235,14 +235,19 @@
   .ctxmeter { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px;
     font-size: 11px; color: var(--dim); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
   .ctxmeter b { color: var(--txt); font-weight: 600; }
-  /* JAG-272: stacked token breakdown — the bars/legend sum to the context total */
-  .ctxbar { display: flex; height: 8px; border-radius: 999px; overflow: hidden;
-    margin-top: 8px; border: 1px solid var(--line); background: var(--bg2); }
-  .ctxbar > i { display: block; height: 100%; }
-  .ctxlegend { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 6px;
-    font-size: 10.5px; color: var(--dim); }
-  .ctxlegend .bdrow { display: inline-flex; align-items: center; gap: 4px; }
-  .ctxlegend .bdrow > i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  /* JAG-355: the context breakdown is a DONUT (part-to-whole) + a compact legend,
+     replacing the old stacked micro-bar with its 12-row wrapping legend. */
+  .ctxdonut { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .ctxdonut svg { flex: 0 0 auto; width: 102px; height: 102px; }
+  .ctxdonut .seg { transition: opacity .12s; }
+  .ctxdonut .seg:hover { opacity: .72; }
+  .ctxdonut .dc { fill: var(--txt); font-size: 9px; font-weight: 600; }
+  .ctxdonut .dl { fill: var(--dim); font-size: 6.2px; letter-spacing: .04em; }
+  .ctxlegend { display: flex; flex-direction: column; gap: 3px; margin: 0; min-width: 0;
+    flex: 1; font-size: 10.5px; color: var(--dim); }
+  .ctxlegend .bdrow { display: flex; align-items: center; gap: 5px; min-width: 0; }
+  .ctxlegend .bdrow > i { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+  .ctxlegend .bdrow .bl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ctxlegend .bdrow b { color: var(--txt); font-weight: 600; }
   .ctxchips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
   .ctxchip { background: transparent; border: 1px solid var(--line); color: var(--dim);
@@ -260,6 +265,16 @@
   .ctxitem[data-open] { cursor: pointer; }
   .ctxitem[data-open]:hover { color: var(--acc2); }
   .ctxitem .cn { color: var(--acc2); }
+
+  /* JAG-355: live cost panel — session total + one row per API call */
+  .costhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .costtot { font-size: 20px; font-weight: 700; color: var(--txt); letter-spacing: -.02em; }
+  .costlist { margin-top: 7px; max-height: 240px; overflow-y: auto; }
+  .costrow { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--dim);
+    padding: 3px 2px; border-bottom: 1px solid var(--line); }
+  .costrow .cm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .costrow .ct { font-family: ui-monospace, monospace; font-size: 10px; color: var(--muted); }
+  .costrow .cu { font-weight: 600; color: var(--txt); min-width: 52px; text-align: right; }
 
   /* approvals */
   button { background: linear-gradient(90deg, var(--acc), var(--acc2)); border: 0; color: #fff;
@@ -705,17 +720,17 @@
     color-scheme: dark;
   }
   html[data-theme="sand"] {
-    --bg: #e7d9bd; --panel: rgba(243,235,216,.92); --panel2: rgba(236,226,203,.96);
-    --line: rgba(120,92,52,.28); --txt: #3a3123; --dim: #6d5c43;
-    --acc: #a86a30; --acc2: #b99248; --ok: #3f8f5b; --warn: #a8791f; --err: #b04f38;
-    --accent: #a86a30; --you: #3d6a9e; --info: #3f7f86;
-    --bg-2: #e4d6b8; --bg-3: #ddceac; --line-2: #d5c4a1; --ink: #4a4034; --muted: #6d5c43;
-    --bg2: #e4d6b8; --grad-a: #ece0c1; --grad-b: #e6d8dc; --hdr: rgba(238,229,209,.94);
-    --aside: rgba(243,235,216,.62); --composer: rgba(243,235,216,.72);
-    --hover: rgba(168,106,48,.12); --sel: rgba(168,106,48,.18);
-    --hl: rgba(168,106,48,.2); --menubg: #f2e9d6;
-    --menuline: rgba(168,106,48,.3); --chipbg: rgba(168,106,48,.10);
-    --chipbd: rgba(168,106,48,.24); --scroll: rgba(168,106,48,.42);
+    --bg: #d9c49c; --panel: rgba(226,212,182,.95); --panel2: rgba(216,201,169,.97);
+    --line: rgba(120,92,52,.30); --txt: #382f21; --dim: #665639;
+    --acc: #9c5f24; --acc2: #a9853f; --ok: #3c8556; --warn: #9c7018; --err: #a8482f;
+    --accent: #9c5f24; --you: #3a648f; --info: #3a767d;
+    --bg-2: #d2bd94; --bg-3: #cbb588; --line-2: #c2ad84; --ink: #453b2c; --muted: #665639;
+    --bg2: #d2bd94; --grad-a: #ddc9a3; --grad-b: #d6c4a6; --hdr: rgba(222,208,178,.95);
+    --aside: rgba(226,212,182,.66); --composer: rgba(226,212,182,.82);
+    --hover: rgba(156,95,36,.12); --sel: rgba(156,95,36,.18);
+    --hl: rgba(156,95,36,.2); --menubg: #ddcba6;
+    --menuline: rgba(156,95,36,.32); --chipbg: rgba(156,95,36,.12);
+    --chipbd: rgba(156,95,36,.26); --scroll: rgba(156,95,36,.45);
     color-scheme: light;
   }
   html[data-theme="midnight"] {
@@ -733,18 +748,32 @@
     color-scheme: dark;
   }
   html[data-theme="sepia"] {
-    --bg: #e6dcc4; --panel: rgba(240,233,217,.92); --panel2: rgba(233,224,205,.96);
-    --line: rgba(110,92,64,.26); --txt: #40382a; --dim: #746344;
-    --acc: #8a6a3f; --acc2: #9c8656; --ok: #4a8560; --warn: #9c7a2e; --err: #a35543;
-    --accent: #8a6a3f; --you: #4a6a8e; --info: #4a7a80;
-    --bg-2: #e3d9c0; --bg-3: #dcd1b6; --line-2: #d4c8ab; --ink: #4a4034; --muted: #746344;
-    --bg2: #e3d9c0; --grad-a: #ebe4cf; --grad-b: #e6ddd6; --hdr: rgba(236,230,214,.94);
-    --aside: rgba(240,233,217,.62); --composer: rgba(240,233,217,.72);
-    --hover: rgba(138,106,63,.12); --sel: rgba(138,106,63,.18);
-    --hl: rgba(138,106,63,.2); --menubg: #efe8d8;
-    --menuline: rgba(138,106,63,.3); --chipbg: rgba(138,106,63,.10);
-    --chipbd: rgba(138,106,63,.24); --scroll: rgba(138,106,63,.42);
-    color-scheme: light;
+    --bg: #17120c; --panel: rgba(38,31,22,.84); --panel2: rgba(29,23,16,.9);
+    --line: rgba(214,180,124,.16); --txt: #e6d8bf; --dim: #9c8767;
+    --acc: #c99a5b; --acc2: #d7bb84; --ok: #6fb98a; --warn: #d9b45c; --err: #de8a6f;
+    --accent: #c99a5b; --you: #b9c0d6; --info: #8fb3b8;
+    --bg-2: #221a12; --bg-3: #2a2016; --line-2: #3a2d1e; --ink: #d3c3a6; --muted: #9c8767;
+    --bg2: #221a12; --grad-a: #2a2015; --grad-b: #1d160f; --hdr: rgba(23,18,12,.82);
+    --aside: rgba(20,15,10,.55); --composer: rgba(23,18,12,.7);
+    --hover: rgba(201,154,91,.14); --sel: rgba(201,154,91,.2);
+    --hl: rgba(201,154,91,.22); --menubg: #211a11;
+    --menuline: rgba(201,154,91,.3); --chipbg: rgba(201,154,91,.14);
+    --chipbd: rgba(214,180,124,.2); --scroll: rgba(201,154,91,.45);
+    color-scheme: dark;
+  }
+  html[data-theme="forest"] {
+    --bg: #0c1410; --panel: rgba(20,31,25,.82); --panel2: rgba(15,24,19,.9);
+    --line: rgba(140,190,160,.14); --txt: #d8e6dc; --dim: #7f9488;
+    --acc: #6fae8b; --acc2: #9ccfae; --ok: #5bd08a; --warn: #d7b25c; --err: #e0836f;
+    --accent: #7fbf95; --you: #a9c9d8; --info: #7fb8c4;
+    --bg-2: #122019; --bg-3: #16281f; --line-2: #20352a; --ink: #c3d4c9; --muted: #7f9488;
+    --bg2: #122019; --grad-a: #14301f; --grad-b: #0e1a14; --hdr: rgba(11,19,15,.8);
+    --aside: rgba(10,17,13,.55); --composer: rgba(11,19,15,.66);
+    --hover: rgba(111,174,139,.14); --sel: rgba(111,174,139,.2);
+    --hl: rgba(111,174,139,.22); --menubg: #101d16;
+    --menuline: rgba(111,174,139,.3); --chipbg: rgba(111,174,139,.14);
+    --chipbd: rgba(140,190,160,.2); --scroll: rgba(111,174,139,.45);
+    color-scheme: dark;
   }
   /* theme polish: re-point the tinted hotspots at the tokens (later rules win) */
   body { background: radial-gradient(1200px 800px at 80% -10%, var(--grad-a) 0%, var(--bg) 55%),
@@ -922,6 +951,20 @@
           <div class="ctxrow"><span id="ctxMsgs">–</span><span id="ctxTok">–</span><span id="ctxBudget">–</span></div>
         </div>
         <div id="ctxCats"></div>
+        </div>
+      </section>
+      <section data-insp="cost" class="insp-open">
+        <button class="insp-hd" onclick="toggleInsp('cost')">Cost</button>
+        <div class="insp-body">
+        <div class="card">
+          <div class="costhead">
+            <span id="costTotal" class="costtot">–</span>
+            <span id="costSub" class="remaining"></span>
+          </div>
+          <div class="ctxrow"><span id="costCalls">–</span><span id="costIn">–</span><span id="costOut">–</span></div>
+          <div style="margin-top:6px"><button class="ghost" id="costRefresh" title="fetch real per-1M prices from OpenRouter's public model list (no key needed) and cache them">↻ prices</button></div>
+        </div>
+        <div id="costList" class="costlist"></div>
         </div>
       </section>
       <section data-insp="role" class="insp-open">
@@ -2320,6 +2363,8 @@ function send(text) {
   es.addEventListener("graph.node.added", e => { if (live()) applyGraphEvent(JSON.parse(e.data)); });
   es.addEventListener("graph.node.updated", e => { if (live()) applyGraphEvent(JSON.parse(e.data)); });
   es.addEventListener("harness.inject", e => { if (live()) harnessInject(JSON.parse(e.data)); });
+  // JAG-355: the server emits one event per LLM call -> live cost panel
+  es.addEventListener("cost.usage", e => { if (live()) costLive(JSON.parse(e.data).call); });
   es.addEventListener("chat.delta", e => {
     const d = JSON.parse(e.data); adopt(d.session);
     if (!live()) return;
@@ -2370,7 +2415,7 @@ function selectSession(s) {
   // JAG-167: never carry another session's run graph into this one.
   curRunId = null; localStorage.removeItem("sf_run"); graph = null;
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
-  loadSessions(); loadHistory(); loadCtx(); loadRole(); loadRules(); loadPlan();
+  loadSessions(); loadHistory(); loadCtx(); loadRole(); loadRules(); loadPlan(); loadCosts();
   modelLabel(); closeAside();
   attachIfRunning(sessionId);   // JAG-181: resume following a still-running turn
   // JAG-127: the open panel must follow the session switch — its folder
@@ -2498,7 +2543,7 @@ async function createNewSession() {
   _sessModel[s.id] = "";
   $("log").innerHTML = ""; curThink = curAns = null; _resetChatTree();
   if (window.SparkEditor && SparkEditor.onSessionChange) SparkEditor.onSessionChange();
-  closeNewSess(); loadSessions(); loadHistory(); loadRules(); loadCtx(); loadRole(); loadPlan(); modelLabel(); closeAside();
+  closeNewSess(); loadSessions(); loadHistory(); loadRules(); loadCtx(); loadRole(); loadPlan(); loadCosts(); modelLabel(); closeAside();
 }
 /* JAG-121: folder picker (file-browser) for the session workspace */
 let _dirState = { path: "", parent: null, roots: [] };
@@ -2758,6 +2803,28 @@ async function loadCtxItems() {
   renderCtxItems();
 }
 function _fmtTok(n) { n = n || 0; return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n); }
+/* JAG-355: donut for the context composition. r is chosen so the circumference is
+   exactly 100, so each stroke-dasharray value IS the segment percentage. */
+const CTX_COLS = ["#6c8cff", "#8b7bf0", "#39d3c3", "#e0a458", "#d96a8f", "#5bd08a",
+                  "#b07be0", "#7f9ac0", "#c9a227", "#d97a7a", "#8a94a8", "#4a5568"];
+function _ctxDonut(bd, total) {
+  const R = 15.9155, C = 100;
+  let off = 0, segs = "";
+  bd.forEach((x, i) => {
+    const pct = (x.tokens / total) * 100;
+    const col = CTX_COLS[i % CTX_COLS.length];
+    segs += '<circle class="seg" cx="21" cy="21" r="' + R + '" fill="none" stroke="' + col +
+      '" stroke-width="6" stroke-dasharray="' + pct.toFixed(3) + " " + (C - pct).toFixed(3) +
+      '" stroke-dashoffset="' + (25 - off).toFixed(3) + '"><title>' + esc(x.label) + ": " +
+      _fmtTok(x.tokens) + " tok \u00b7 " + Math.round(pct) + "%</title></circle>";
+    off += pct;
+  });
+  return '<svg viewBox="0 0 42 42" role="img" aria-label="context composition">' +
+    '<circle cx="21" cy="21" r="' + R + '" fill="none" stroke="var(--line)" stroke-width="6"></circle>' +
+    segs +
+    '<text class="dc" x="21" y="20.2" text-anchor="middle">' + _fmtTok(total) + "</text>" +
+    '<text class="dl" x="21" y="25.4" text-anchor="middle">TOKENS</text></svg>';
+}
 function renderCtxItems() {
   const box = $("ctxCats"); if (!box) return;
   if (!_ctxItems) { box.innerHTML = '<div class="remaining">no context yet</div>'; return; }
@@ -2778,12 +2845,13 @@ function renderCtxItems() {
   let bdHtml = "";
   if (bd.length) {
     const total = bd.reduce((a, x) => a + (x.tokens || 0), 0) || 1;
-    const cols = ["#6c8cff", "#8b7bf0", "#39d3c3", "#e0a458", "#d96a8f",
-                  "#5bd08a", "#b07be0", "#7f9ac0", "#c9a227", "#d97a7a",
-                  "#8a94a8", "#4a5568"];
-    const bar = bd.map((x, i) => `<i style="width:${(x.tokens / total * 100).toFixed(2)}%;background:${cols[i % cols.length]}" title="${esc(x.label)}: ${_fmtTok(x.tokens)} tok"></i>`).join("");
-    const legend = bd.map((x, i) => `<span class="bdrow"><i style="background:${cols[i % cols.length]}"></i>${esc(x.label)} <b>${_fmtTok(x.tokens)}</b><span class="cn">${(x.tokens / total * 100).toFixed(0)}%</span></span>`).join("");
-    bdHtml = `<div class="ctxbar">${bar}</div><div class="ctxlegend">${legend}</div>`;
+    const legend = bd.map((x, i) => {
+      const pct = Math.round(x.tokens / total * 100);
+      return `<span class="bdrow"><i style="background:${CTX_COLS[i % CTX_COLS.length]}"></i>` +
+             `<span class="bl" title="${esc(x.label)}">${esc(x.label)}</span>` +
+             `<b>${pct}%</b><span class="cn">${_fmtTok(x.tokens)}</span></span>`;
+    }).join("");
+    bdHtml = `<div class="ctxdonut">${_ctxDonut(bd, total)}<div class="ctxlegend">${legend}</div></div>`;
   }
   const chips = nonEmpty.map(([k, label]) => {
     const n = (_ctxItems[k] || []).length;
@@ -2823,6 +2891,56 @@ function renderCtxItems() {
     SparkEditor.open(b.getAttribute("data-open"));
   });
 }
+/* JAG-355: live cost of the session — a running $ total + one row per API call.
+   The server folds the provider's REAL usage into the ledger and pushes a
+   `cost.usage` event, so this updates mid-run. Prices are per 1M tokens. */
+let _cost = null;
+function _usd(v) { return v == null ? "\u2014" : ("$" + (v < 0.01 ? v.toFixed(4) : v.toFixed(2))); }
+function _shortModel(m) { m = String(m || "?"); return m.length > 26 ? "\u2026" + m.slice(-25) : m; }
+function _hhmmss(ts) { try { return new Date((ts || 0) * 1000).toLocaleTimeString(); } catch (e) { return ""; } }
+function renderCosts() {
+  const box = $("costList"); if (!box) return;
+  const c = _cost;
+  const total = $("costTotal"), sub = $("costSub");
+  if (!c) { if (total) total.textContent = "$0"; if (sub) sub.textContent = ""; box.innerHTML = '<div class="remaining">no calls yet</div>'; return; }
+  if (total) total.textContent = (c.priced || (c.calls && !c.unknown_calls)) ? _usd(c.total_usd) : (c.calls ? "\u2014" : "$0");
+  if (sub) sub.textContent = c.calls
+    ? (c.calls + " call" + (c.calls === 1 ? "" : "s") + (c.priced ? (c.unknown_calls ? " \u00b7 " + c.unknown_calls + " unpriced" : "") : " \u00b7 press \u21bb prices"))
+    : "";
+  if ($("costCalls")) $("costCalls").textContent = (c.calls || 0) + " calls";
+  if ($("costIn")) $("costIn").textContent = _fmtTok(c.tokens_in) + " in";
+  if ($("costOut")) $("costOut").textContent = _fmtTok(c.tokens_out) + " out";
+  const rows = (c.recent || []).map(r =>
+    '<div class="costrow"><span class="cm" title="' + _attr(r.model || "") + '">' + esc(_shortModel(r.model)) + "</span>" +
+    '<span class="ct">' + esc(_hhmmss(r.ts)) + "</span>" +
+    '<span class="ct">' + _fmtTok(r.prompt) + "\u2192" + _fmtTok(r.completion) + "</span>" +
+    '<span class="cu">' + _usd(r.usd) + "</span></div>").join("");
+  box.innerHTML = rows || '<div class="remaining">no calls yet</div>';
+}
+async function loadCosts() {
+  if (!sessionId) { _cost = null; renderCosts(); return; }
+  try { const d = await api("GET", "/api/costs?session=" + encodeURIComponent(sessionId)); if (d && !d.error) _cost = d; }
+  catch (e) { _cost = null; }
+  renderCosts();
+}
+function costLive(call) {
+  if (!call) return;
+  if (!_cost) _cost = { calls: 0, tokens_in: 0, tokens_out: 0, total_usd: 0, unknown_calls: 0, recent: [], priced: false };
+  _cost.calls = call.calls || (_cost.calls + 1);
+  if (call.total_usd != null) _cost.total_usd = call.total_usd;
+  _cost.tokens_in = (_cost.tokens_in || 0) + (call.prompt || 0);
+  _cost.tokens_out = (_cost.tokens_out || 0) + (call.completion || 0);
+  if (call.usd != null) _cost.priced = true; else _cost.unknown_calls = (_cost.unknown_calls || 0) + 1;
+  _cost.recent = [call].concat(_cost.recent || []).slice(0, 60);
+  renderCosts();
+}
+if ($("costRefresh")) $("costRefresh").onclick = async () => {
+  const b = $("costRefresh"); const t = b.textContent; b.textContent = "\u21bb fetching\u2026";
+  const r = await api("POST", "/api/costs/refresh", {});
+  b.textContent = t;
+  toast(r && r.ok ? ("cached " + r.count + " model prices") : ("price refresh failed: " + ((r && r.error) || "?")), r && r.ok ? "ok" : "err");
+  loadCosts();
+};
 async function compactNow() {
   if (!sessionId) { alert("no active session"); return; }
   const btn = $("compactBtn"); btn.textContent = "compacting…";
@@ -4379,10 +4497,12 @@ const THEMES = [
     sw: "linear-gradient(120deg,#0e1116,#1a1f28 58%,#9fb0cb)" },
   { id: "midnight", name: "Midnight", desc: "Deep blue-black — night eye-saver",
     sw: "linear-gradient(120deg,#0a1020,#101a2e 58%,#6b8cff)" },
-  { id: "sand", name: "Sand", desc: "Warm cream — soft daylight",
-    sw: "linear-gradient(120deg,#ece0c1,#dcc9a3 58%,#a86a30)" },
-  { id: "sepia", name: "Sepia", desc: "Muted paper, minimal contrast",
-    sw: "linear-gradient(120deg,#e9e0cd,#d8c8ab 58%,#8a6a3f)" },
+  { id: "forest", name: "Forest", desc: "Deep muted green — calm focus",
+    sw: "linear-gradient(120deg,#16281f,#0c1410 58%,#6fae8b)" },
+  { id: "sand", name: "Sand", desc: "Warm cream, low glare — soft daylight",
+    sw: "linear-gradient(120deg,#ddc9a3,#cbb588 58%,#9c5f24)" },
+  { id: "sepia", name: "Sepia", desc: "Dark warm amber — night reading",
+    sw: "linear-gradient(120deg,#2a2015,#17120c 58%,#c99a5b)" },
 ];
 function renderThemeGrid() {
   const g = $("themeGrid"); if (!g) return;
@@ -4551,6 +4671,7 @@ function focusInsp(name) {
   localStorage.setItem("sf_insp_" + key, "1");
   if (key === "plan") { loadPlan(); loadGraph(); }
   else if (key === "context") { loadCtx(); }
+  else if (key === "cost") { loadCosts(); }
   else if (key === "role") { loadRole(); }
   else if (key === "approvals") { loadApprovals(); }
   else if (key === "files") { loadFiles(); loadEdits(); }
@@ -5320,7 +5441,7 @@ $("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progres
 $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
-  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadRole(); loadHistory(); connectFeed(); loadSkills(); loadCompactionRef();
+  loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadRole(); loadHistory(); connectFeed(); loadSkills(); loadCompactionRef(); loadCosts();
   attachIfRunning(sessionId);   // JAG-181: a refresh must not lose a running turn
 });
 setInterval(loadStatus, 5000);

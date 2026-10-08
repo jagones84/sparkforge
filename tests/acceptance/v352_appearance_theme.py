@@ -30,18 +30,21 @@ def check(name, ok, detail=""):
 
 
 # --- A: themes ---------------------------------------------------------------
-check("A1 five themes defined (English names)",
+check("A1 six themes defined (English names)",
       all(s in HTML for s in ('id: "indigo"', 'id: "dark"', 'id: "midnight"',
-                              'id: "sand"', 'id: "sepia"')), "")
+                              'id: "forest"', 'id: "sand"', 'id: "sepia"')), "")
 check("A2 no Italian theme name remains",
       "Sabbia" not in HTML and "sabbia" not in HTML, "")
 check("A3 a real token block per theme",
       all(s in HTML for s in ('html[data-theme="dark"]', 'html[data-theme="midnight"]',
-                              'html[data-theme="sand"]', 'html[data-theme="sepia"]')), "")
+                              'html[data-theme="forest"]', 'html[data-theme="sand"]',
+                              'html[data-theme="sepia"]')), "")
 check("A4 Sand is creamier (lower luminance than the old near-white)",
-      "--bg: #e7d9bd" in HTML and "#f4ead7" not in HTML, "")
-check("A5 light themes request light native controls",
-      HTML.count("color-scheme: light") >= 2, str(HTML.count("color-scheme: light")))
+      "--bg: #d9c49c" in HTML and "#e7d9bd" not in HTML, "")
+check("A5 Sand and Sepia are no longer identical",
+      "--bg: #d9c49c" in HTML and "--bg: #17120c" in HTML, "")
+check("A6 Sand is the ONLY light theme (Sepia is now dark)",
+      HTML.count("color-scheme: light") == 1, str(HTML.count("color-scheme: light")))
 
 # --- B: Appearance settings + persistence -----------------------------------
 check("B1 an Appearance settings category exists",
@@ -88,8 +91,8 @@ check("F4 the toggle behaviour is preserved (collapsed/show + resize)",
 # --- G: composer contrast ---------------------------------------------------
 check("G1 the composer background is token-driven",
       "--composer:" in HTML and "#composer { background: var(--composer); }" in HTML, "")
-check("G2 light themes give the composer a light background",
-      "--composer: rgba(243,235,216,.72)" in HTML and "--composer: rgba(240,233,217,.72)" in HTML, "")
+check("G2 Sand gives the composer a light background; dark themes stay dark",
+      "--composer: rgba(226,212,182,.82)" in HTML and "--composer: rgba(23,18,12,.7)" in HTML, "")
 
 # --- H: the deck is renamed Bridge -----------------------------------------
 check("H1 the WebUI entry is labelled Bridge",
@@ -101,7 +104,8 @@ check("H3 the API fallback page says Bridge",
 
 # --- I: Bridge is themed too ------------------------------------------------
 check("I1 Bridge carries the per-theme token override blocks",
-      'html[data-theme="sand"]' in ORBIT and 'html[data-theme="midnight"]' in ORBIT, "")
+      all(s in ORBIT for s in ('html[data-theme="sand"]', 'html[data-theme="midnight"]',
+                               'html[data-theme="forest"]', 'html[data-theme="sepia"]')), "")
 check("I2 Bridge re-points its hardcoded dark bits at tokens",
       ".cbody{background:var(--cbody)}" in ORBIT and ".cnode text{fill:var(--linktext)}" in ORBIT, "")
 

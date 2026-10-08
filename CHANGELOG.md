@@ -71,8 +71,34 @@ All notable changes to SparkForge are documented here. The format follows
   script opens in the editor too), and the fs endpoints resolve a relative path against
   the session workspace first. The image preview now carries the session, so relative
   images open as well. Guarded by `tests/acceptance/v354_ui_links_pins.py`. Battery 112 → 113.
+- **Sand and Sepia were effectively the SAME theme (JAG-355).** Both were near-white warm
+  papers (`--bg #e7d9bd` vs `#e6dcc4`), so switching between them changed almost nothing —
+  and Sand was still too bright to be an eye-saver. Sand is now a genuine low-luminance cream
+  (`#d9c49c`) and Sepia is a **dark** warm amber (`#17120c`); they are now unmistakably
+  different. `Sand` remains the only light theme.
 
 ### Added
+- **Live cost panel (JAG-355).** The harness already captures the provider's REAL `usage`
+  per call; new `costs.py` prices each call (USD per 1M, `[input, output]`) and keeps a
+  per-session ledger (`data/costs/<session>.json`), surfaced in a new right-panel **Cost**
+  section: session total, tokens in/out, and **one row per API call** (model, time, tokens,
+  $), pushed live on a `cost.usage` SSE event so it updates mid-run. Prices come from
+  `SPARKFORGE_PRICES`, `config/prices.yaml` (or `config/prices.json`), or the `↻ prices`
+  button, which pulls OpenRouter's PUBLIC model catalogue (no key needed) into
+  `data/prices.json`. An unpriced model (e.g. a local GGUF) reports `usd: null` — never a
+  fake zero. Verified live: a chat turn wrote 3 priced-shape call records (with cached
+  tokens) for the local model, correctly `usd: null`. Routes: `GET /api/costs`,
+  `POST /api/costs/refresh`, `POST /api/costs/reset`. Guarded by
+  `tests/acceptance/v355_themes_donut_costs.py`. Battery 113 → 114.
+- **Six eye-saver themes, all differentiated.** Indigo · Dark · Midnight · **Forest** (deep
+  muted green) · Sand (low-luminance cream) · Sepia (dark warm amber) — WebUI **and** Bridge.
+- **Context donut.** The token breakdown is now an SVG donut (part-to-whole, centre = total
+  tokens) with a compact single-column legend, replacing the 8-px stacked micro-bar and its
+  wrapping 12-row legend.
+- **`tests/acceptance/v355_themes_donut_costs.py`** — the cost-ledger math + refresh parser +
+  the donut/theme/cost static guards. Battery 113 → 114.
+- **`tests/acceptance/v354_ui_links_pins.py`** — chat file links (relative/external), the pin
+  marker, and that compaction never drops the todo list. Battery 112 → 113.
 - **Pinned sessions are marked in the rail (JAG-354).** A pinned session (already sorted
   to the top) now shows a 📌 marker and a heavier title in the left panel, so the pin is
   visible without opening the session menu.

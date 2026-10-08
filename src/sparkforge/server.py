@@ -3481,6 +3481,15 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 _REAL_CACHED_TOKENS[sess["id"]] = int(_c)
             except (TypeError, ValueError):
                 pass
+        # JAG-355: price this call from its REAL usage, append it to the live cost
+        # ledger, and push it so the Cost panel updates mid-run.
+        try:
+            from . import costs as _costs
+            _call = _costs.record(sess["id"], model, chat_usage)
+            if _call:
+                on_event("cost.usage", session=sess["id"], call=_call)
+        except Exception:  # noqa: BLE001 — accounting must never break a turn
+            pass
 
     def _emit_context():
         """JAG-98: re-emit the live ctx size with the model's REAL prompt_tokens
