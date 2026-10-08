@@ -29,9 +29,9 @@
   * { scrollbar-width: thin; scrollbar-color: rgba(139,123,240,.45) transparent; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(139,123,240,.35); border-radius: 999px;
+  ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 999px;
     border: 2px solid transparent; background-clip: padding-box; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(139,123,240,.62); background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scroll); background-clip: padding-box; }
   ::-webkit-scrollbar-corner { background: transparent; }
   html, body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; height: 100%; }
   body {
@@ -79,9 +79,9 @@
   /* JAG-113: custom model picker (no native <select>) */
   /* JAG-116: the selector must be legible — not the dim .pill default */
   .model-btn { cursor: pointer; color: var(--txt); font-weight: 600; max-width: 340px;
-    overflow: hidden; text-overflow: ellipsis; border-color: rgba(108,140,255,.5);
-    background: rgba(108,140,255,.12); }
-  .model-btn:hover { background: rgba(108,140,255,.2); }
+    overflow: hidden; text-overflow: ellipsis; border-color: var(--accent);
+    background: var(--hover); }
+  .model-btn:hover { background: var(--sel); }
   .model-btn .mc { color: var(--dim); margin-left: 2px; }
   /* JAG-281: anchor the model menu ABOVE its own button (it was pinned to the
      bottom-right corner, detached from the trigger) and make it opaque so it
@@ -95,9 +95,9 @@
   #modelMenu .mh { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .6px; padding: 8px 8px 2px; }
   #modelMenu .mi { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
     cursor: pointer; font-size: 12px; color: var(--txt); }
-  #modelMenu .mi:hover { background: rgba(120,140,255,.14); }
-  #modelMenu .mi.active { background: rgba(120,140,255,.2); }
-  #modelMenu .mi.hl { background: rgba(120,140,255,.22); outline: 1px solid var(--accent); }
+  #modelMenu .mi:hover { background: var(--hover); }
+  #modelMenu .mi.active { background: var(--sel); }
+  #modelMenu .mi.hl { background: var(--hl); outline: 1px solid var(--accent); }
   #modelMenu .mi .bg { margin-left: auto; font-size: 10px; color: var(--dim); }
   /* JAG-278: the "+" attach menu (TRAE-style: attach / insert). */
   #plusMenu { position: absolute; bottom: 46px; left: 8px; width: 264px; z-index: 31; padding: 6px;
@@ -106,7 +106,7 @@
   #plusMenu[hidden] { display: none; }
   #plusMenu .mi { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;
     cursor: pointer; font-size: 12.5px; color: var(--txt); }
-  #plusMenu .mi:hover { background: rgba(120,140,255,.14); }
+  #plusMenu .mi:hover { background: var(--hover); }
   #plusMenu .mi .k { margin-left: auto; font-size: 10px; color: var(--dim); }
   #plusMenu .sep { height: 1px; background: var(--line); margin: 4px 6px; }
   #plusMenu .mh { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .6px; padding: 6px 10px 2px; }
@@ -114,16 +114,16 @@
   #attachRow { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 22px 0; }
   #attachRow[hidden] { display: none; }
   .attchip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--txt);
-    background: rgba(120,140,255,.14); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+    background: var(--hover); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
   .attchip .x { cursor: pointer; color: var(--dim); font-weight: 700; }
   .attchip .x:hover { color: var(--err); }
   /* JAG-283: clickable attachment chips inside a chat bubble (open a file in the
      editor, an image in the image window, etc.). */
   .attrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
   .chatatt { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--txt);
-    background: rgba(120,140,255,.14); border: 1px solid var(--line); border-radius: 999px;
+    background: var(--hover); border: 1px solid var(--line); border-radius: 999px;
     padding: 2px 9px; cursor: pointer; }
-  .chatatt:hover { border-color: var(--acc); background: rgba(120,140,255,.24); }
+  .chatatt:hover { border-color: var(--acc); background: var(--sel); }
   .chatatt:focus { outline: 1px solid var(--acc); }
   /* JAG-278: mic button recording state. */
   #micBtn.rec { color: #fff; background: linear-gradient(90deg, var(--acc), var(--acc2));
@@ -132,7 +132,7 @@
   /* JAG-279: transient toast (copy confirmations, attach feedback). */
   #sfToast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 9999;
     display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
-  .sf-toast { background: rgba(24,28,40,.97); color: #e6e9f2; border: 1px solid var(--line);
+  .sf-toast { background: var(--menubg); color: var(--txt); border: 1px solid var(--line);
     border-radius: 10px; padding: 8px 14px; font-size: 12.5px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
     opacity: 0; transform: translateY(6px); transition: opacity .18s ease, transform .18s ease; }
   .sf-toast.show { opacity: 1; transform: translateY(0); }
@@ -161,7 +161,7 @@
   .pick-list { overflow: auto; display: flex; flex-direction: column; gap: 2px; }
   .pick-row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px;
     cursor: pointer; font-size: 12.5px; color: var(--txt); border: 1px solid transparent; }
-  .pick-row:hover, .pick-row.hl { background: rgba(120,140,255,.14); border-color: var(--acc); }
+  .pick-row:hover, .pick-row.hl { background: var(--hover); border-color: var(--acc); }
   .pick-row .ic { flex-shrink: 0; }
   .pick-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pick-row .sub { color: var(--dim); font-size: 10.5px; flex-shrink: 0; }
@@ -178,7 +178,7 @@
   aside h2:first-child { margin-top: 0; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; }
   .step, .task { display: flex; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 8px; margin-bottom: 4px; font-size: 12.5px; }
-  .step:hover, .task:hover { background: rgba(108,140,255,.08); cursor: pointer; }
+  .step:hover, .task:hover { background: var(--hover); cursor: pointer; }
   .step.done { color: var(--dim); text-decoration: line-through; }
   .task .st { font-size: 9px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); flex-shrink: 0; }
   .task .st.doing { color: var(--warn); border-color: rgba(251,191,36,.4); }
@@ -199,8 +199,8 @@
   /* sessions */
   .sess { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px;
     border: 1px solid transparent; margin-bottom: 4px; cursor: pointer; }
-  .sess:hover { background: rgba(108,140,255,.08); }
-  .sess.active { border-color: rgba(108,140,255,.45); background: rgba(108,140,255,.1); }
+  .sess:hover { background: var(--hover); }
+  .sess.active { border-color: var(--accent); background: var(--sel); }
   /* JAG-168: a session busy with a chat turn keeps running in the background. */
   .sess.running { border-color: rgba(52,211,153,.5); }
   /* JAG-218: a live turn shows a spinning CIRCULAR ring on the rail row. */
@@ -223,27 +223,27 @@
   .sess.pinned .t { font-weight: 600; }
   .sess .menu-btn { color: var(--dim); font-size: 14px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: 0; }
   .sess:hover .menu-btn, .sess.menu-open .menu-btn { opacity: .8; }
-  .sess .menu-btn:hover { opacity: 1; background: rgba(108,140,255,.12); }
+  .sess .menu-btn:hover { opacity: 1; background: var(--hover); }
   .sess-menu { position: absolute; z-index: 50; background: var(--panel); border: 1px solid var(--line2); border-radius: 10px; padding: 4px; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
   .sess-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--txt); padding: 7px 10px; border-radius: 7px; font-size: 12px; cursor: pointer; }
-  .sess-menu button:hover { background: rgba(108,140,255,.12); }
+  .sess-menu button:hover { background: var(--hover); }
   .sess-menu button.danger { color: var(--err); }
   .sess { position: relative; }
   .sess .del:hover { opacity: 1; background: rgba(248,113,113,.12); }
   /* JAG-218: toast shown when a background session finishes while you're away. */
   .done-toast { position: fixed; right: 16px; bottom: 16px; z-index: 9999;
-    background: rgba(24,28,40,.97); color: #e6e9f2;
+    background: var(--menubg); color: var(--txt);
     border: 1px solid rgba(250,204,21,.5); border-radius: 10px;
     padding: 10px 14px; font-size: 12.5px; cursor: pointer;
     box-shadow: 0 8px 24px rgba(0,0,0,.5); }
   .done-toast:hover { border-color: rgba(250,204,21,.9); }
   /* JAG-169: the session's stable job id (JX) shown in the rail. */
   .sess .jid { font-family: ui-monospace, monospace; font-size: 10px; color: #8ab4ff; flex-shrink: 0;
-    background: rgba(108,140,255,.12); border: 1px solid rgba(108,140,255,.3);
+    background: var(--hover); border: 1px solid var(--accent);
     border-radius: 6px; padding: 1px 5px; }
 
   /* context meter */
-  .meter { height: 14px; border-radius: 999px; background: rgba(120,140,255,.12);
+  .meter { height: 14px; border-radius: 999px; background: var(--chipbg);
     overflow: hidden; margin: 6px 0 8px; box-shadow: inset 0 0 0 1px var(--line); }
   .meter > i { display: block; height: 100%; border-radius: 999px; min-width: 6px;
     background: linear-gradient(90deg, var(--acc), var(--acc2)); transition: width .4s ease; }
@@ -322,7 +322,7 @@
     background: var(--panel2); border: 1px solid rgba(108,140,255,.5);
     box-shadow: 0 6px 18px rgba(0,0,0,.5); }
   #jumpBtn[hidden] { display: none; }
-  #jumpBtn:hover { background: rgba(108,140,255,.2); }
+  #jumpBtn:hover { background: var(--sel); }
   /* JAG-267: vertical dot rail — one dot per user message, click to jump to it. */
   #dotrail { position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
     display: flex; flex-direction: column; gap: 7px; z-index: 5; max-height: 62%;
@@ -374,7 +374,7 @@
   .tctree > summary { cursor: pointer; font-size: 12px; font-weight: 600; list-style: none; display: flex;
     align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
   .tctree > summary::-webkit-details-marker { display: none; }
-  .tctree[open] > summary { border-color: rgba(108,140,255,.45); }
+  .tctree[open] > summary { border-color: var(--accent); }
   .tctree .st { font-size: 10px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); }
   .tctree .st.todo { color: var(--dim); }
   .tctree .st.doing { color: #fbbf24; border-color: rgba(251,191,36,.5); }
@@ -437,7 +437,7 @@
   #moreMenu .mi { display: flex; align-items: center; gap: 8px; width: 100%; height: auto;
     min-height: 0; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px;
     background: transparent; color: var(--txt); font-size: 12px; font-weight: 500; }
-  #moreMenu .mi:hover { background: rgba(255,255,255,.06); }
+  #moreMenu .mi:hover { background: var(--hover); }
   #composer #inp { width: 100%; }
   #inp, .inp { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
     border-radius: var(--radius); padding: 12px 16px; font: inherit; outline: none; }
@@ -447,11 +447,11 @@
   #queueBar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 4px 0; }
   #queueBar[hidden] { display: none; }
   .qchip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-    background: rgba(139,123,240,.14); border: 1px solid var(--line); border-radius: 999px;
+    background: var(--sel); border: 1px solid var(--line); border-radius: 999px;
     padding: 3px 6px 3px 10px; font-size: 11px; color: var(--txt); }
   .qchip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
   .qchip button { font-size: 11px; padding: 0 5px; line-height: 1.4; }
-  #inp:focus, .inp:focus { border-color: rgba(108,140,255,.5); box-shadow: 0 0 0 3px rgba(108,140,255,.12); }
+  #inp:focus, .inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,140,255,.12); }
 
   /* JAG-290: in a short or zoomed (narrow) window the composer's send/stop row must
      stay ANCHORED to the frame bottom. The log shrinks first (see #log min-height:0),
@@ -490,7 +490,7 @@
     }
     #tabbar button { flex: 1; background: transparent; border: 1px solid var(--line); color: var(--dim);
       padding: 9px 4px; font-size: 11px; font-weight: 400; border-radius: 10px; }
-    #tabbar button.active { color: var(--txt); border-color: rgba(108,140,255,.5); background: rgba(108,140,255,.1); }
+    #tabbar button.active { color: var(--txt); border-color: var(--accent); background: var(--sel); }
     #tabbar .badge { color: var(--warn); }
     #log { padding: 14px; }
     #composer { padding: 10px 12px; gap: 8px; }
@@ -500,9 +500,12 @@
 
   /* ---------- v0.8 redesign: 3-column desktop shell ---------- */
   #app { display: flex; flex: 1; min-height: 0; }
-  [data-col="sessions"] { flex: 0 0 220px; width: 220px; border-right: 1px solid var(--line); overflow-y: auto; }
-  [data-col="chat"]     { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-  [data-col="context"]  { flex: 0 0 238px; width: 238px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden; min-height: 0; }
+  /* JAG-360: the side panels may SHRINK (never grow) so the chat keeps a usable
+     minimum: dragging a panel wide (or a narrow window) can no longer squeeze the
+     centre column to a sliver. The chat floor is the flexbox hard limit. */
+  [data-col="sessions"] { flex: 0 1 220px; width: 220px; min-width: 150px; border-right: 1px solid var(--line); overflow-y: auto; }
+  [data-col="chat"]     { flex: 1 1 auto; min-width: 420px; display: flex; flex-direction: column; min-height: 0; }
+  [data-col="context"]  { flex: 0 1 238px; width: 238px; min-width: 150px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden; min-height: 0; }
   /* JAG-150: the right rail is now a collapsible inspector (see #inspector) */
   .toolcard-head { cursor: pointer; }
   .toolcard.expanded .toolcard-body { display: block; }
@@ -526,7 +529,7 @@
   #dirPicker[hidden] { display: none; }
   #dirList button { display: block; width: 100%; text-align: left; margin-bottom: 4px; font-size: 12px; }
   .pal-item { cursor: pointer; }
-  .pal-item:hover, .pal-item.hl { background: rgba(108,140,255,.16); }
+  .pal-item:hover, .pal-item.hl { background: var(--hl); }
   #palette-results { max-height: 56vh; overflow: auto; }
   /* v0.8.1 resizable columns + panel toggles */
   .resizer { flex: 0 0 5px; width: 5px; cursor: col-resize; background: transparent; }
@@ -561,8 +564,8 @@
   #fileTree { max-height: 300px; overflow: auto; font-family: monospace; }
   .ftrow { cursor: pointer; padding: 3px 6px; border-radius: 6px; font-size: 12px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ftrow:hover { background: rgba(108,140,255,.12); }
-  .ftrow.active { background: rgba(139,123,240,.18); }
+  .ftrow:hover { background: var(--hover); }
+  .ftrow.active { background: var(--sel); }
   #fileText { width: 100%; min-height: 280px; resize: vertical; font-family: monospace;
     font-size: 12px; padding: 8px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--bg2); color: var(--txt); }
@@ -583,7 +586,7 @@
   .editchip .ehead { display: flex; gap: 8px; align-items: center; }
   .editchip .efile { display: flex; gap: 8px; cursor: pointer; padding: 2px 4px; border-radius: 5px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .editchip .efile:hover { background: rgba(108,140,255,.14); }
+  .editchip .efile:hover { background: var(--hover); }
   .editchip .efile .en { flex: 1; overflow: hidden; text-overflow: ellipsis; }
   .add { color: var(--ok); }
   .del { color: var(--err); }
@@ -660,7 +663,7 @@
   #settingsWin .sw-nav button { display: block; width: 100%; text-align: left; background: transparent;
     border: 1px solid transparent; color: var(--dim); border-radius: 8px; padding: 7px 10px; margin-bottom: 3px;
     font-size: 12px; cursor: pointer; }
-  #settingsWin .sw-nav button.active { color: var(--txt); border-color: var(--accent); background: rgba(139,123,240,.14); }
+  #settingsWin .sw-nav button.active { color: var(--txt); border-color: var(--accent); background: var(--sel); }
   #settingsWin .sw-main { flex: 1; min-width: 0; overflow-y: auto; padding: 14px; }
   #settingsWin .sw-main .sw-cat > h2 { font-size: 11px; letter-spacing: .16em; color: var(--dim);
     margin: 16px 0 8px; text-transform: uppercase; }
@@ -706,7 +709,7 @@
   #mcpJsonWin .mj-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
   #mcpJsonWin textarea { flex: 1; min-height: 300px; width: 100%; box-sizing: border-box; resize: vertical;
     font-family: monospace; font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: 10px;
-    border: 1px solid var(--line); background: #0b0f18; color: var(--txt); }
+    border: 1px solid var(--line); background: var(--panel2); color: var(--txt); }
   /* JAG-153: assistant replies are rendered markdown (sanitized) + HTML artifact preview */
   /* JAG-193: reset `white-space: pre-wrap` (inherited from .bubble) on the markdown
    * bubble. marked emits a newline between block tags (`</p>\n<ol>\n<li>…`); with
@@ -903,7 +906,7 @@
 (function () {
   var t = localStorage.getItem("sf_theme") || "indigo";
   document.documentElement.dataset.theme = t;
-  if ((localStorage.getItem("sf_bold") || "1") === "1") document.documentElement.classList.add("bold-text");
+  if ((localStorage.getItem("sf_bold") || "0") === "1") document.documentElement.classList.add("bold-text");
 })();
 </script>
 </head>
@@ -4604,7 +4607,7 @@ function settingsCategory(name) {
   else if (name === "appearance") {
     renderThemeGrid();
     const bc = $("boldText");
-    if (bc) bc.checked = (localStorage.getItem("sf_bold") || "1") === "1";
+    if (bc) bc.checked = (localStorage.getItem("sf_bold") || "0") === "1";
   }
   else if (name === "keys") { $("token-input").value = TOKEN || ""; loadKeys(); }
   else if (name === "info") {
@@ -5383,23 +5386,28 @@ function bindResizer(handle, colSel, sign, key) {
   const col = document.querySelector(colSel);
   if (!handle || !col) return;
   const saved = parseInt(localStorage.getItem(key) || "", 10);
-  if (saved) { col.style.width = saved + "px"; col.style.flex = "0 0 " + saved + "px"; }
+  // JAG-360: 0 1 (shrinkable) — a saved wide panel must not squeeze the chat; the
+  // centre column's min-width then pulls it back to a usable size.
+  if (saved) { col.style.width = saved + "px"; col.style.flex = "0 1 " + saved + "px"; }
   handle.addEventListener("mousedown", e => {
     e.preventDefault(); handle.classList.add("active");
-    const startX = e.clientX, startW = col.getBoundingClientRect().width;
+    // JAG-360: the drag maths run in CSS px (the unit of `style.width`), NOT in
+    // already-zoomed rect pixels — otherwise the panel lags the cursor by the zoom.
+    const z = _pageScale();
+    const startX = e.clientX, startW = col.getBoundingClientRect().width / z;
     const move = ev => {
-      // JAG-127b: the old hard cap of 560px was too small — let a side panel
-      // grow up to ~72% of the window (capped at 1200px) while keeping the chat
-      // legible.
-      const maxW = Math.max(560, Math.min(1200, window.innerWidth * 0.72));
-      const w = Math.max(170, Math.min(maxW, startW + sign * (ev.clientX - startX)));
-      col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
+      // JAG-127b: cap a side panel at ~72% of the window (max 1200px). JAG-360: the
+      // chat has its own min-width, so the flex layout also refuses to starve it —
+      // dragging past the limit simply stops growing the panel.
+      const maxW = Math.max(170, Math.min(1200, (window.innerWidth / z) * 0.72));
+      const w = Math.max(170, Math.min(maxW, startW + sign * (ev.clientX - startX) / z));
+      col.style.width = w + "px"; col.style.flex = "0 1 " + w + "px";
       positionHandles();   // JAG-357: keep the handle glued to the border we move
     };
     const up = () => {
       document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
       handle.classList.remove("active");
-      localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width)));
+      localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width / _pageScale())));
       positionHandles();
     };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
@@ -5490,15 +5498,29 @@ function _settleHandles() {
   const tick = () => { positionHandles(); if (++n < 24) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
-// JAG-356: the resize grip sits on the same border — never let it (or a stray
-// selection) swallow the press; a mousedown on the handle is just a click.
+// JAG-356/JAG-360: the resize grip shares this border. Never let it (or a stray
+// text selection) steal the press, and toggle on POINTER UP with a small movement
+// guard — so a press-and-hold behaves EXACTLY like a tap (holding changes nothing)
+// and a 1-2 px wobble can no longer cancel the click.
 ["handle-left", "handle-right"].forEach(id => {
   const h = $(id);
+  let down = false, x0 = 0, y0 = 0;
   h.onmousedown = e => { e.preventDefault(); e.stopPropagation(); };
   h.ontouchstart = e => { e.stopPropagation(); };
+  h.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    down = true; x0 = e.clientX; y0 = e.clientY;
+    try { h.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  h.addEventListener("pointerup", e => {
+    if (!down) return;
+    down = false;
+    if (Math.abs(e.clientX - x0) + Math.abs(e.clientY - y0) <= 8) {
+      (id === "handle-left" ? toggleLeftPanel : toggleRightPanel)();
+    }
+  });
+  h.addEventListener("pointercancel", () => { down = false; });
 });
-$("handle-left").onclick = toggleLeftPanel;
-$("handle-right").onclick = toggleRightPanel;
 addEventListener("resize", _settleHandles);
 addEventListener("load", _settleHandles);
 // JAG-358: a drawer slides in with a transform transition — re-glue when it ends.

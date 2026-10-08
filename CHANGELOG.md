@@ -131,7 +131,31 @@ All notable changes to SparkForge are documented here. The format follows
   `calc(100dvh / var(--zoom))` and `applyZoom` publishes `--zoom`, so the shell fills the real
   viewport at every level (verified: body == viewport at 0.7 / 0.85 / 1.3 / 1.0).
 
+- **The theme STILL stopped at a few surfaces (JAG-360).** After the settings window itself was
+  themed, the MCP JSON textarea stayed near-black (`#0b0f18`), the toasts + the session menu
+  stayed dark gray (`rgba(24,28,40,.97)`), and ~25 hover/active/chip fills kept the indigo blue
+  (`rgba(108,140,255,…)` / `rgba(120,140,255,…)` / `rgba(139,123,240,…)`) — including the
+  scrollbar thumb. They all resolve through theme tokens now (`--panel2` / `--menubg` /
+  `--hover` / `--sel` / `--hl` / `--chipbg` / `--scroll`), so switching to Sand or Sepia
+  re-paints the WHOLE UI.
+- **The panel arrow was unreliable (JAG-360).** The toggle fired on the native `click`, which a
+  press-and-hold, a 1-2 px wobble, or the resize grip sharing the same border could all
+  swallow. It now toggles on POINTER UP with an ≤8px movement guard and a pointer capture, so a
+  hold is exactly one click and small movements never cancel it.
+- **Widening a side panel crushed the chat (JAG-360).** The panels were `flex: 0 0 <w>` (never
+  shrink) with their width persisted to localStorage — a saved `618 + 773` in a ~1200px window
+  squeezed the centre column to a sliver (hence the wrapped composer). The panels are now
+  `flex: 0 1 <w>` with a 150px floor, the centre column has a hard `min-width: 420px`, and the
+  drag + save maths run in CSS px, so a wide panel (or a narrow window) can no longer starve
+  the chat.
+- **Defaults (JAG-360):** the theme is indigo and bolder text is OFF out of the box.
+
 ### Added
+- **`tests/acceptance/v360_shell_fixes.py` (14 checks)** — no indigo literal survives
+  (`#0b0f18` / `rgba(24,28,40` / the blue tints), the settings + popups + MCP textarea +
+  scrollbars resolve through theme tokens, the handle toggles on pointer-up with a movement
+  guard (no native `onclick`), the chat keeps its `min-width: 420px` while the panels stay
+  shrinkable, and the defaults are indigo + no bolder text. Battery 115 → 116.
 - **`tests/acceptance/v352_appearance_theme.py` extended to 38 checks** — the six themes, the
   flipped edge-handle arrows, the resize-grip guard, the app-wide bolder text (and its OFF
   baseline), that the panels stay free of instructional prose while the Harness tab keeps it,
