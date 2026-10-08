@@ -116,6 +116,20 @@ All notable changes to SparkForge are documented here. The format follows
 - **"Bolder text" off still looked bold (JAG-358).** Many chrome labels ship at `600` in the
   base sheet, so the OFF state was indistinguishable from ON. The OFF state now resets those
   labels to a normal weight, so the switch changes the whole app (chat + labels) both ways.
+- **The theme stopped at the app shell (JAG-359).** The Settings window and every popup
+  (`#modelMenu`, the folder picker, the skill/diff/mcp windows) were pinned to the indigo dark
+  surface (`#0f1320`) and the Harness/Tool-policy cards to raw slate hexes (`#1e293b`), so
+  switching to Sand or Sepia left them navy. They now paint with the theme tokens
+  (`var(--menubg)` / `--panel` / `--line-2` / `--chipbg`), so the settings panel follows the theme.
+- **The topbar read like debug output (JAG-359).** `ctx 41k/127k · 32%` and
+  `sandbox: none (by config)` are gone: the context load is now a tiny ring + `%` and the
+  sandbox a coloured status dot + one short word, with the full detail moved into the tooltip.
+  The context indicator turns **red from 70%** up.
+- **Zooming left a gap at the bottom of the screen (JAG-359).** `100dvh` is an absolute unit,
+  so the CSS `zoom` on `<html>` scaled it and the shell only covered `zoom × viewport` (~15%
+  gap at 0.85, worse zoomed out, and overflow when zoomed in). The body height is now
+  `calc(100dvh / var(--zoom))` and `applyZoom` publishes `--zoom`, so the shell fills the real
+  viewport at every level (verified: body == viewport at 0.7 / 0.85 / 1.3 / 1.0).
 
 ### Added
 - **`tests/acceptance/v352_appearance_theme.py` extended to 38 checks** — the six themes, the
@@ -125,6 +139,10 @@ All notable changes to SparkForge are documented here. The format follows
   grip, an off-screen panel is not treated as shown, the toggle thresholds match the CSS
   overlays, and the topbar carries the active session name both when the panel is collapsed
   and when it is parked off screen. Battery stays 114 (an existing file grew, no new file).
+- **`tests/acceptance/v359_theme_shell.py` (13 checks)** — every popup paints with a theme
+  token (none left on `#0f1320`/`#1e293b`), the topbar ctx/sandbox indicators are the ring +
+  status-dot graphics with the 70% red threshold, and the shell height is divided by the live
+  zoom. Battery 114 → 115 (a new file).
 - **Live cost panel (JAG-355).** The harness already captures the provider's REAL `usage`
   per call; new `costs.py` prices each call (USD per 1M, `[input, output]`) and keeps a
   per-session ledger (`data/costs/<session>.json`), surfaced in a new right-panel **Cost**

@@ -12,6 +12,7 @@
     --line: rgba(130,150,255,.13); --txt: #e2e6ff; --dim: #8189b0;
     --acc: #7c8cff; --acc2: #b56cff; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
     --radius: 12px;
+    --zoom: 1;   /* JAG-359: live UI zoom, so the shell can fill the real viewport */
     /* v0.8 redesign tokens */
     --accent: #8b7bf0; --you: #8fb6ff; --info: #5ac8fa;
     --bg-2: #121722; --bg-3: #161b25; --line-2: #1e2431; --ink: #c3cad6; --muted: #7b8494;
@@ -37,7 +38,10 @@
     background: radial-gradient(1200px 800px at 80% -10%, #141a3a 0%, var(--bg) 55%),
                 radial-gradient(900px 700px at -10% 110%, #241638 0%, transparent 60%);
     color: var(--txt); font: 14px/1.55 ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
-    height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+    /* JAG-359: `dvh` is an absolute unit, so the CSS `zoom` on <html> scaled it and
+       left a gap at the bottom (and overflow when zoomed in). Divide by the live
+       zoom so the shell always fills the REAL viewport, whatever the zoom. */
+    height: calc(100dvh / var(--zoom, 1)); display: flex; flex-direction: column; overflow: hidden;
   }
   header {
     display: flex; align-items: center; gap: 10px; padding: 10px 14px; flex-wrap: wrap;
@@ -56,6 +60,22 @@
   .pill { font-size: 10px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); white-space: nowrap; }
   .pill.ok { color: var(--ok); border-color: rgba(74,222,128,.35); }
   .pill.warn { color: var(--warn); border-color: rgba(251,191,36,.4); }
+  /* JAG-359: the topbar indicators are compact GRAPHICS, not debug text — a tiny
+     ring for the context load, a status DOT for the sandbox. The verbose string
+     lives in the tooltip. The context indicator turns RED from 70% up. */
+  .pill.meter { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 3px; }
+  .pill.meter b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mring { width: 15px; height: 15px; flex: 0 0 auto; transform: rotate(-90deg); }
+  .mring .mtrk { fill: none; stroke: var(--line); stroke-width: 4.4; }
+  .mring .mfill { fill: none; stroke: var(--accent); stroke-width: 4.4; stroke-linecap: round;
+    stroke-dasharray: 100 100; stroke-dashoffset: 100; transition: stroke-dashoffset .3s, stroke .3s; }
+  .pill.meter.hot .mfill { stroke: var(--err); }
+  .pill.meter.hot b { color: var(--err); }
+  .pill.sbox { display: inline-flex; align-items: center; gap: 6px; }
+  .pill.sbox.ok, .pill.sbox.warn { color: var(--dim); }
+  .sdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--dim); opacity: .8; }
+  #sbxPill.ok .sdot { background: var(--ok); opacity: 1; box-shadow: 0 0 7px var(--ok); }
+  #sbxPill.warn .sdot { background: var(--warn); opacity: 1; box-shadow: 0 0 7px var(--warn); }
   /* JAG-113: custom model picker (no native <select>) */
   /* JAG-116: the selector must be legible — not the dim .pill default */
   .model-btn { cursor: pointer; color: var(--txt); font-weight: 600; max-width: 340px;
@@ -68,7 +88,7 @@
      reads as a real popover instead of a translucent slab. */
   .model-wrap { position: relative; display: inline-flex; }
   #modelMenu { position: absolute; right: 0; bottom: calc(100% + 8px); width: 360px; max-height: 62vh;
-    overflow-y: auto; z-index: 30; padding: 6px; background: #0f1320;
+    overflow-y: auto; z-index: 30; padding: 6px; background: var(--menubg);
     border: 1px solid rgba(120,140,255,.28); border-radius: 12px;
     box-shadow: 0 18px 40px rgba(0,0,0,.7); }
   #modelMenu[hidden] { display: none; }
@@ -133,7 +153,7 @@
   .smback { position: fixed; inset: 0; z-index: 47; background: rgba(0,0,0,.55); }
   .smback[hidden] { display: none; }
   .smodal { position: fixed; z-index: 48; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    width: min(560px, 94vw); max-height: 80vh; padding: 14px; background: #0f1320;
+    width: min(560px, 94vw); max-height: 80vh; padding: 14px; background: var(--menubg);
     display: flex; flex-direction: column; gap: 10px; }
   .smodal[hidden] { display: none; }
   .pick-hd { display: flex; align-items: center; gap: 8px; }
@@ -502,7 +522,7 @@
   #dirBackdrop { position: fixed; inset: 0; z-index: 41; background: rgba(0,0,0,.5); }
   #dirBackdrop[hidden] { display: none; }
   #dirPicker { position: fixed; z-index: 42; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    width: min(520px, 94vw); padding: 16px; background: #0f1320; }
+    width: min(520px, 94vw); padding: 16px; background: var(--menubg); }
   #dirPicker[hidden] { display: none; }
   #dirList button { display: block; width: 100%; text-align: left; margin-bottom: 4px; font-size: 12px; }
   .pal-item { cursor: pointer; }
@@ -551,7 +571,7 @@
   #skillBackdrop { position: fixed; inset: 0; z-index: 43; background: rgba(0,0,0,.5); }
   #skillBackdrop[hidden] { display: none; }
   #skillView { position: fixed; z-index: 44; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    width: min(780px, 94vw); max-height: 86vh; padding: 16px; background: #0f1320;
+    width: min(780px, 94vw); max-height: 86vh; padding: 16px; background: var(--menubg);
     display: flex; flex-direction: column; }
   #skillView[hidden] { display: none; }
   #skillViewBody { white-space: pre-wrap; word-break: break-word; font-size: 12px;
@@ -570,7 +590,7 @@
   #diffBackdrop { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.55); }
   #diffBackdrop[hidden] { display: none; }
   #diffView { position: fixed; z-index: 46; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    width: min(1120px, 96vw); max-height: 88vh; padding: 14px; background: #0f1320;
+    width: min(1120px, 96vw); max-height: 88vh; padding: 14px; background: var(--menubg);
     display: flex; flex-direction: column; }
   #diffView[hidden] { display: none; }
   #diffBody { overflow: auto; border: 1px solid var(--line); border-radius: 8px;
@@ -591,7 +611,7 @@
   #imgBackdrop[hidden] { display: none; }
   #imgView { position: fixed; z-index: 48; top: 50%; left: 50%; transform: translate(-50%,-50%);
     max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column; gap: 8px;
-    background: #0f1320; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+    background: var(--menubg); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
   #imgView[hidden] { display: none; }
   #imgView img { max-width: 88vw; max-height: 74vh; display: block; border-radius: 8px; }
   #imgView .cap { font-size: 11px; color: var(--dim); word-break: break-all; }
@@ -627,7 +647,7 @@
   .mts { font-size: 9.5px; color: var(--dim); opacity: .8; font-weight: 400; letter-spacing: .02em; }
   /* JAG-150: movable, non-blocking settings window */
   #settingsWin { position: fixed; z-index: 60; width: min(760px, 94vw); height: min(620px, 86vh);
-    background: #0f1320; border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column;
+    background: var(--menubg); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column;
     box-shadow: 0 24px 70px rgba(0,0,0,.55); overflow: hidden; }
   #settingsWin[hidden] { display: none; }
   #settingsWin .sw-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
@@ -650,8 +670,8 @@
      (slate panel, accent dot header, compact inline labels). */
   #swMain .sw-cat[data-cat="harness"] > .card,
   #swMain .sw-cat[data-cat="tools"] > .card {
-    background: linear-gradient(180deg, rgba(15,23,42,.5), rgba(9,13,26,.55));
-    border: 1px solid #1e293b; border-radius: 12px; padding: 13px 15px; margin-bottom: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line-2); border-radius: 12px; padding: 13px 15px; margin-bottom: 10px;
   }
   .hcard-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .hcard-hd .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px;
@@ -660,12 +680,12 @@
   .hcard-hd .hc-sub { font-size: 12px; color: var(--dim); }
   .hrow { display: flex; flex-wrap: wrap; align-items: center; }
   #swMain .sw-cat[data-cat="harness"] label {
-    display: inline-flex; align-items: center; gap: 7px; background: rgba(30,41,59,.35);
-    border: 1px solid #1e293b; border-radius: 8px; padding: 5px 9px; margin: 3px 6px 3px 0;
+    display: inline-flex; align-items: center; gap: 7px; background: var(--chipbg);
+    border: 1px solid var(--line-2); border-radius: 8px; padding: 5px 9px; margin: 3px 6px 3px 0;
     color: var(--txt); font-size: 12px;
   }
   #swMain .sw-cat[data-cat="harness"] label input {
-    background: #0b1020; border: 1px solid #263349; border-radius: 6px;
+    background: var(--panel2); border: 1px solid var(--line-2); border-radius: 6px;
     color: var(--txt); padding: 3px 7px; font: inherit; font-size: 12px; width: 84px;
   }
   #swMain .sw-cat[data-cat="harness"] label input[type=checkbox] { width: auto; accent-color: var(--hc, #6c8cff); }
@@ -681,7 +701,7 @@
     display: flex; align-items: center; justify-content: center; padding: 4vh 4vw; }
   #mcpJsonWin[hidden] { display: none; }
   #mcpJsonWin .mj-card { width: min(720px, 94vw); max-height: 88vh; display: flex; flex-direction: column;
-    background: #0f1320; border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    background: var(--menubg); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
     box-shadow: 0 24px 70px rgba(0,0,0,.55); }
   #mcpJsonWin .mj-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
   #mcpJsonWin textarea { flex: 1; min-height: 300px; width: 100%; box-sizing: border-box; resize: vertical;
@@ -893,8 +913,11 @@
   <span class="sub">agent harness · self-hosted · any OS</span>
   <span class="sessbadge" id="sessBadge" hidden></span>
   <span style="flex:1"></span>
-  <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
-  <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
+  <span class="pill meter" id="ctx-meter" title="context tokens / budget"><svg class="mring"
+      viewBox="0 0 36 36" aria-hidden="true"><circle class="mtrk" cx="18" cy="18" r="15.9155"></circle><circle
+      class="mfill" id="ctxRing" cx="18" cy="18" r="15.9155"></circle></svg><b id="ctxPct">…</b></span>
+  <span class="pill sbox" id="sbxPill" title="sandbox backend"><span class="sdot" id="sbxDot"></span><span
+      id="sbxTxt">…</span></span>
   <button class="ghost" id="settingsBtn" title="settings" onclick="openSettings()">⚙</button>
   <button class="ghost" id="deck-open" title="Bridge — agent orchestration deck (beta)" onclick="location.href='/orbit'">🛰 Bridge</button>
   <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
@@ -2743,7 +2766,9 @@ function ctxNa(reason) {
   $("ctxBudget").className = "";
   $("ctxBudget").style.color = "var(--dim)";
   $("ctxBar").style.width = "0%"; $("ctxBar").style.minWidth = "0px"; $("ctxBar").className = "";
-  $("ctx-meter").textContent = "ctx: n/d"; $("ctx-meter").className = "pill";
+  const _cm = $("ctx-meter"); _cm.className = "pill meter"; _cm.title = "context tokens / budget";
+  const _cp = $("ctxPct"); if (_cp) _cp.textContent = "–";
+  const _cr = $("ctxRing"); if (_cr) _cr.style.strokeDashoffset = "100";
 }
 /* JAG-294: the session's ROLE.md — a small role+behaviour patch merged into the
    system prompt. Same file the Orbit deck edits (GET/POST /api/roles). */
@@ -2797,11 +2822,15 @@ async function loadCtx() {
     const bar = $("ctxBar"); bar.style.width = (d.bar_pct != null ? d.bar_pct : 0) + "%";
     bar.style.minWidth = (d.bar_pct > 0 ? 6 : 0) + "px";
     bar.className = d.bar_hot ? "hot" : (state === "near" ? "near" : "");
+    // JAG-359: the topbar ctx indicator is a small ring + % (red from 70% up); the
+    // full "used / budget · %" string moves to the tooltip instead of the label.
+    const pct = (d.pct != null ? d.pct : 0);
     const pill = $("ctx-meter");
-    pill.textContent = d.short || d.meter || "ctx: n/d";
-    pill.className = "pill" + (state === "near" || state === "over" ? " warn" : "");
-    pill.style.color = state === "over" ? "var(--err)"
-      : (state === "near" ? "var(--warn)" : "var(--dim)");
+    pill.title = d.detail || d.short || "context tokens / budget";
+    pill.className = "pill meter" + (pct >= 70 ? " hot" : "");
+    const pctEl = $("ctxPct"); if (pctEl) pctEl.textContent = pct + "%";
+    const ring = $("ctxRing");
+    if (ring) ring.style.strokeDashoffset = String(100 - Math.max(0, Math.min(100, pct)));
   } catch {
     // JAG-238: a failed /api/context (network, or a session it cannot read) must
     // NOT leave the PREVIOUS session's meter on screen — that made a small chat
@@ -3343,12 +3372,12 @@ async function loadStatus() {
     const s = await api("GET", "/api/status");
     if (s.sandbox) {
       const sb = s.sandbox;
-      const byConfig = (sb.requested === "none");
-      $("sbxPill").textContent = "sandbox: " + sb.backend +
-        (sb.isolated ? "" : (byConfig ? " (by config)" : " (!)"));
-      $("sbxPill").className = "pill" + (sb.isolated ? " ok" : "");
+      // JAG-359: a status dot + one short word; the backend detail moves to the tip.
+      $("sbxPill").className = "pill sbox" + (sb.isolated ? " ok" : " warn");
+      const _st = $("sbxTxt"); if (_st) _st.textContent = sb.isolated ? "isolated" : "host";
       $("sbxPill").title = "sandbox backend: " + sb.backend + " (requested: " +
-        (sb.requested || "?") + ")" + (sb.isolated ? "" : " — host execution, not isolated");
+        (sb.requested || "?") + ")" +
+        (sb.isolated ? " — isolated" : " — host execution, not isolated");
     }
   } catch { /* /api/status is best-effort: the meter keeps its last value */ }
 }
@@ -5501,6 +5530,9 @@ let _zoom = parseFloat(localStorage.getItem("sf_zoom") || "1");
 if (!isFinite(_zoom) || _zoom <= 0) _zoom = 1;
 function applyZoom() {
   document.documentElement.style.zoom = (_zoom === 1) ? "" : String(_zoom);
+  // JAG-359: expose the zoom so the shell can divide its 100dvh height by it and
+  // keep filling the real viewport (see the body height rule).
+  document.documentElement.style.setProperty("--zoom", String(_zoom));
   try { localStorage.setItem("sf_zoom", String(_zoom)); } catch (e) {}
   _settleHandles();    // JAG-358: a zoom change rescales the page — re-glue the handles
 }

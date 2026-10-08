@@ -125,7 +125,8 @@ check("term.py uses a persistent bash + a completion sentinel",
 check("the model popover is anchored above its own button",
       ".model-wrap { position: relative" in ui and "bottom: calc(100% + 8px)" in ui)
 check("the model popover is opaque (not translucent)",
-      "background: #0f1320" in ui and "position: fixed; bottom: 92px" not in ui)
+      "background: var(--menubg)" in ui and "--menubg: #0f1320" in ui
+      and "position: fixed; bottom: 92px" not in ui)
 check("the Browser panel copies all stacked URLs",
       'id="browserCopy"' in ui and "function _renderBrowserUrls" in ui
       and "_browserUrls.join" in ui)
