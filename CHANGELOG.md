@@ -91,12 +91,23 @@ All notable changes to SparkForge are documented here. The format follows
   Browser, the new-session dialog, the tool-policy legend) are gone — the UI is now
   self-explanatory. The **Harness** settings tab keeps its full explanations, by request.
 - **Models: an empty provider kind no longer persists as `""`** (falls back to `openai`).
+- **The panel handles drifted off their border (JAG-357).** The app scales the page with CSS
+  `zoom` on `<html>` (JAG-283); a fixed element's `left` is multiplied by that zoom while a
+  panel's rect is already scaled, so the handle landed ~15% past the edge — and it only
+  re-positioned on a *window* resize, so dragging the panel border left it behind. The
+  position is now divided by the live zoom, recomputed during the resize drag, on a
+  `ResizeObserver` of both panels, and whenever the zoom changes. Verified live: handle
+  centre == panel border at rest, mid-drag and after the drag.
+- **Collapsing the left panel now shows the active session name in the topbar (JAG-357)** —
+  you hide the *panel*, never which session you are in. A collapsed panel also drops its
+  resize grip so it cannot sit under the re-open handle.
 
 ### Added
-- **`tests/acceptance/v352_appearance_theme.py` extended to 30 checks** — the six themes, the
-  flipped edge-handle arrows, the resize-grip guard, the app-wide bolder text, and that the
-  panels stay free of instructional prose while the Harness tab keeps it. Battery stays 114
-  (an existing file grew, no new test file).
+- **`tests/acceptance/v352_appearance_theme.py` extended to 35 checks** — the six themes, the
+  flipped edge-handle arrows, the resize-grip guard, the app-wide bolder text, that the
+  panels stay free of instructional prose while the Harness tab keeps it, and (K1–K5) that the
+  handles re-glue on resize and on zoom, a collapsed panel drops its grip, and the topbar
+  carries the active session name. Battery stays 114 (an existing file grew, no new file).
 - **Live cost panel (JAG-355).** The harness already captures the provider's REAL `usage`
   per call; new `costs.py` prices each call (USD per 1M, `[input, output]`) and keeps a
   per-session ledger (`data/costs/<session>.json`), surfaced in a new right-panel **Cost**

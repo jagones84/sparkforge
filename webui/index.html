@@ -46,6 +46,13 @@
   header .logo { font-weight: 700; letter-spacing: .06em; font-size: 16px;
     background: linear-gradient(90deg, var(--acc), var(--acc2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   header .sub { color: var(--dim); font-size: 11px; }
+  /* JAG-357: the active session's name, shown in the topbar when the left panel is
+     collapsed — you hide the PANEL, never the fact of which session you are in. */
+  .sessbadge { display: inline-flex; align-items: center; gap: 6px; max-width: 42vw;
+    padding: 3px 11px; border-radius: 999px; border: 1px solid var(--acc);
+    background: var(--chipbg); color: var(--txt); font-size: 12px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sessbadge[hidden] { display: none; }
   .pill { font-size: 10px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); white-space: nowrap; }
   .pill.ok { color: var(--ok); border-color: rgba(74,222,128,.35); }
   .pill.warn { color: var(--warn); border-color: rgba(251,191,36,.4); }
@@ -513,6 +520,9 @@
   [data-col="context"] .card > div { flex-wrap: wrap; }
   body.collapsed-left [data-col="sessions"] { display: none; }
   body.collapsed-right [data-col="context"] { display: none; }
+  /* JAG-357: a collapsed panel has no border to drag — drop its grip so it cannot
+     sit under the re-open handle. */
+  body.collapsed-left #resize-left, body.collapsed-right #resize-right { display: none; }
   @media (max-width: 1100px) {
     [data-col="context"] { display: none; }
     .resizer { display: none; }
@@ -853,6 +863,7 @@
 <header id="topbar">
   <span class="logo">⚡ SPARKFORGE</span>
   <span class="sub">agent harness · self-hosted · any OS</span>
+  <span class="sessbadge" id="sessBadge" hidden></span>
   <span style="flex:1"></span>
   <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
@@ -2469,6 +2480,7 @@ async function loadSessions() {
   const box = $("sessions"); box.innerHTML = "";
   const q = ($("session-search") ? $("session-search").value : "").toLowerCase();
   const hideEmpty = $("hide-empty") ? $("hide-empty").checked : false;
+  (out.sessions || []).forEach(s => { if (s.id === sessionId) _activeTitle = s.title || s.id; });
   let pinnedIds = [];
   (() => { try { pinnedIds = _pinned(); (out.sessions || []).sort((a, b) => (pinnedIds.includes(b.id) ? 1 : 0) - (pinnedIds.includes(a.id) ? 1 : 0)); } catch (e) {} })();
   (out.sessions || []).filter(s => (!hideEmpty || (s.messages || 0) > 0) && ((s.title || s.id || "").toLowerCase().includes(q))).forEach(s => {
@@ -2502,6 +2514,7 @@ async function loadSessions() {
         box.appendChild(d);
   });
   if (!(out.sessions || []).length) box.innerHTML = '<div class="remaining">no sessions yet</div>';
+  updateSessBadge();   // JAG-357: keep the topbar badge in sync with the active session
   modelLabel();   // JAG-157: reflect the active session's model once the cache is filled
 }
 /* JAG-117: creating a session asks which local folder to open it in. */
@@ -5324,11 +5337,13 @@ function bindResizer(handle, colSel, sign, key) {
       const maxW = Math.max(560, Math.min(1200, window.innerWidth * 0.72));
       const w = Math.max(170, Math.min(maxW, startW + sign * (ev.clientX - startX)));
       col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
+      positionHandles();   // JAG-357: keep the handle glued to the border we move
     };
     const up = () => {
       document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
       handle.classList.remove("active");
       localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width)));
+      positionHandles();
     };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
@@ -5354,17 +5369,39 @@ function _panelShown(sel) {
   if (!el || getComputedStyle(el).display === "none") return false;
   return el.getBoundingClientRect().width > 1;
 }
+/* JAG-357: the topbar shows the active session's name while the left panel is
+   collapsed, so hiding the panel never hides which session you are in. */
+let _activeTitle = "";
+function updateSessBadge() {
+  const b = $("sessBadge");
+  if (!b) return;
+  const on = document.body.classList.contains("collapsed-left") && !!_activeTitle;
+  b.hidden = !on;
+  if (on) b.textContent = "\uD83D\uDDC2 " + _activeTitle;
+}
 function positionHandles() {
   const L = $("handle-left"), R = $("handle-right");
   if (!L || !R) return;
+  updateSessBadge();
   const ls = document.querySelector('[data-col="sessions"]');
   const rc = document.querySelector('[data-col="context"]');
   const lOpen = _panelShown('[data-col="sessions"]');
   const rOpen = _panelShown('[data-col="context"]');
-  L.style.left = (lOpen ? ls.getBoundingClientRect().right : 13) + "px";
+  // JAG-357: the app scales the page with `zoom` on <html> (JAG-283). A fixed
+  // element's `left` is multiplied by that zoom, while a sibling's rect is ALREADY
+  // scaled — so divide the target rect by the zoom, or the handle drifts off its border.
+  const z = _pageZoom();
+  const rootRight = document.documentElement.getBoundingClientRect().right;
+  L.style.left = ((lOpen ? ls.getBoundingClientRect().right : 13 * z) / z) + "px";
   L.textContent = lOpen ? "◀" : "▶";
-  R.style.left = (rOpen ? rc.getBoundingClientRect().left : innerWidth - 13) + "px";
+  R.style.left = ((rOpen ? rc.getBoundingClientRect().left : rootRight - 13 * z) / z) + "px";
   R.textContent = rOpen ? "▶" : "◀";
+}
+/* JAG-357: the live page zoom (the CSS `zoom` on <html>), read from the DOM so it is
+   already correct during the very first positionHandles() call. */
+function _pageZoom() {
+  const z = parseFloat(getComputedStyle(document.documentElement).zoom);
+  return (z && isFinite(z) && z > 0) ? z : 1;
 }
 // JAG-356: the resize grip sits on the same border — never let it (or a stray
 // selection) swallow the press; a mousedown on the handle is just a click.
@@ -5377,6 +5414,15 @@ $("handle-left").onclick = toggleLeftPanel;
 $("handle-right").onclick = toggleRightPanel;
 addEventListener("resize", positionHandles);
 addEventListener("load", positionHandles);
+// JAG-357: re-glue the handles on ANY layout change of the panels (a programmatic
+// width, a flex re-flow, a font swap), not only on a window resize.
+if (window.ResizeObserver) {
+  const _ro = new ResizeObserver(() => positionHandles());
+  const _sl = document.querySelector('[data-col="sessions"]');
+  const _sr = document.querySelector('[data-col="context"]');
+  if (_sl) _ro.observe(_sl);
+  if (_sr) _ro.observe(_sr);
+}
 positionHandles();
 $("palette-input").addEventListener("input", e => { _palHi = 0; renderPalette(e.target.value); });
 $("palette-input").addEventListener("keydown", paletteKey);
@@ -5394,6 +5440,7 @@ if (!isFinite(_zoom) || _zoom <= 0) _zoom = 1;
 function applyZoom() {
   document.documentElement.style.zoom = (_zoom === 1) ? "" : String(_zoom);
   try { localStorage.setItem("sf_zoom", String(_zoom)); } catch (e) {}
+  positionHandles();   // JAG-357: a zoom change rescales the page — re-glue the handles
 }
 function zoomBy(d) {
   _zoom = Math.min(1.6, Math.max(0.7, Math.round((_zoom + d) * 100) / 100));

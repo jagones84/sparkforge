@@ -125,6 +125,20 @@ check("J3 bolder text really bumps the whole app (body + chat + inputs)",
       "html.bold-text body, html.bold-text .bubble" in HTML
       and "html.bold-text input," in HTML and "font-weight: 600" in HTML, "")
 
+# --- K: handles stay glued + the collapsed session name (JAG-357) ------------
+check("K1 the handles reposition while the panel is being resized",
+      "positionHandles();   // JAG-357: keep the handle glued to the border we move" in HTML
+      and "new ResizeObserver(() => positionHandles())" in HTML, "")
+check("K2 a collapsed panel drops its resize grip",
+      "body.collapsed-left #resize-left, body.collapsed-right #resize-right { display: none; }" in HTML, "")
+check("K3 the active session name shows in the topbar when the left panel is collapsed",
+      'id="sessBadge"' in HTML and "function updateSessBadge" in HTML
+      and 'document.body.classList.contains("collapsed-left")' in HTML, "")
+check("K4 the handle position compensates the live page zoom",
+      "function _pageZoom" in HTML and "13 * z) / z" in HTML, "")
+check("K5 a zoom change re-glues the handles",
+      "positionHandles();   // JAG-357: a zoom change rescales the page" in HTML, "")
+
 print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
