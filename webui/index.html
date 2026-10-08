@@ -191,6 +191,9 @@
   .sess .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
   .sess .n { color: var(--dim); font-size: 10px; letter-spacing: .02em; }
   .sess .ws { font-size: 12px; flex-shrink: 0; opacity: .85; }
+  /* JAG-354: pinned sessions are marked in the rail (and sorted to the top). */
+  .sess .pin { font-size: 11px; flex-shrink: 0; opacity: .95; }
+  .sess.pinned .t { font-weight: 600; }
   .sess .menu-btn { color: var(--dim); font-size: 14px; flex-shrink: 0; padding: 2px 6px; border-radius: 6px; opacity: 0; }
   .sess:hover .menu-btn, .sess.menu-open .menu-btn { opacity: .8; }
   .sess .menu-btn:hover { opacity: 1; background: rgba(108,140,255,.12); }
@@ -2222,7 +2225,7 @@ $("micBtn").onclick = micToggle;
    an image in the image window, a skill/text is a note. The chips keep the real
    path, and the path also stays in the transcript so a reload re-linkifies it. */
 function _rawUrl(path) {
-  return "/api/fs/raw?path=" + encodeURIComponent(path) + (authQS() ? "&" + authQS() : "");
+  return "/api/fs/raw?path=" + encodeURIComponent(path) + (authQS() ? "&" + authQS() : "") + (sessionId ? "&session=" + encodeURIComponent(sessionId) : "");
 }
 function _openAttachment(kind, path) {
   if (kind === "img" && path) { showImage(_rawUrl(path)); return; }
@@ -2431,7 +2434,8 @@ async function loadSessions() {
   const box = $("sessions"); box.innerHTML = "";
   const q = ($("session-search") ? $("session-search").value : "").toLowerCase();
   const hideEmpty = $("hide-empty") ? $("hide-empty").checked : false;
-  (() => { try { const p = _pinned(); (out.sessions || []).sort((a, b) => (p.includes(b.id) ? 1 : 0) - (p.includes(a.id) ? 1 : 0)); } catch (e) {} })();
+  let pinnedIds = [];
+  (() => { try { pinnedIds = _pinned(); (out.sessions || []).sort((a, b) => (pinnedIds.includes(b.id) ? 1 : 0) - (pinnedIds.includes(a.id) ? 1 : 0)); } catch (e) {} })();
   (out.sessions || []).filter(s => (!hideEmpty || (s.messages || 0) > 0) && ((s.title || s.id || "").toLowerCase().includes(q))).forEach(s => {
     _sessModel[s.id] = s.model || "";   // JAG-157: cache each session's model
     _sessJob[s.id] = s.job || null;     // JAG-169: cache each session's job id
@@ -2441,7 +2445,7 @@ async function loadSessions() {
     if (s.running) runningSessions[s.id] = true;
     else if (!turnSSE[s.id]) delete runningSessions[s.id];
     const d = document.createElement("div");
-    d.className = "sess" + (s.id === sessionId ? " active" : "") + (runningSessions[s.id] ? " running" : "") + (doneSessions[s.id] && s.id !== sessionId ? " done" : "");
+    d.className = "sess" + (pinnedIds.includes(s.id) ? " pinned" : "") + (s.id === sessionId ? " active" : "") + (runningSessions[s.id] ? " running" : "") + (doneSessions[s.id] && s.id !== sessionId ? " done" : "");
     d.dataset.sid = s.id;   // JAG-168: lets setRunning() toggle the busy marker
     const age = s.age ? (" · " + s.age) : "";
     const fol = s.workspace ? `<span class="ws" title="workspace: ${esc(s.workspace)}">📁</span>` : "";
@@ -2452,7 +2456,8 @@ async function loadSessions() {
     // JAG-339: the team symbol(s) this agent belongs to (may be several).
     const tchips = ag ? (ag.teams || []).map(id => { const t = _teamsById[id];
       return t ? `<span class="team" title="team ${esc(t.name)} — ${esc(t.id)}" style="flex-shrink:0">${esc(t.symbol || "•")}</span>` : ""; }).join("") : "";
-    d.innerHTML = `${agtag}${jid}${tchips}<span class="col"><span class="t">${esc(s.title || s.id)}</span><span class="n">${s.messages} msg${age}</span></span><span class="menu-btn" title="session actions">⋮</span>`;
+    const pin = pinnedIds.includes(s.id) ? '<span class="pin" title="pinned session">📌</span>' : "";
+    d.innerHTML = `${pin}${agtag}${jid}${tchips}<span class="col"><span class="t">${esc(s.title || s.id)}</span><span class="n">${s.messages} msg${age}</span></span><span class="menu-btn" title="session actions">⋮</span>`;
     d.onclick = e => {
       if (e.target.classList.contains("menu-btn")) { openSessMenu(d, s, ag); return; }
       if (e.target.closest && e.target.closest(".sess-menu")) return;
@@ -4820,11 +4825,24 @@ async function undoEdits(path) { return rejectEdits(path); }
    A document the agent produced/references (.md, .txt, .pdf, .json, .csv, an
    image, …) is turned into a link in the reply; clicking it opens the file in
    the Files editor (left panel), where it can be read (and edited if text). */
-const READABLE_RE = /((?:\/|~\/)[\w.\-\/ ]*\.(?:md|markdown|txt|rst|json|ya?ml|csv|tsv|log|pdf|html?|xml|ini|toml|cfg|conf|env|png|jpe?g|gif|svg|webp|mp4|mp3|wav))/gi;
+/* JAG-354: a path in prose becomes a clickable file link. Agents emit RELATIVE
+   paths and bare filenames (`viz/trend.png`, `insights.md`, `README.md`), so the
+   pattern matches absolute/~ paths, relative dir paths AND bare filenames — not
+   only absolute ones. Code extensions are included too, so a generated script
+   opens in the editor. The risky generic extensions (log, ini, cfg, env, …) are
+   only linked when the path has a slash — avoids false hits like `console.log`. */
+const READABLE_EXT = "md|markdown|txt|rst|json|ya?ml|csv|tsv|log|pdf|html?|xml|ini|toml|cfg|conf|env|py|js|mjs|cjs|jsx|ts|tsx|sh|bash|ps1|sql|go|rs|java|rb|php|css|scss|png|jpe?g|gif|svg|webp|bmp|avif|ico|mp4|mp3|wav";
+const READABLE_BARE_EXT = "md|markdown|txt|rst|json|ya?ml|csv|tsv|pdf|html?|py|js|mjs|cjs|jsx|ts|tsx|sh|sql|go|rs|java|rb|php|css|scss|png|jpe?g|gif|svg|webp|bmp|avif|ico|mp4|mp3|wav";
+const READABLE_RE = new RegExp(
+  "(?:\\/|~\\/)[\\w.\\-\\/]*\\.(?:" + READABLE_EXT + ")" +
+  "|(?:\\.{1,2}\\/)?(?:[\\w.\\-]+\\/)+[\\w.\\-]+\\.(?:" + READABLE_EXT + ")" +
+  "|(?<![\\w.\\-\\/])[\\w\\-]+\\.(?:" + READABLE_BARE_EXT + ")(?![\\w])",
+  "gi");
+const READABLE_END_RE = new RegExp("\\.(?:" + READABLE_EXT + ")$", "i");
 /* JAG-127e: external URLs in a reply were plain text (nothing to click). */
 const URL_RE = /https?:\/\/[^\s<>"'`)\]]+/gi;
 function _readable(p) {
-  return /\.(md|markdown|txt|rst|json|ya?ml|csv|tsv|log|pdf|html?|xml|ini|toml|cfg|conf|env|png|jpe?g|gif|svg|webp|mp4|mp3|wav)$/i.test(p || "");
+  return READABLE_END_RE.test(p || "");
 }
 function _isImage(u) {
   return /\.(png|jpe?g|gif|svg|webp|bmp|avif|ico)(\?|#|$)/i.test(String(u || ""));

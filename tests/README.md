@@ -42,4 +42,4 @@ or the events DB. A test may also set its own `tempfile.mkdtemp()`.
 ## Current count
 
 Run `bash tests/battery.sh` and read the last line (`=== battery: N/N GREEN ===`).
-As of the v352 appearance pass: **112/112**.
+As of the v354 links/pins pass: **113/113**.

@@ -1418,6 +1418,41 @@ def _ws_root(qs=None) -> str:
     return _browse_roots()[0]
 
 
+def _resolve_fs_arg(path, qs=None) -> str:
+    """Resolve a caller-supplied path for the fs endpoints (JAG-354).
+
+    An absolute path is used as-is. A RELATIVE path — agents emit links like
+    `viz/trend.png` or `insights.md` — is resolved against the SESSION workspace
+    first, then the process CWD, then the first browse root, so a link in the
+    chat opens the file the agent actually wrote. Returns "" for an empty path;
+    the sandbox check still runs afterwards on the resolved absolute path.
+    """
+    import os as _os
+    raw = str(path or "").strip()
+    if not raw:
+        return ""
+    p = _os.path.expanduser(raw)
+    if _os.path.isabs(p):
+        return p
+    candidates = []
+    try:
+        root = _ws_root(qs)
+    except Exception:  # noqa: BLE001 — a lookup hint must never be fatal
+        root = ""
+    if root:
+        candidates.append(_os.path.join(root, p))
+    candidates.append(_os.path.join(_os.getcwd(), p))
+    for r in _browse_roots():
+        candidates.append(_os.path.join(r, p))
+    for c in candidates:
+        try:
+            if _os.path.exists(c):
+                return c
+        except OSError:
+            continue
+    return candidates[0] if candidates else p
+
+
 def _safe_fs_path(path, roots=None):
     """Resolve `path` and return it only if inside an allowed root, else None."""
     import os as _os
@@ -1437,7 +1472,7 @@ def fs_list(qs=None) -> dict:
     import os as _os
     q = qs or {}
     root = _ws_root(q)
-    p = _safe_fs_path(q.get("path") or root, [root] + _browse_roots())
+    p = _safe_fs_path(_resolve_fs_arg(q.get("path"), q) or root, [root] + _browse_roots())
     if not p:
         return {"error": "path outside allowed roots", "root": root}
     if not _os.path.isdir(p):
@@ -1472,7 +1507,7 @@ def fs_read(qs=None) -> dict:
     """
     import os as _os
     q = qs or {}
-    p = _safe_fs_path(q.get("path"), _browse_roots() + [_ws_root(q)])
+    p = _safe_fs_path(_resolve_fs_arg(q.get("path"), q), _browse_roots() + [_ws_root(q)])
     if not p:
         return {"error": "path outside allowed roots"}
     if not _os.path.isfile(p):
@@ -1499,7 +1534,7 @@ def _fs_raw(handler, qs=None):
     import os as _os
     import mimetypes
     q = qs or {}
-    p = _safe_fs_path(q.get("path"), _browse_roots() + [_ws_root(q)])
+    p = _safe_fs_path(_resolve_fs_arg(q.get("path"), q), _browse_roots() + [_ws_root(q)])
     if not p or not _os.path.isfile(p):
         return _r(handler, 404, {"error": "not found"})
     if _os.path.getsize(p) > 32 * 1024 * 1024:
@@ -1534,7 +1569,7 @@ def fs_write(body) -> dict:
     """
     import os as _os
     b = body or {}
-    p = _safe_fs_path(b.get("path"), _browse_roots() + [_ws_root(b)])
+    p = _safe_fs_path(_resolve_fs_arg(b.get("path"), b), _browse_roots() + [_ws_root(b)])
     if not p:
         return {"error": "path outside allowed roots"}
     if not _os.path.isfile(p):

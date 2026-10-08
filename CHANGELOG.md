@@ -62,8 +62,26 @@ All notable changes to SparkForge are documented here. The format follows
   exist across ALL sessions, so "install on device" could never succeed. Both steps
   now lead with the working DGX path (direct `adb connect` + the ARM64 `compileSdk 34`
   rule). Guarded by `tests/acceptance/v351_android_skill_adb.py`. Battery 110 → 111.
+- **Chat file links often did nothing (JAG-354).** The reply linkifier only matched
+  ABSOLUTE paths (`/…`, `~/…`), so the relative paths and bare filenames agents actually
+  emit (`viz/trend.png`, `insights.md`, `README.md`) stayed plain text — and even when a
+  link was made, `GET /api/fs/read` / `/api/fs/raw` resolved a relative `?path=` against
+  the server CWD instead of the session workspace. Both ends fixed: the pattern now
+  matches absolute, relative AND bare paths (code extensions included, so a generated
+  script opens in the editor too), and the fs endpoints resolve a relative path against
+  the session workspace first. The image preview now carries the session, so relative
+  images open as well. Guarded by `tests/acceptance/v354_ui_links_pins.py`. Battery 112 → 113.
 
 ### Added
+- **Pinned sessions are marked in the rail (JAG-354).** A pinned session (already sorted
+  to the top) now shows a 📌 marker and a heavier title in the left panel, so the pin is
+  visible without opening the session menu.
+- **Accurate positioning + dependency honesty (JAG-354).** The README no longer frames
+  SparkForge as "not a meta-harness" (a meta-harness collects *other* harnesses; SparkForge
+  is ONE harness whose own sessions are the agents you organise into teams and an org
+  chart). The dependency claim is now truthful: the core is stdlib-only, with **PyYAML**
+  (pure-Python) as the single third-party import — required only to read the shipped
+  `config/*.yaml`, and the tool allowlist stays fail-closed if it is missing.
 - **`sessions` tool** (read-only): let any agent — above all the coordinator — inspect
   another session's transcript to understand why a teammate is failing and help it.
   Wired in `registry.TOOL_SCHEMAS` + `tools.py`, enabled in `config/tools.yaml`.
@@ -103,9 +121,9 @@ All notable changes to SparkForge are documented here. The format follows
 ## [1.0.0] — 2026-10-07
 
 The first tagged release. SparkForge is a local-first, stdlib-only agent harness that
-**drives one LLM hard** and then composes that harness into **meta-agents organised in
-teams**. It is *not* a meta-harness that merely spawns sub-agents: every agent is a full
-harness instance with its own tools, skills, plan, memory and transcript.
+**drives one LLM hard** and then runs **its own sessions as a team of agents**. It is a
+single harness — not a meta-harness: every agent is one of its sessions, a full harness
+instance with its own tools, skills, plan, memory and transcript.
 
 ### Added
 - **TEAMS — the fifth object level.** A first-class object model:

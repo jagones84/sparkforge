@@ -2,19 +2,20 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![stdlib-only](https://img.shields.io/badge/dependencies-none%20(stdlib)-brightgreen.svg)](#install--run)
-[![tests](https://img.shields.io/badge/battery-112%2F112%20green-success.svg)](#the-quality-gate)
+[![deps](https://img.shields.io/badge/deps-stdlib%20%2B%20PyYAML-brightgreen.svg)](#install--run)
+[![tests](https://img.shields.io/badge/battery-113%2F113%20green-success.svg)](#the-quality-gate)
 [![CI](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml/badge.svg)](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml)
 
-**SparkForge is not another meta-harness that just spawns sub-agents.** It is a
-*harness engineered to drive one LLM extremely well* — disciplined context, a real
-tool loop, evidence-gated task tracking, verifier gates — and **then** it composes
-that same capable harness into **meta-agents organised in TEAMS**. Every agent is a
-full SparkForge instance: its own tools, skills, plan, memory and transcript. The
-coordinator delegates; the team executes in enforced dependency order; the master
-synthesises the result.
+**SparkForge is a single agent harness — one engine that drives one LLM
+extremely well.** Disciplined context, a real tool loop, evidence-gated task
+tracking, verifier gates. **Then it runs that same harness as a team**: every
+*session* it already runs **is** an agent — its own tools, skills, plan, memory
+and transcript — and you **orchestrate those sessions as an org chart** (teams,
+jobs, subjobs, todos). The coordinator delegates; the team executes in enforced
+dependency order; the master synthesises the result.
 
-> **Local-first · stdlib-only (Python 3.10+) · zero pip dependencies.** One codebase runs on
+> **Local-first · stdlib-only core (Python 3.10+) · one pure-Python dependency (PyYAML)**
+> for the shipped YAML configs. One codebase runs on
 > **Linux x86_64**, **Linux arm64/aarch64** (NVIDIA **DGX Spark** / GB10 Grace Blackwell,
 > Ubuntu 24.04) and **Windows 10/11 (x64)**.
 
@@ -32,8 +33,10 @@ synthesises the result.
 | **Safe by construction** | Allowlist registry + per-action approval gate + a real sandbox (`docker`/`bwrap`/`nsjail`, `--network none`) so the agent never touches the host. |
 | **Observable end to end** | Every delta, thought, tool call, delegation and todo change is streamed over SSE and persisted — you can *watch* the team work. |
 
-**SparkForge ≠ Paperclip-style "meta-harness".** Paperclip orchestrates agents that
-are already capable. SparkForge *builds the capable agent first* — then teams it up.
+**A single harness — not a "meta-harness".** A meta-harness is a collector that
+orchestrates *other* harnesses; SparkForge has **one** engine. The agents it
+orchestrates are simply *its own sessions*, organised into teams and an org chart
+you can inspect and re-wire.
 
 ---
 
@@ -98,9 +101,15 @@ All views share one theme: pick **Indigo / Dark / Midnight / Sand / Sepia** in �
 
 ## Install & run
 
-**Requirements:** Python **3.10+**. Nothing else — the core has **no pip dependencies**.
-You need an LLM: a local **llama.cpp router** (default `http://127.0.0.1:8080`) or a
-cloud key in `.env` (OpenRouter / DeepSeek / OpenAI / Anthropic / Google).
+**Requirements:** Python **3.10+**, plus **PyYAML** (pure-Python — no compiler, no
+wheels) to read the shipped `config/*.yaml`. Nothing else: the core
+(`src/sparkforge/`) imports only the standard library, and every heavier extra
+(`numpy`, `sentence_transformers`, OpenTelemetry, `psutil`, the voice stack) is
+optional and lazily guarded. The tool allowlist stays **fail-closed**: if PyYAML is
+missing while `config/tools.yaml` exists, the harness refuses to start rather than
+run with an unverified policy. You need an LLM: a local **llama.cpp router**
+(default `http://127.0.0.1:8080`) or a cloud key in `.env`
+(OpenRouter / DeepSeek / OpenAI / Anthropic / Google).
 
 ### Platforms
 
@@ -110,7 +119,8 @@ cloud key in `.env` (OpenRouter / DeepSeek / OpenAI / Anthropic / Google).
 | **Linux** (Ubuntu 22.04+ & similar) | x86_64 | ✅ supported | `run.sh` |
 | **Linux — NVIDIA DGX Spark** (GB10 Grace Blackwell, Ubuntu 24.04) | **arm64 / aarch64** | ✅ verified | `run.sh` |
 
-The core is **pure stdlib**, so there are no compiled wheels to build — any OS/architecture
+The core is **pure stdlib** (PyYAML is its only third-party import, and it is
+pure-Python), so there are no compiled wheels to build — any OS/architecture
 with **CPython 3.10+** runs it identically. The only OS-specific code lives in one place,
 [`src/sparkforge/osutil.py`](src/sparkforge/osutil.py): shell spawn
 (`/bin/sh -c` ↔ `cmd /c`), process-tree kill (`SIGTERM/SIGKILL` ↔ `taskkill /T /F`) and
@@ -153,7 +163,7 @@ The **only** regression gate is one deterministic, fully-isolated battery — it
 every `SPARKFORGE_*` data dir at a throwaway temp dir, so it never touches live state:
 
 ```bash
-bash tests/battery.sh        # → === battery: 112/112 GREEN ===
+bash tests/battery.sh        # → === battery: 113/113 GREEN ===
 ```
 
 CI runs the same battery on every push/PR ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

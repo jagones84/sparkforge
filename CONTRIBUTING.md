@@ -7,6 +7,8 @@ deliberate and load-bearing, so please respect it.
 
 - **No third-party runtime dependencies.** The core (`src/sparkforge/`) imports only the
   Python standard library. New behaviour must not add a `pip` requirement to the core.
+  The single exception is **PyYAML** (pure-Python), used only to read the shipped
+  `config/*.yaml`; JSON configs work without it.
 - **Keep it cross-platform.** Platform-specific code lives in `src/sparkforge/osutil.py`.
   No POSIX assumption may leak into the core — SparkForge runs on Linux x86_64,
   Linux arm64/aarch64 (NVIDIA DGX Spark) and Windows x64 from the same code.
@@ -20,7 +22,7 @@ deliberate and load-bearing, so please respect it.
 ```bash
 git clone https://github.com/jagones84/sparkforge && cd sparkforge
 cp .env.template .env
-bash tests/battery.sh          # → === battery: 112/112 GREEN ===
+bash tests/battery.sh          # → === battery: 113/113 GREEN ===
 ```
 
 ## The loop
