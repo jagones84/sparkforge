@@ -65,6 +65,9 @@ check("C2 Bridge applies the same saved theme before paint",
 check("D1 a bolder-text preference exists",
       'html.bold-text body' in HTML and 'id="boldText"' in HTML
       and "function applyBold" in HTML, "")
+check("D2 bolder-text OFF is a real normal baseline (chrome labels not bold)",
+      "html:not(.bold-text) .sess .t" in HTML
+      and "html:not(.bold-text) button.primary" in HTML, "")
 
 # --- E: compaction model in the chat model menu -----------------------------
 check("E1 the model menu renders the compaction bar",
@@ -125,19 +128,26 @@ check("J3 bolder text really bumps the whole app (body + chat + inputs)",
       "html.bold-text body, html.bold-text .bubble" in HTML
       and "html.bold-text input," in HTML and "font-weight: 600" in HTML, "")
 
-# --- K: handles stay glued + the collapsed session name (JAG-357) ------------
+# --- K: handles stay glued + the collapsed session name (JAG-357/358) --------
 check("K1 the handles reposition while the panel is being resized",
       "positionHandles();   // JAG-357: keep the handle glued to the border we move" in HTML
       and "new ResizeObserver(() => positionHandles())" in HTML, "")
 check("K2 a collapsed panel drops its resize grip",
       "body.collapsed-left #resize-left, body.collapsed-right #resize-right { display: none; }" in HTML, "")
-check("K3 the active session name shows in the topbar when the left panel is collapsed",
+check("K3 the active session name shows in the topbar whenever the panel is off screen",
       'id="sessBadge"' in HTML and "function updateSessBadge" in HTML
-      and 'document.body.classList.contains("collapsed-left")' in HTML, "")
-check("K4 the handle position compensates the live page zoom",
-      "function _pageZoom" in HTML and "13 * z) / z" in HTML, "")
+      and "!_panelShown('[data-col=\"sessions\"]')" in HTML, "")
+check("K4 the handle position compensates the real page scale (engine-agnostic)",
+      "function _pageScale" in HTML and "p.getBoundingClientRect().left / 100" in HTML
+      and "L.style.left = (lx / s)" in HTML, "")
 check("K5 a zoom change re-glues the handles",
-      "positionHandles();   // JAG-357: a zoom change rescales the page" in HTML, "")
+      "_settleHandles();    // JAG-358: a zoom change rescales the page" in HTML, "")
+check("K6 a panel parked off screen is not treated as shown",
+      "r.right > 1 && r.left < innerWidth - 1" in HTML, "")
+check("K7 the toggle thresholds match the CSS overlays (900 / 1100)",
+      '_overlayLeft() ? "show-left" : "collapsed-left"' in HTML
+      and '_overlayRight() ? "show-right" : "collapsed-right"' in HTML
+      and "return innerWidth <= 900" in HTML, "")
 
 print("---")
 ok = sum(results)

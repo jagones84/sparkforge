@@ -101,13 +101,30 @@ All notable changes to SparkForge are documented here. The format follows
 - **Collapsing the left panel now shows the active session name in the topbar (JAG-357)** —
   you hide the *panel*, never which session you are in. A collapsed panel also drops its
   resize grip so it cannot sit under the re-open handle.
+- **The left arrow was dead at narrow widths (JAG-358).** Two bugs stacked: the drawer CSS
+  lived in `@media (max-width: 820px)` while the arrow tested `<= 900`, so between 821–900
+  it toggled a class with **no CSS at all**; and the drawer selector used a bare attribute
+  (`body.show-left [data-col="sessions"]`), which *loses to the ID rule* `#aside { transform:
+  translateX(105%) }`, so even ≤820 the panel never slid in. The CSS now covers `<= 900` and
+  targets `#aside`, and the arrow's thresholds match the CSS exactly (sessions 900,
+  inspector 1100). Verified live: the drawer opens/closes and the handle lands on its border.
+- **Handles could still detach (JAG-358).** Placement trusted `getComputedStyle().zoom`,
+  which engines disagree on, and a panel parked off-screen by a `transform` was counted as
+  *shown* — flinging its handle past the edge. Placement now calibrates the real scale with a
+  one-off probe, treats an element outside the viewport as hidden, and re-glues within a few
+  animation frames after any toggle/resize/transition (`_settleHandles`).
+- **"Bolder text" off still looked bold (JAG-358).** Many chrome labels ship at `600` in the
+  base sheet, so the OFF state was indistinguishable from ON. The OFF state now resets those
+  labels to a normal weight, so the switch changes the whole app (chat + labels) both ways.
 
 ### Added
-- **`tests/acceptance/v352_appearance_theme.py` extended to 35 checks** — the six themes, the
-  flipped edge-handle arrows, the resize-grip guard, the app-wide bolder text, that the
-  panels stay free of instructional prose while the Harness tab keeps it, and (K1–K5) that the
-  handles re-glue on resize and on zoom, a collapsed panel drops its grip, and the topbar
-  carries the active session name. Battery stays 114 (an existing file grew, no new file).
+- **`tests/acceptance/v352_appearance_theme.py` extended to 38 checks** — the six themes, the
+  flipped edge-handle arrows, the resize-grip guard, the app-wide bolder text (and its OFF
+  baseline), that the panels stay free of instructional prose while the Harness tab keeps it,
+  and (K1–K7) that the handles re-glue on resize and on zoom, a collapsed panel drops its
+  grip, an off-screen panel is not treated as shown, the toggle thresholds match the CSS
+  overlays, and the topbar carries the active session name both when the panel is collapsed
+  and when it is parked off screen. Battery stays 114 (an existing file grew, no new file).
 - **Live cost panel (JAG-355).** The harness already captures the provider's REAL `usage`
   per call; new `costs.py` prices each call (USD per 1M, `[input, output]`) and keeps a
   per-session ledger (`data/costs/<session>.json`), surfaced in a new right-panel **Cost**
