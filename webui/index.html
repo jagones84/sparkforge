@@ -782,14 +782,17 @@
   aside { background: var(--aside); }
   .step:hover, .task:hover { background: var(--hover); }
   #composer { background: var(--composer); }
-  /* JAG-353: panel toggles are circular handles ON the panel's inner border (the
-     topbar icon buttons are gone). Arrows: left panel = ▶ open / ◀ closed;
-     right panel = ◀ open / ▶ closed. Positioned by JS from the panel rect. */
-  .edge-handle { position: fixed; top: 50%; z-index: 24; width: 22px; height: 22px; padding: 0;
+  /* JAG-353/JAG-356: panel toggles are circular handles ON the panel's inner border
+     (the topbar icon buttons are gone). The arrow points the way the panel MOVES:
+     left panel = ◀ open / ▶ closed; right panel = ▶ open / ◀ closed.
+     Positioned by JS from the panel rect. A high z-index + a mousedown guard stop the
+     resize grip on the SAME border from stealing the press. */
+  .edge-handle { position: fixed; top: 50%; z-index: 30; width: 24px; height: 24px; padding: 0;
     display: flex; align-items: center; justify-content: center; border-radius: 50%;
     background: var(--panel2); color: var(--accent); border: 1px solid var(--line);
     font: inherit; font-size: 12px; line-height: 1; cursor: pointer; opacity: .85;
     box-shadow: 0 2px 10px rgba(0,0,0,.28); transform: translate(-50%, -50%);
+    touch-action: manipulation; pointer-events: auto;
     transition: opacity .12s, background .12s, border-color .12s; }
   .edge-handle:hover, .edge-handle:focus-visible { opacity: 1; background: var(--sel); border-color: var(--accent); }
   * { scrollbar-color: var(--scroll) transparent; }
@@ -823,13 +826,19 @@
   .themecard .nm { font-weight: 600; font-size: 12.5px; }
   .themecard .ds { color: var(--dim); font-size: 11px; }
   /* bolder text preference (default on) */
-  html.bold-text body { font-weight: 500; }
-  html.bold-text .bubble, html.bold-text .card, html.bold-text .sw-main,
-  html.bold-text #modelMenu .mi, html.bold-text .themecard { font-weight: 500; }
-  html.bold-text .remaining, html.bold-text .pill, html.bold-text .sub,
-  html.bold-text .mh, html.bold-text #modelMenu .mh { font-weight: 600; }
+  /* JAG-356: Bolder text — a real, app-wide weight bump. `body` cascades to the
+     whole UI and the chat bubble is forced, so long answers visibly change. */
+  html.bold-text body, html.bold-text .bubble, html.bold-text .card, html.bold-text .sw-main,
+  html.bold-text #modelMenu .mi, html.bold-text .themecard, html.bold-text .sess .t,
+  html.bold-text .ctxitem, html.bold-text .costrow, html.bold-text input,
+  html.bold-text select, html.bold-text textarea, html.bold-text button { font-weight: 600; }
+  html.bold-text .remaining, html.bold-text .pill, html.bold-text .sub, html.bold-text .mh,
+  html.bold-text #modelMenu .mh, html.bold-text .sess .n, html.bold-text .ctxlegend,
+  html.bold-text .toolcard-meta { font-weight: 600; }
+  html.bold-text .bubble p, html.bold-text .bubble li, html.bold-text .bubble td { font-weight: 600; }
+  html.bold-text .bubble b, html.bold-text .bubble strong { font-weight: 800; }
   html.bold-text header .logo { font-weight: 800; }
-  html.bold-text h2 { font-weight: 700; }
+  html.bold-text h2, html.bold-text h3, html.bold-text .insp-hd { font-weight: 700; }
 </style>
 <script>
 /* JAG-352: apply the saved theme + text-weight before first paint (no flash). */
@@ -852,9 +861,9 @@
   <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
 </header>
 <button class="edge-handle" id="handle-left" type="button"
-        title="collapse / expand the sessions panel" aria-label="toggle sessions panel">▶</button>
+        title="collapse / expand the sessions panel" aria-label="toggle sessions panel">◀</button>
 <button class="edge-handle" id="handle-right" type="button"
-        title="collapse / expand the inspector" aria-label="toggle inspector panel">◀</button>
+        title="collapse / expand the inspector" aria-label="toggle inspector panel">▶</button>
 <main id="app">
   <aside id="aside" data-col="sessions">
     <section>
@@ -935,7 +944,6 @@
           <div id="approvals" class="remaining">no pending approvals</div>
           <div style="margin-top:6px"><button class="ghost" onclick="approvalsClear()" title="delete decided approvals (pending are kept)">clear decided</button></div>
         </div>
-        <div class="remaining" style="margin-top:8px">Tools set to <b>auto</b> never ask. Change a tool's policy in <b>Settings → Tool policy</b>.</div>
         </div>
       </section>
       <section data-insp="context" class="insp-open">
@@ -972,8 +980,6 @@
         <div class="insp-body">
         <h2>ROLE.md <span id="rolePath" class="remaining"></span></h2>
         <div class="card">
-          <div class="remaining" style="margin:0 0 6px">The role and a few behaviour notes for <b>this session only</b>.
-            Merged into the system prompt (it never replaces it), and shared with the Bridge deck.</div>
           <textarea id="roleText" class="inp" placeholder="Role: API designer&#10;- answer with the endpoint list and JSON schema only" style="width:100%;min-height:110px;font-size:12px;font-family:ui-monospace,monospace"></textarea>
           <div style="display:flex;gap:6px;margin-top:8px">
             <button class="ghost" onclick="saveRole()" title="save this session's ROLE.md">save role</button>
@@ -993,8 +999,6 @@
             <button class="ghost" onclick="clearSession()" title="clear chat + tasks">clear</button>
             <button class="ghost" onclick="resetPlan()" title="clear this session's task list (start a new task)">reset</button>
           </div>
-          <div class="remaining" style="margin-top:6px">This panel is the persistent view of the plan.
-            <b>/goal &lt;text&gt;</b> in chat does the same thing: plan + execute autonomously (no manual planning needed).</div>
           <div id="graphHead" class="remaining">run graph: — (send a request to generate it)</div>
           <div id="tasks"></div>
           <div style="display:flex;gap:6px;margin-top:8px">
@@ -1085,7 +1089,6 @@
         </div>
         <h2>GitHub access</h2>
         <div class="card">
-          <div class="remaining" style="margin-bottom:6px">The agent uses GitHub through the official <b>GitHub MCP server</b> (remote <code>https://api.githubcopilot.com/mcp/</code>). Create a fine-grained Personal Access Token (scopes: <code>repo</code>, <code>read:org</code>, optionally <code>workflow</code>), set it as <code>GITHUB_TOKEN</code> above, then add the server from <b>Settings → MCP → catalog</b>.</div>
           <button class="ghost" onclick="openSettings('mcp')">open MCP settings</button>
         </div>
         <h2>API token</h2>
@@ -1096,13 +1099,11 @@
             <button class="ghost" onclick="copyToken()" title="copy">⧉ copy</button>
             <button class="ghost" onclick="saveToken()">save</button>
           </div>
-          <div class="remaining" style="margin-top:6px">Stored in <code>localStorage</code> (key <code>sf_token</code>). Masked by default; <b>👁</b> to reveal, <b>⧉</b> to copy.</div>
         </div>
       </div>
       <div class="sw-cat" data-cat="mcp" hidden>
         <h2>MCP · external servers</h2>
         <div class="card">
-          <div class="remaining" style="margin-bottom:6px">Local file <code>config/mcp_clients.local.json</code> — never committed. Edit it in the editor, or paste a server snippet here.</div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div class="remaining" id="mcpSummary" style="flex:1">loading…</div>
             <button class="ghost" onclick="openMcpFile()" title="open config/mcp_clients.local.json in the editor and edit it by hand">✎ Edit mcp.json</button>
@@ -1114,7 +1115,6 @@
         </div>
         <h2>Catalog · add in one click</h2>
         <div class="card">
-          <div class="remaining" style="margin-bottom:6px">Known servers, ready to use. <b>＋ add</b> installs right away; if a token or a path is needed, it opens the <b>snippet</b> to complete and confirm.</div>
           <div id="mcpCatalog"></div>
         </div>
       </div>
@@ -1126,7 +1126,6 @@
           <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="skillOverwrite"> overwrite if exists</label>
           <button class="ghost" onclick="installSkillZip()" style="margin-top:8px">install</button>
           <div id="skillResult" class="remaining" style="margin-top:6px"></div>
-          <div class="remaining" style="margin-top:6px">installed in skills/local/ (outside the repo)</div>
         </div>
         <h2>Skills · installed</h2>
         <div class="card">
@@ -1144,7 +1143,7 @@
             <button class="ghost" onclick="window.SparkEditor&&window.SparkEditor.toggle()" title="open/close the editor dock (CodeMirror; markdown/images preview)">🗔 editor</button>
             <button class="ghost" onclick="loadFiles()" title="reload tree">↻</button>
           </div>
-          <div id="fileTree" style="margin-top:6px"><div class="remaining">open a session, then ↻ · click a file to edit it</div></div>
+          <div id="fileTree" style="margin-top:6px"><div class="remaining">open a session first</div></div>
           <div class="remaining" id="fileMsg" style="margin-top:4px"></div>
         </div>
         <h2>Pending changes · <span id="editsStat" class="remaining">…</span></h2>
@@ -1172,7 +1171,6 @@
             <button type="button" class="ctxcopy" id="browserCopy" title="copy every URL found in the result, one per line — ready to paste as sources">⧉ copy all URLs</button>
           </div>
           <div id="browserOut" class="remaining" style="margin-top:8px;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:11.5px"></div>
-          <div class="remaining" style="margin-top:6px">The content comes from the harness' network tool (<code>web</code>), read-only and public hosts only.</div>
         </div>
         </div>
       </section>
@@ -1191,7 +1189,6 @@
             <input id="termInp" class="inp" placeholder="command…  (↑↓ history · ⏎ run)" style="flex:1;padding:6px 10px;font-size:12px;font-family:ui-monospace,monospace" autocomplete="off" spellcheck="false">
             <button class="ghost" onclick="termSend()" title="run">▶</button>
           </div>
-          <div class="remaining" style="margin-top:6px">A <b>persistent</b> shell per session: <code>cd</code>, env vars and shell state survive across commands, output streams live. It runs as you, in the session workspace; the agent's own <code>shell</code> tool still goes through the approval gate.</div>
         </div>
         </div>
       </section>
@@ -1241,7 +1238,6 @@
             <button class="ghost" onclick="memoryPurge()" title="purge invalidated/expired memories">🧹</button>
           </div>
           <div id="memResult" class="remaining" style="margin-top:6px"></div>
-          <div class="remaining" style="margin-top:6px">Persistent harness memory (<code>/api/memory</code>): the agent reuses it as a lesson/context across sessions.</div>
         </div>
       </div>
     </div>
@@ -1272,11 +1268,9 @@
           <input id="provUrl" class="inp" placeholder="base_url (https://…/v1)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
           <input id="provKeyEnv" class="inp" placeholder="api_key_env = VAR name (not the key)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
           <input id="provModels" class="inp" placeholder="models (comma-separated; id or id:context_length)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
-          <div class="remaining" style="margin-top:4px">Each model is <code>id</code> or <code>id:context_length</code> in tokens (e.g. <code>gpt-5.1:400000</code>). The window drives the context budget; a local llama.cpp window is read LIVE and overrides this, a cloud one is declared here (or fetched from OpenRouter).</div>
           <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="provLocal"> local (no key)</label>
           <button class="ghost" onclick="saveProvider()" style="margin-top:8px">save provider</button>
           <div id="provResult" class="remaining" style="margin-top:6px"></div>
-          <div class="remaining" style="margin-top:6px">Saved in <code>config/providers.local.yaml</code> (outside the repo).</div>
         </div>
         <h2>Providers</h2>
         <div class="card">
@@ -1287,14 +1281,12 @@
         <div class="card" id="modelsList"><div class="remaining">loading…</div></div>
         <h2>Compaction model</h2>
         <div class="card">
-          <div class="remaining" style="margin-bottom:6px">Model that summarizes the transcript when you run <b>compact</b> — the same list as the chat model selector.</div>
           <select id="compactionModel" class="inp" style="width:100%;padding:6px 10px;font-size:12px"></select>
           <button class="ghost" onclick="saveCompactionModel()" style="margin-top:8px">save</button>
           <div class="remaining" id="compactionResult" style="margin-top:6px"></div>
         </div>
         <h2>Thinking effort</h2>
         <div class="card">
-          <div class="remaining" style="margin-bottom:6px">Sent as <code>reasoning_effort</code> to OpenAI-compatible <b>reasoning</b> models (o-series, GPT-5.x, DeepSeek-R, Gemini 2.5, …). Leave it <b>off</b> for plain or local models — they may reject the field.</div>
           <div class="hrow">
             <label title="Send the reasoning_effort field at all.">enabled <input id="reOn" type="checkbox"></label>
             <label title="Depth of reasoning requested from the model.">effort
@@ -1313,7 +1305,6 @@
       <div class="sw-cat" data-cat="appearance" hidden>
         <h2>Theme</h2>
         <div class="card">
-          <div class="remaining" style="margin-bottom:8px">Choose how SparkForge looks. Saved on this device, applied instantly.</div>
           <div class="themegrid" id="themeGrid"></div>
         </div>
         <h2>Text</h2>
@@ -1338,7 +1329,7 @@
   <div class="mj-card">
     <div class="mj-head"><b>MCP JSON · configure manually</b><span style="flex:1"></span>
       <button class="ghost" onclick="closeMcpJson()" title="close (Esc)">✕</button></div>
-    <div class="remaining" style="margin:10px 0 8px"><code>mcpServers</code> config from your local file. Copy it into another MCP client, or paste <b>only the server</b> you want to add (or edit the fields) and press <b>confirm</b>: it is written to <code>config/mcp_clients.local.json</code> (it updates same-named entries, <b>it removes</b> nothing).</div>
+    <div class="remaining" style="margin:10px 0 8px"><code>mcpServers</code> — paste one <b>server</b> snippet and press <b>confirm</b>; written to <code>config/mcp_clients.local.json</code>.</div>
     <textarea id="mcpJsonText" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
     <div id="mcpJsonMsg" class="remaining" style="margin-top:6px"></div>
     <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">
@@ -1358,7 +1349,6 @@
     <input id="nsWs" class="inp" placeholder="/home/jagones/Repositories/…" style="flex:1;padding:6px 10px;font-size:12px">
     <button class="ghost" onclick="openDirPicker()" title="browse folders">📁 browse…</button>
   </div>
-  <div class="remaining" style="margin-top:4px">the session will be bound to this folder (project rules, tools, git)</div>
   <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
     <button class="ghost" onclick="closeNewSess()">cancel</button>
     <button class="ghost" onclick="createNewSession()">create</button>
@@ -1401,7 +1391,7 @@
 <div id="textModal" class="smodal" hidden role="dialog" aria-modal="true" aria-labelledby="textModalTitle">
   <div class="pick-hd"><b id="textModalTitle">📝 Paste text as context</b>
     <button class="ghost" onclick="closeTextModal()" aria-label="close">✕</button></div>
-  <textarea id="textModalArea" rows="8" placeholder="paste or type the text to attach — it is sent to the model as context" style="resize:vertical;font-family:inherit"></textarea>
+  <textarea id="textModalArea" rows="8" placeholder="paste or type the text to attach" style="resize:vertical;font-family:inherit"></textarea>
   <div style="display:flex;justify-content:flex-end;gap:8px">
     <button class="ghost" onclick="closeTextModal()">cancel</button>
     <button class="ghost" onclick="confirmTextModal()">attach</button>
@@ -3781,7 +3771,7 @@ function renderTools(el, d) {
   const policyCard =
     `<div class="card" style="margin-bottom:10px">
        <div style="font-weight:600;margin-bottom:6px">🔓 Global approval policy</div>
-       <div class="remaining" style="margin-bottom:8px"><b>FULL</b> = never ask for anything (a hard-denied tool is still blocked). <b>Outside workspace</b> = whether a file op outside the session folder must be confirmed.</div>
+       <div class="remaining" style="margin-bottom:8px"><b>FULL</b> = never ask. <b>Outside workspace</b> = confirm file ops outside the session folder.</div>
        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
          <span style="font-size:11px;color:var(--dim);min-width:126px">Approval mode</span>
          ${mk("mode", "normal", mode)} ${mk("mode", "full", mode, "FULL — never ask")}
@@ -3792,7 +3782,7 @@ function renderTools(el, d) {
        </div>
      </div>`;
   el.innerHTML = policyCard +
-    '<div class="remaining" style="margin-bottom:8px">Per-tool policy — click to cycle: <b>auto</b> = never ask · <b>required</b> = always ask · <b>denied</b> = blocked.</div>' +
+    '<div class="remaining" style="margin-bottom:8px">click to cycle: <b>auto</b> · <b>required</b> · <b>denied</b></div>' +
     tools.map(t => {
     const on = t.enabled !== false;
     const ap = t.approval || "auto";
@@ -4298,7 +4288,7 @@ async function saveReasoning() {
 async function saveProvider() {
   const id = $("provId").value.trim();
   if (!id) { $("provResult").textContent = "id required"; return; }
-  const body = { id, kind: $("provKind").value, local: $("provLocal").checked };
+  const body = { id, kind: $("provKind").value || "openai", local: $("provLocal").checked };
   if ($("provName").value.trim()) body.name = $("provName").value.trim();
   if ($("provUrl").value.trim()) body.base_url = $("provUrl").value.trim();
   if ($("provKeyEnv").value.trim()) body.api_key_env = $("provKeyEnv").value.trim();
@@ -5347,7 +5337,8 @@ bindResizer($("resize-left"), '[data-col="sessions"]', 1, "sf_w_left");
 bindResizer($("resize-right"), '[data-col="context"]', -1, "sf_w_right");
 /* JAG-353: the two topbar icon buttons are gone — each panel collapses from a
    circular handle on its inner border (fixed, re-positioned from the panel rect).
-   Arrows: left panel = ▶ open / ◀ closed; right panel = ◀ open / ▶ closed. */
+   The arrow points the way the panel MOVES: left = ◀ open / ▶ closed;
+   right = ▶ open / ◀ closed. */
 function toggleLeftPanel() {
   if (innerWidth <= 820) document.body.classList.toggle("show-left");
   else document.body.classList.toggle("collapsed-left");
@@ -5370,11 +5361,18 @@ function positionHandles() {
   const rc = document.querySelector('[data-col="context"]');
   const lOpen = _panelShown('[data-col="sessions"]');
   const rOpen = _panelShown('[data-col="context"]');
-  L.style.left = (lOpen ? ls.getBoundingClientRect().right : 11) + "px";
-  L.textContent = lOpen ? "▶" : "◀";
-  R.style.left = (rOpen ? rc.getBoundingClientRect().left : innerWidth - 11) + "px";
-  R.textContent = rOpen ? "◀" : "▶";
+  L.style.left = (lOpen ? ls.getBoundingClientRect().right : 13) + "px";
+  L.textContent = lOpen ? "◀" : "▶";
+  R.style.left = (rOpen ? rc.getBoundingClientRect().left : innerWidth - 13) + "px";
+  R.textContent = rOpen ? "▶" : "◀";
 }
+// JAG-356: the resize grip sits on the same border — never let it (or a stray
+// selection) swallow the press; a mousedown on the handle is just a click.
+["handle-left", "handle-right"].forEach(id => {
+  const h = $(id);
+  h.onmousedown = e => { e.preventDefault(); e.stopPropagation(); };
+  h.ontouchstart = e => { e.stopPropagation(); };
+});
 $("handle-left").onclick = toggleLeftPanel;
 $("handle-right").onclick = toggleRightPanel;
 addEventListener("resize", positionHandles);

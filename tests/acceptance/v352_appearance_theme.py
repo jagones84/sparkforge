@@ -82,8 +82,10 @@ check("F2 circular edge handles exist",
       'id="handle-left"' in HTML and 'id="handle-right"' in HTML
       and ".edge-handle" in HTML, "")
 check("F3 handles are positioned from the panel rect + flip their arrow",
-      "function positionHandles" in HTML and 'L.textContent = lOpen ? "▶" : "◀"' in HTML
-      and 'R.textContent = rOpen ? "◀" : "▶"' in HTML, "")
+      "function positionHandles" in HTML and 'L.textContent = lOpen ? "◀" : "▶"' in HTML
+      and 'R.textContent = rOpen ? "▶" : "◀"' in HTML, "")
+check("F5 the resize grip cannot steal the handle press",
+      'h.onmousedown = e => { e.preventDefault(); e.stopPropagation(); }' in HTML, "")
 check("F4 the toggle behaviour is preserved (collapsed/show + resize)",
       "function toggleLeftPanel" in HTML and "function toggleRightPanel" in HTML
       and "collapsed-left" in HTML and "collapsed-right" in HTML, "")
@@ -108,6 +110,20 @@ check("I1 Bridge carries the per-theme token override blocks",
                                'html[data-theme="forest"]', 'html[data-theme="sepia"]')), "")
 check("I2 Bridge re-points its hardcoded dark bits at tokens",
       ".cbody{background:var(--cbody)}" in ORBIT and ".cnode text{fill:var(--linktext)}" in ORBIT, "")
+
+# --- J: minimal GUI copy + a real bolder-text (JAG-356) ---------------------
+check("J1 the instructional paragraphs are gone from the panels/subwindows",
+      "This panel is the persistent view of the plan" not in HTML
+      and "Known servers, ready to use" not in HTML
+      and "Each model is <code>id</code> or" not in HTML
+      and "Stored in <code>localStorage</code> (key <code>sf_token</code>)" not in HTML
+      and "the session will be bound to this folder" not in HTML, "")
+check("J2 the Harness tab keeps its detailed explanations",
+      "keeps long jobs alive without getting stuck forever" in HTML
+      and "applies them only if it passes" in HTML, "")
+check("J3 bolder text really bumps the whole app (body + chat + inputs)",
+      "html.bold-text body, html.bold-text .bubble" in HTML
+      and "html.bold-text input," in HTML and "font-weight: 600" in HTML, "")
 
 print("---")
 ok = sum(results)

@@ -181,7 +181,6 @@
   <select class="inp" id="teamSel" title="team — scope the whole board"
           style="max-width:210px;width:auto"></select>
   <span class="spacer"></span>
-  <button class="btn ghost" id="refresh">↻ refresh</button>
   <a class="btn ghost" href="/">main app ↗</a>
 </header>
 
@@ -806,7 +805,6 @@ class OrbitApp {
     this.routines = new RoutinesView(this.api, () => this.refresh());
     this.feed = new FeedView(this.api);
     this.tac.mount();
-    $("refresh").onclick = () => this.refresh();
     $("agNew").onclick = () => this.agents.create();
     $("agPolicy").onclick = () => this.applyModelPolicy();
     $("jobCreate").onclick = () => this.createJob();

@@ -84,8 +84,10 @@ check("D3 the correct framing is stated (one harness / its sessions are the agen
       "single agent harness" in README and 'not a "meta-harness"' in README, "")
 check("D4 the 1.0.0 changelog no longer says 'merely spawns sub-agents'",
       "merely spawns sub-agents" not in CHANGELOG, "")
-check("D5 the battery count is bumped in the README",
-      "113/113" in README, "")
+_ntests = len([f for f in os.listdir(os.path.join(REPO, "tests", "acceptance"))
+               if f.startswith("v") and f.endswith(".py")])
+check("D5 the README battery count matches the acceptance-suite size",
+      ("%d/%d" % (_ntests, _ntests)) in README, "%d tests" % _ntests)
 
 # --- B: a task list survives compaction --------------------------------------
 TMP = tempfile.mkdtemp(prefix="sf-v354-")

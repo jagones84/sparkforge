@@ -76,8 +76,27 @@ All notable changes to SparkForge are documented here. The format follows
   and Sand was still too bright to be an eye-saver. Sand is now a genuine low-luminance cream
   (`#d9c49c`) and Sepia is a **dark** warm amber (`#17120c`); they are now unmistakably
   different. `Sand` remains the only light theme.
+- **The panel-collapse arrows pointed the wrong way and the resize grip could steal the
+  press (JAG-356).** The arrows now follow the intended semantics — left panel `◀` open /
+  `▶` closed, right panel `▶` open / `◀` closed — and the handle takes precedence over the
+  column resize grip on the same border (z-index 30 + a `mousedown` guard), so pressing the
+  arrow is always a click, never a drag.
+- **"Bolder text" did almost nothing (JAG-356).** It only bumped a handful of nodes by 100.
+  It is now a real, app-wide weight (body `600` cascades to panels, chat, inputs) with the
+  chat bubble forced, so answers visibly change.
+- **Removed the redundant Bridge refresh button (JAG-356).** The deck already polls every 5s
+  (and a browser reload covers the rest), so the manual button added nothing.
+- **Stripped the instructional prose from the GUI (JAG-356).** The multi-sentence "how to"
+  paragraphs in the panels and sub-windows (Plan/Tasks, MCP, Models, Keys, Terminal, Memory,
+  Browser, the new-session dialog, the tool-policy legend) are gone — the UI is now
+  self-explanatory. The **Harness** settings tab keeps its full explanations, by request.
+- **Models: an empty provider kind no longer persists as `""`** (falls back to `openai`).
 
 ### Added
+- **`tests/acceptance/v352_appearance_theme.py` extended to 30 checks** — the six themes, the
+  flipped edge-handle arrows, the resize-grip guard, the app-wide bolder text, and that the
+  panels stay free of instructional prose while the Harness tab keeps it. Battery stays 114
+  (an existing file grew, no new test file).
 - **Live cost panel (JAG-355).** The harness already captures the provider's REAL `usage`
   per call; new `costs.py` prices each call (USD per 1M, `[input, output]`) and keeps a
   per-session ledger (`data/costs/<session>.json`), surfaced in a new right-panel **Cost**
