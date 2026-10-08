@@ -5527,23 +5527,34 @@ function bindResizer(handle, colSel, sign, key) {
   if (saved) { col.style.width = saved + "px"; col.style.flex = "0 0 " + saved + "px"; }
   _fitPanels();
   handle.addEventListener("mousedown", e => {
-    e.preventDefault(); handle.classList.add("active");
-    // JAG-360: the drag maths run in CSS px (the unit of `style.width`), NOT in
-    // already-zoomed rect pixels — otherwise the panel lags the cursor by the zoom.
+    // JAG-363: a CLICK on the border — or a press-and-hold — must NEVER move the
+    // panel. A physical click wiggles the pointer 1-3px, and the old handler
+    // resized by exactly that much, so the panel shifted on contact. The resize
+    // only engages once the pointer really travels (> 4px): below that it is a
+    // dead click; above it the panel tracks the cursor exactly (no dead start).
+    e.preventDefault();
     const z = _pageScale();
     const startX = e.clientX, startW = col.getBoundingClientRect().width / z;
-    const room = _panelRoom(col);   // JAG-361
+    const room = _panelRoom(col);
+    let dragging = false;
     const move = ev => {
+      const dx = ev.clientX - startX;
+      if (!dragging) {
+        if (Math.abs(dx) < 4) return;   // a click (1-3px wobble) is not a drag
+        dragging = true; handle.classList.add("active");
+      }
       // JAG-361: bounded by the room the centre column leaves — so the panel stops
       // growing at the floor instead of being redistributed by the flex algorithm.
-      const w = Math.max(150, Math.min(room, startW + sign * (ev.clientX - startX) / z));
+      const w = Math.max(150, Math.min(room, startW + sign * dx / z));
       col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
       positionHandles();   // JAG-357: keep the handle glued to the border we move
     };
     const up = () => {
       document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
       handle.classList.remove("active");
-      localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width / _pageScale())));
+      if (dragging) {
+        localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width / _pageScale())));
+      }
       positionHandles();
     };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);

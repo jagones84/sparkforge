@@ -8,6 +8,8 @@ Static guards only (deterministic, no model, no network):
      re-paint the WHOLE UI (settings, popovers, MCP textarea, scrollbars);
   B) the panel handle toggles on POINTER UP with a movement guard, so a press and
      hold behaves exactly like a tap and a 1-2 px wobble cannot cancel the click;
+     and the resize BORDER ignores a click too — it only resizes after the pointer
+     really travels (> 4px), so touching the border never shifts the panel;
   C) the centre column has a min-width floor and the side panels are shrinkable, so
      a wide panel (or a narrow window) can never crush the chat;
   D) the defaults are indigo + NO bolder text.
@@ -53,6 +55,10 @@ check("B3 the fragile native onclick is gone",
       '$("handle-left").onclick' not in HTML and '$("handle-right").onclick' not in HTML, "")
 check("B4 the press guard against the resize grip is kept",
       'h.onmousedown = e => { e.preventDefault(); e.stopPropagation(); };' in HTML, "")
+check("B5 the resize border ignores a click (no shift on a 1-px wobble)",
+      "if (Math.abs(dx) < 4) return;" in HTML and "let dragging = false;" in HTML, "")
+check("B6 a click never persists a width (only a real drag does)",
+      "if (dragging) {\n        localStorage.setItem(key," in HTML, "")
 
 # --- C: the chat cannot be crushed -------------------------------------------
 check("C1 the centre column has a min-width floor and a 0 basis (never steals the panels' space)",

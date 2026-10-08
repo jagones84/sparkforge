@@ -195,6 +195,13 @@ All notable changes to SparkForge are documented here. The format follows
   means — `sandboxed` / `no sandbox`, with the backend and the requested mode in the tooltip —
   and the ctx `%` is a ring + label matching the other header chips.
 
+- **Clicking a panel's border shifted the panel (JAG-363).** The resize strip started resizing on
+  the raw `mousedown`, so the 1–3px of pointer travel that any physical click carries became a
+  1–3px panel move (and a press-and-hold did the same). The resize now engages only once the
+  pointer really travels (**> 4px**), and it maps the full delta from there — so a click or a hold
+  is a dead no-op, a drag tracks the cursor exactly (verified live: click 0px, 2px wobble 0px,
+  drag +10/+30/−10 = exactly +10/+30/−10), and a plain click no longer persists a width.
+
 ### Added
 - **`tests/acceptance/v362_agent_identity.py` (12 checks)** — every designated agent announces
   its roster identity in the `agent-role` prompt section even with no ROLE.md (and two agents
