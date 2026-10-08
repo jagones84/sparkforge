@@ -171,24 +171,51 @@ def _provider_self_summary(sess, ws, ctx):
 
 
 def _provider_role(sess, ws, ctx):
-    """The session's ROLE.md, merged as its own prompt section (JAG-294).
+    """The AGENT identity + the session's ROLE.md — the `agent-role` section.
 
-    A small per-session patch (`Role:` + a few behaviour notes) that rides on top
-    of the canonical prompt — never a replacement. Empty when the session has none.
+    JAG-294 added the per-session ROLE.md patch. JAG-362 harmonises the layers:
+    a session DESIGNATED as an org agent always announces its identity here
+    (``A#`` · name · the short roster label) and the ROLE.md text is appended
+    when set. Before this the section was EMPTY for the ~90% of agents with no
+    ROLE.md yet, so every agent looked identical to the model (and the agent's
+    own name/label never reached the prompt at all).
+
+    Layers, in prompt order: agent identity + ROLE.md (this section, order 52)
+    then the standing rules (order 60: GLOBAL RULES.md + AGENTS.md, then the
+    PROJECT RULES.md + rules/*.md + AGENTS.md — the project wins on conflict).
     """
     sid = (sess or {}).get("id") if isinstance(sess, dict) else sess
     if not sid:
         return ""
+    who = ""
+    try:
+        from . import agents
+        rec = agents.REGISTRY.get(sid) or {}
+        if rec.get("id"):
+            who = "You are %s" % rec["id"]
+            if rec.get("name"):
+                who += " \u2014 %s" % rec["name"]
+            if rec.get("role"):
+                who += " (%s)" % rec["role"]
+            who += "."
+    except Exception:  # noqa: BLE001 — the prompt must never break the chat
+        who = ""
     try:
         from . import roles
-        text = roles.read(sid)
-    except Exception:  # noqa: BLE001 — the prompt must never break the chat
+        text = roles.read(sid) or ""
+    except Exception:  # noqa: BLE001
+        text = ""
+    if not who and not text:
         return ""
-    if not text:
-        return ""
-    return ("## Your role (this session)\n"
-            "Hold this role and these behaviour rules for everything you do here.\n\n"
-            + text)
+    out = "## Your role (%s)\n" % ("this agent" if who else "this session")
+    if who:
+        out += (who + " Hold this identity and the rules below for everything you "
+                "do here.\n")
+    else:
+        out += ("Hold this role and these behaviour rules for everything you do "
+                "here.\n")
+    out += ("\n" + text) if text else "\n(No extra role text is set for this agent yet.)"
+    return out
 
 
 def _provider_tools(sess, ws, ctx):

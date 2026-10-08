@@ -57,7 +57,7 @@ check("B6 the sandbox dot is green when isolated, amber otherwise",
       and "#sbxPill.warn .sdot { background: var(--warn);" in HTML, "")
 check("B7 the backend detail moved to the sandbox tooltip",
       '"sandbox backend: " + sb.backend + " (requested: "' in HTML
-      and 'sb.isolated ? " — isolated" : " — host execution, not isolated"' in HTML, "")
+      and 'sb.isolated ? " — sandboxed (isolated)" : " — host execution, no sandbox"' in HTML, "")
 
 # --- C: the shell fills the viewport at any zoom -----------------------------
 check("C1 the body height is divided by the live zoom",

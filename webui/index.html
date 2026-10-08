@@ -63,15 +63,17 @@
   /* JAG-359: the topbar indicators are compact GRAPHICS, not debug text — a tiny
      ring for the context load, a status DOT for the sandbox. The verbose string
      lives in the tooltip. The context indicator turns RED from 70% up. */
-  .pill.meter { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 3px; }
+  .pill.meter { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px;
+    font-size: 11px; }
   .pill.meter b { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .mring { width: 15px; height: 15px; flex: 0 0 auto; transform: rotate(-90deg); }
+  .mring { width: 16px; height: 16px; flex: 0 0 auto; transform: rotate(-90deg); }
   .mring .mtrk { fill: none; stroke: var(--line); stroke-width: 4.4; }
   .mring .mfill { fill: none; stroke: var(--accent); stroke-width: 4.4; stroke-linecap: round;
     stroke-dasharray: 100 100; stroke-dashoffset: 100; transition: stroke-dashoffset .3s, stroke .3s; }
   .pill.meter.hot .mfill { stroke: var(--err); }
   .pill.meter.hot b { color: var(--err); }
-  .pill.sbox { display: inline-flex; align-items: center; gap: 6px; }
+  .pill.sbox { display: inline-flex; align-items: center; gap: 6px; font-size: 11px;
+    padding: 3px 11px; }
   .pill.sbox.ok, .pill.sbox.warn { color: var(--dim); }
   .sdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--dim); opacity: .8; }
   #sbxPill.ok .sdot { background: var(--ok); opacity: 1; box-shadow: 0 0 7px var(--ok); }
@@ -924,6 +926,8 @@
   .rbadge.ok { color: var(--ok); }
   .rpath { font-size: 10.5px; color: var(--dim); word-break: break-all; margin: 4px 0 5px; }
   .rrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .rwho { font-size: 11px; color: var(--dim); margin-bottom: 6px; line-height: 1.4; }
+  .rwho.agent { color: var(--txt); }
 </style>
 <script>
 /* JAG-352: apply the saved theme + text-weight before first paint (no flash). */
@@ -1070,6 +1074,7 @@
         <div class="card">
           <div class="remaining" style="margin-bottom:4px">Every file that feeds the system prompt, with its real path. The text
             is already loaded, so edit it here. A later section wins on conflict.</div>
+          <div id="rulesWho" class="rwho"></div>
           <div id="rulesList"></div>
         </div>
         </div>
@@ -2813,6 +2818,24 @@ async function loadRulesPanel() {
     catch (e) { role = null; }
   }
   if (!d) { box.innerHTML = '<div class="remaining">rules unavailable</div>'; return; }
+  // JAG-362: show WHO this session is. The role text below is that agent's
+  // ROLE.md (the `agent-role` prompt section); the rules rows under it are the
+  // standing rules. This is the one place the whole prompt stack is visible.
+  let who = null;
+  try {
+    const ags = await api("GET", "/api/agents");
+    const list = Array.isArray(ags) ? ags : ((ags && ags.agents) || []);
+    who = list.find ? (list.find(a => a && a.session === sessionId) || null) : null;
+  } catch (e) { who = null; }
+  const wbox = $("rulesWho");
+  if (wbox) {
+    wbox.textContent = who
+      ? ((who.id || "") + (who.name ? " \u00b7 " + who.name : "")
+         + (who.role ? " \u00b7 " + who.role : "")
+         + "  \u2014 agent identity (roster); the role text below is this agent's ROLE.md")
+      : "ad-hoc session (not designated as an agent) \u2014 the role text below is this session's ROLE.md";
+    wbox.className = "rwho" + (who ? " agent" : "");
+  }
   const g = d.global || {}, p = d.project || {};
   const rows = [];
   if (sessionId) rows.push(_rulesRow("role", "session role", (role && role.path) || "(no session)",
@@ -3444,10 +3467,10 @@ async function loadStatus() {
       const sb = s.sandbox;
       // JAG-359: a status dot + one short word; the backend detail moves to the tip.
       $("sbxPill").className = "pill sbox" + (sb.isolated ? " ok" : " warn");
-      const _st = $("sbxTxt"); if (_st) _st.textContent = sb.isolated ? "isolated" : "host";
+      const _st = $("sbxTxt"); if (_st) _st.textContent = sb.isolated ? "sandboxed" : "no sandbox";
       $("sbxPill").title = "sandbox backend: " + sb.backend + " (requested: " +
         (sb.requested || "?") + ")" +
-        (sb.isolated ? " — isolated" : " — host execution, not isolated");
+        (sb.isolated ? " — sandboxed (isolated)" : " — host execution, no sandbox");
     }
   } catch { /* /api/status is best-effort: the meter keeps its last value */ }
 }
@@ -5717,6 +5740,28 @@ $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
   loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadRole(); loadHistory(); connectFeed(); loadSkills(); loadCompactionRef(); loadCosts();
+
+/* JAG-362: a long-lived tab must notice that the app on disk was updated. The
+   server serves the SPA with no-store, but an OPEN tab never re-fetches
+   index.html — which is why a freshly-fixed UI could keep looking stale. Compare
+   the /api/build fingerprint on load, on focus and every 60s, then reload once. */
+let _build0 = null;
+async function _checkBuild() {
+  try {
+    const d = await api("GET", "/api/build");
+    const b = d && d.build;
+    if (!b) return;
+    if (_build0 === null) { _build0 = b; return; }
+    if (b !== _build0) { _build0 = b; location.reload(); }
+  } catch (e) { /* offline is fine — never break the app for a build check */ }
+}
+_checkBuild();
+setInterval(_checkBuild, 60000);
+addEventListener("focus", _checkBuild);
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) _checkBuild();
+});
+
   attachIfRunning(sessionId);   // JAG-181: a refresh must not lose a running turn
 });
 setInterval(loadStatus, 5000);

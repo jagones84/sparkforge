@@ -42,4 +42,4 @@ or the events DB. A test may also set its own `tempfile.mkdtemp()`.
 ## Current count
 
 Run `bash tests/battery.sh` and read the last line (`=== battery: N/N GREEN ===`).
-As of the v361 unified-Rules-panel / real-cost / ui-polish pass: **117/117**.
+As of the v362 agent-identity / prompt-layer harmonisation pass: **118/118**.

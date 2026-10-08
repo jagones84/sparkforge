@@ -5852,6 +5852,17 @@ class Handler(BaseHTTPRequestHandler):
         if _orbit_handle(self, "GET", path, qs, None):   # JAG-285: optional beta API
             return
 
+        if path == "/api/build":
+            # JAG-362: a cheap fingerprint of the served SPA so a long-lived tab
+            # can notice that the app was updated and reload itself — the reason
+            # a freshly-fixed UI could keep looking stale in an open tab.
+            try:
+                _b = "%d-%d" % tuple(int(x) for x in (
+                    os.stat(os.path.join(WEBUI_DIR, "index.html")).st_mtime,
+                    os.stat(os.path.join(WEBUI_DIR, "index.html")).st_size))
+            except OSError:
+                _b = ""
+            return self._send(200, {"build": _b})
         if path in ("/", "/index.html"):
             try:
                 with open(os.path.join(WEBUI_DIR, "index.html"), "r", encoding="utf-8") as f:

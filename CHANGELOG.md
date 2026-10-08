@@ -177,7 +177,31 @@ All notable changes to SparkForge are documented here. The format follows
   session-menu border) is fixed; `#qmode` no longer forces a dark native popup on light themes;
   and the hardcoded light-blue id labels use `--acc2`.
 
+- **Every agent looked identical to the model (JAG-362).** The `agent-role` prompt section only
+  rendered the per-session `ROLE.md`, so the ~90% of agents with no ROLE.md yet contributed
+  **nothing** and their own roster name/label never reached the prompt at all (33 agents, 3 role
+  files — the other 30 were a void, which is why "role.md equal for all agents"). The section now
+  always announces the agent identity (`You are A7 — coder (coding agent).`) and appends the
+  ROLE.md when it is set. The three role-ish things are one story now: the roster `role` is a
+  short **label** (UI only, never the prompt), the session `ROLE.md` **is** this prompt section,
+  and the standing `RULES.md` (global + project) is the section right below it.
+- **You can now see WHICH agent you are and WHERE its text comes from (JAG-362).** The Rules
+  panel gained an identity line — `A7 · coder · coding agent — agent identity (roster); the role
+  text below is this agent's ROLE.md`, or "ad-hoc session" when the session is not designated.
+- **A long-lived tab could hide a GUI fix silently (JAG-362).** A cheap `GET /api/build`
+  fingerprint is polled (at boot, every 60s, and on focus/visibility); when the served app
+  changes, the tab reloads itself, so a fix is never buried behind a tab opened hours ago.
+- **The topbar chips now read like the rest of the UI (JAG-362).** The sandbox pill says what it
+  means — `sandboxed` / `no sandbox`, with the backend and the requested mode in the tooltip —
+  and the ctx `%` is a ring + label matching the other header chips.
+
 ### Added
+- **`tests/acceptance/v362_agent_identity.py` (12 checks)** — every designated agent announces
+  its roster identity in the `agent-role` prompt section even with no ROLE.md (and two agents
+  get DIFFERENT sections), the ROLE.md is appended under the identity, a plain session still
+  contributes nothing, the Rules panel states the agent identity (with the "ad-hoc session"
+  fallback), the server exposes the `/api/build` fingerprint the SPA self-reloads on, and the
+  sandbox pill says what it means. Battery 117 → 118.
 - **`tests/acceptance/v361_rules_cost_polish.py` (16 checks)** — the single complete Rules
   panel (sources + paths + the right backend per scope), the exact-vs-estimated cost path
   (provider cost verbatim, cache-read rate + per-request fee, unknown stays null), the richer
