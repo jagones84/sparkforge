@@ -486,7 +486,7 @@
   /* v0.8.1 resizable columns + panel toggles */
   .resizer { flex: 0 0 5px; width: 5px; cursor: col-resize; background: transparent; }
   .resizer:hover, .resizer.active { background: var(--accent); }
-  #toggle-left, #toggle-right, #palette-open { color: var(--txt); border-color: var(--accent); }
+  #palette-open { color: var(--txt); border-color: var(--accent); }
   /* JAG-322: the Orbit entry must be as remarkable as Orbit's own "main app ↗"
      button — a labelled, accent-outlined button, not a bare icon. */
   #deck-open { color: var(--accent); border-color: var(--accent); font-weight: 600; }
@@ -678,10 +678,10 @@
   .bubble.md-content img { max-width: 100%; border-radius: 8px; }
   .bubble .artprev { margin-top: 6px; }
   .bubble .artprev iframe { width: 100%; height: 320px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-  /* ==== JAG-352 theme system: indigo (default) · dark · sabbia ============ */
+  /* ==== theme system: indigo (default) · dark · midnight · sand · sepia ==== */
   :root {
     --grad-a: #141a3a; --grad-b: #241638; --hdr: rgba(8,10,20,.6);
-    --bg2: #121722; --aside: rgba(8,10,20,.45);
+    --bg2: #121722; --aside: rgba(8,10,20,.45); --composer: rgba(8,10,20,.6);
     --hover: rgba(120,140,255,.14); --sel: rgba(120,140,255,.2);
     --hl: rgba(120,140,255,.22); --menubg: #0f1320;
     --menuline: rgba(120,140,255,.28); --chipbg: rgba(120,140,255,.14);
@@ -694,7 +694,7 @@
     --accent: #9fb0cb; --you: #a9c2e8; --info: #6fc7e8;
     --bg-2: #14171e; --bg-3: #181c24; --line-2: #232833; --ink: #c7ced9; --muted: #7e8697;
     --bg2: #14171e; --grad-a: #1b2029; --grad-b: #121319; --hdr: rgba(11,13,18,.74);
-    --aside: rgba(8,10,14,.5);
+    --aside: rgba(8,10,14,.5); --composer: rgba(8,10,14,.7);
     --hover: rgba(159,176,203,.12); --sel: rgba(159,176,203,.18);
     --hl: rgba(159,176,203,.2); --menubg: #0d1015;
     --menuline: rgba(159,176,203,.24); --chipbg: rgba(159,176,203,.12);
@@ -702,17 +702,45 @@
     color-scheme: dark;
   }
   html[data-theme="sand"] {
-    --bg: #f4ead7; --panel: rgba(255,252,245,.9); --panel2: rgba(250,244,232,.95);
-    --line: rgba(120,92,52,.26); --txt: #382f23; --dim: #6d5c43;
-    --acc: #b4763a; --acc2: #c9a24a; --ok: #3f8f5b; --warn: #b8862a; --err: #c0563f;
-    --accent: #b4763a; --you: #3d6a9e; --info: #3f7f86;
-    --bg-2: #efe4cf; --bg-3: #eadfc7; --line-2: #e0d2b6; --ink: #4a4034; --muted: #6d5c43;
-    --bg2: #efe4cf; --grad-a: #f8ebcf; --grad-b: #efe0e6; --hdr: rgba(247,239,224,.9);
-    --aside: rgba(255,252,245,.6);
-    --hover: rgba(180,118,58,.12); --sel: rgba(180,118,58,.18);
-    --hl: rgba(180,118,58,.2); --menubg: #fbf5e8;
-    --menuline: rgba(180,118,58,.28); --chipbg: rgba(180,118,58,.10);
-    --chipbd: rgba(180,118,58,.22); --scroll: rgba(180,118,58,.4);
+    --bg: #e7d9bd; --panel: rgba(243,235,216,.92); --panel2: rgba(236,226,203,.96);
+    --line: rgba(120,92,52,.28); --txt: #3a3123; --dim: #6d5c43;
+    --acc: #a86a30; --acc2: #b99248; --ok: #3f8f5b; --warn: #a8791f; --err: #b04f38;
+    --accent: #a86a30; --you: #3d6a9e; --info: #3f7f86;
+    --bg-2: #e4d6b8; --bg-3: #ddceac; --line-2: #d5c4a1; --ink: #4a4034; --muted: #6d5c43;
+    --bg2: #e4d6b8; --grad-a: #ece0c1; --grad-b: #e6d8dc; --hdr: rgba(238,229,209,.94);
+    --aside: rgba(243,235,216,.62); --composer: rgba(243,235,216,.72);
+    --hover: rgba(168,106,48,.12); --sel: rgba(168,106,48,.18);
+    --hl: rgba(168,106,48,.2); --menubg: #f2e9d6;
+    --menuline: rgba(168,106,48,.3); --chipbg: rgba(168,106,48,.10);
+    --chipbd: rgba(168,106,48,.24); --scroll: rgba(168,106,48,.42);
+    color-scheme: light;
+  }
+  html[data-theme="midnight"] {
+    --bg: #070d18; --panel: rgba(14,22,38,.82); --panel2: rgba(10,17,30,.9);
+    --line: rgba(120,150,210,.15); --txt: #d7e0f2; --dim: #7d89a6;
+    --acc: #6b8cff; --acc2: #7fd4c8; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --accent: #6b8cff; --you: #8fb6ff; --info: #5ac8fa;
+    --bg-2: #0d1729; --bg-3: #111d33; --line-2: #1a2740; --ink: #c3cfe4; --muted: #7d89a6;
+    --bg2: #0d1729; --grad-a: #101c38; --grad-b: #0d1428; --hdr: rgba(8,14,26,.8);
+    --aside: rgba(8,13,24,.55); --composer: rgba(8,14,26,.66);
+    --hover: rgba(107,140,255,.14); --sel: rgba(107,140,255,.2);
+    --hl: rgba(107,140,255,.22); --menubg: #0b1424;
+    --menuline: rgba(107,140,255,.3); --chipbg: rgba(107,140,255,.14);
+    --chipbd: rgba(120,150,210,.2); --scroll: rgba(107,140,255,.45);
+    color-scheme: dark;
+  }
+  html[data-theme="sepia"] {
+    --bg: #e6dcc4; --panel: rgba(240,233,217,.92); --panel2: rgba(233,224,205,.96);
+    --line: rgba(110,92,64,.26); --txt: #40382a; --dim: #746344;
+    --acc: #8a6a3f; --acc2: #9c8656; --ok: #4a8560; --warn: #9c7a2e; --err: #a35543;
+    --accent: #8a6a3f; --you: #4a6a8e; --info: #4a7a80;
+    --bg-2: #e3d9c0; --bg-3: #dcd1b6; --line-2: #d4c8ab; --ink: #4a4034; --muted: #746344;
+    --bg2: #e3d9c0; --grad-a: #ebe4cf; --grad-b: #e6ddd6; --hdr: rgba(236,230,214,.94);
+    --aside: rgba(240,233,217,.62); --composer: rgba(240,233,217,.72);
+    --hover: rgba(138,106,63,.12); --sel: rgba(138,106,63,.18);
+    --hl: rgba(138,106,63,.2); --menubg: #efe8d8;
+    --menuline: rgba(138,106,63,.3); --chipbg: rgba(138,106,63,.10);
+    --chipbd: rgba(138,106,63,.24); --scroll: rgba(138,106,63,.42);
     color-scheme: light;
   }
   /* theme polish: re-point the tinted hotspots at the tokens (later rules win) */
@@ -721,6 +749,17 @@
   header { background: var(--hdr); }
   aside { background: var(--aside); }
   .step:hover, .task:hover { background: var(--hover); }
+  #composer { background: var(--composer); }
+  /* JAG-353: panel toggles are circular handles ON the panel's inner border (the
+     topbar icon buttons are gone). Arrows: left panel = ▶ open / ◀ closed;
+     right panel = ◀ open / ▶ closed. Positioned by JS from the panel rect. */
+  .edge-handle { position: fixed; top: 50%; z-index: 24; width: 22px; height: 22px; padding: 0;
+    display: flex; align-items: center; justify-content: center; border-radius: 50%;
+    background: var(--panel2); color: var(--accent); border: 1px solid var(--line);
+    font: inherit; font-size: 12px; line-height: 1; cursor: pointer; opacity: .85;
+    box-shadow: 0 2px 10px rgba(0,0,0,.28); transform: translate(-50%, -50%);
+    transition: opacity .12s, background .12s, border-color .12s; }
+  .edge-handle:hover, .edge-handle:focus-visible { opacity: 1; background: var(--sel); border-color: var(--accent); }
   * { scrollbar-color: var(--scroll) transparent; }
   ::-webkit-scrollbar-thumb { background: var(--scroll); background-clip: padding-box; }
   #qmode option { background: var(--bg2); color: var(--txt); }
@@ -776,12 +815,14 @@
   <span style="flex:1"></span>
   <span class="pill" id="ctx-meter" title="context tokens / budget">ctx: …</span>
   <span class="pill" id="sbxPill" title="sandbox backend">sandbox: …</span>
-  <button class="ghost" id="toggle-left" title="show/hide sessions">▤</button>
-  <button class="ghost" id="toggle-right" title="show/hide inspector">▥</button>
   <button class="ghost" id="settingsBtn" title="settings" onclick="openSettings()">⚙</button>
-  <button class="ghost" id="deck-open" title="Orbit — agent orchestration deck (beta)" onclick="location.href='/orbit'">🛰 Orbit</button>
+  <button class="ghost" id="deck-open" title="Bridge — agent orchestration deck (beta)" onclick="location.href='/orbit'">🛰 Bridge</button>
   <button class="ghost" id="palette-open" title="command palette (Cmd/Ctrl+K)">⌘K</button>
 </header>
+<button class="edge-handle" id="handle-left" type="button"
+        title="collapse / expand the sessions panel" aria-label="toggle sessions panel">▶</button>
+<button class="edge-handle" id="handle-right" type="button"
+        title="collapse / expand the inspector" aria-label="toggle inspector panel">◀</button>
 <main id="app">
   <aside id="aside" data-col="sessions">
     <section>
@@ -886,7 +927,7 @@
         <h2>ROLE.md <span id="rolePath" class="remaining"></span></h2>
         <div class="card">
           <div class="remaining" style="margin:0 0 6px">The role and a few behaviour notes for <b>this session only</b>.
-            Merged into the system prompt (it never replaces it), and shared with the Orbit deck.</div>
+            Merged into the system prompt (it never replaces it), and shared with the Bridge deck.</div>
           <textarea id="roleText" class="inp" placeholder="Role: API designer&#10;- answer with the endpoint list and JSON schema only" style="width:100%;min-height:110px;font-size:12px;font-family:ui-monospace,monospace"></textarea>
           <div style="display:flex;gap:6px;margin-top:8px">
             <button class="ghost" onclick="saveRole()" title="save this session's ROLE.md">save role</button>
@@ -4329,10 +4370,14 @@ const SETTINGS_CATS = [
 const THEMES = [
   { id: "indigo", name: "Indigo", desc: "Blue & purple — the house style",
     sw: "linear-gradient(120deg,#141a3a,#241638 58%,#8b7bf0)" },
-  { id: "dark", name: "Dark", desc: "Neutral graphite, flat & quiet",
+  { id: "dark", name: "Dark", desc: "Neutral graphite, low glare",
     sw: "linear-gradient(120deg,#0e1116,#1a1f28 58%,#9fb0cb)" },
-  { id: "sand", name: "Sabbia", desc: "Warm Egyptian sand & ochre",
-    sw: "linear-gradient(120deg,#f8ebcf,#e7d3ab 58%,#b4763a)" },
+  { id: "midnight", name: "Midnight", desc: "Deep blue-black — night eye-saver",
+    sw: "linear-gradient(120deg,#0a1020,#101a2e 58%,#6b8cff)" },
+  { id: "sand", name: "Sand", desc: "Warm cream — soft daylight",
+    sw: "linear-gradient(120deg,#ece0c1,#dcc9a3 58%,#a86a30)" },
+  { id: "sepia", name: "Sepia", desc: "Muted paper, minimal contrast",
+    sw: "linear-gradient(120deg,#e9e0cd,#d8c8ab 58%,#8a6a3f)" },
 ];
 function renderThemeGrid() {
   const g = $("themeGrid"); if (!g) return;
@@ -5161,14 +5206,41 @@ function bindResizer(handle, colSel, sign, key) {
 }
 bindResizer($("resize-left"), '[data-col="sessions"]', 1, "sf_w_left");
 bindResizer($("resize-right"), '[data-col="context"]', -1, "sf_w_right");
-$("toggle-left").onclick = () => {
+/* JAG-353: the two topbar icon buttons are gone — each panel collapses from a
+   circular handle on its inner border (fixed, re-positioned from the panel rect).
+   Arrows: left panel = ▶ open / ◀ closed; right panel = ◀ open / ▶ closed. */
+function toggleLeftPanel() {
   if (innerWidth <= 820) document.body.classList.toggle("show-left");
   else document.body.classList.toggle("collapsed-left");
-};
-$("toggle-right").onclick = () => {
+  positionHandles();
+}
+function toggleRightPanel() {
   if (innerWidth <= 1100) document.body.classList.toggle("show-right");
   else document.body.classList.toggle("collapsed-right");
-};
+  positionHandles();
+}
+function _panelShown(sel) {
+  const el = document.querySelector(sel);
+  if (!el || getComputedStyle(el).display === "none") return false;
+  return el.getBoundingClientRect().width > 1;
+}
+function positionHandles() {
+  const L = $("handle-left"), R = $("handle-right");
+  if (!L || !R) return;
+  const ls = document.querySelector('[data-col="sessions"]');
+  const rc = document.querySelector('[data-col="context"]');
+  const lOpen = _panelShown('[data-col="sessions"]');
+  const rOpen = _panelShown('[data-col="context"]');
+  L.style.left = (lOpen ? ls.getBoundingClientRect().right : 11) + "px";
+  L.textContent = lOpen ? "▶" : "◀";
+  R.style.left = (rOpen ? rc.getBoundingClientRect().left : innerWidth - 11) + "px";
+  R.textContent = rOpen ? "◀" : "▶";
+}
+$("handle-left").onclick = toggleLeftPanel;
+$("handle-right").onclick = toggleRightPanel;
+addEventListener("resize", positionHandles);
+addEventListener("load", positionHandles);
+positionHandles();
 $("palette-input").addEventListener("input", e => { _palHi = 0; renderPalette(e.target.value); });
 $("palette-input").addEventListener("keydown", paletteKey);
 $("palette").addEventListener("click", e => { if (e.target.id === "palette") closePalette(); });

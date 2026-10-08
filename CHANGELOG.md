@@ -81,6 +81,19 @@ All notable changes to SparkForge are documented here. The format follows
   `⛭ compaction` row: click it to switch the list into *compaction mode* and pin the model
   that summarizes/compacts the transcript (the `summarizer` role, via `POST /api/routing`).
   The same control remains under Settings → Models.
+- **Five eye-saver themes, English-named, applied app-wide.** Indigo · Dark · Midnight ·
+  Sand · Sepia. `Sand` is now a genuine warm cream (was near-white and too luminous); the
+  two new ones are `Midnight` (deep blue-black) and `Sepia` (muted paper). The **Bridge**
+  deck (formerly “Orbit”) reads the same per-device choice and is themed too — its hardcoded
+  dark bits (background, header, constellation fills/links/labels) are now token-driven.
+- **Minimal chrome, border handles.** The two topbar “hide panel” icons are gone; each
+  panel now collapses from a **circular arrow handle on its own inner border** (left panel
+  ▶ open / ◀ closed, right panel ◀ open / ▶ closed), positioned from the panel rect and
+  preserved across resize + the mobile off-canvas behaviour. The composer bar is
+  token-driven, so its toolbar text is legible on the light themes.
+- **The beta deck is renamed “Bridge”.** “Orbit” made no sense for a mission-control deck;
+  the label, the page title/`<h1>` and the API fallback page all read **Bridge** (the route
+  `/orbit` is unchanged for link stability).
 - **`tests/acceptance/v345_json_extract_props.py`** — a stdlib, seeded property gate
   for `server.extract_json` (400 randomized wrapped values + edge cases + malformed
   input). This closes a real coverage gap: `extract_json` previously had no runnable

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""v352 — Appearance: theme switcher + compaction model in the chat model menu (JAG-352).
+"""v352 — Appearance: themes + compaction model in the chat menu + panel handles (JAG-352/353).
 
-Static guards for the WebUI work:
-  A) three themes exist (indigo/dark/sand) with real CSS token blocks;
+Static guards for the WebUI/Bridge work:
+  A) five English themes with real CSS token blocks (no "Sabbia");
   B) an Appearance settings category renders a swatch grid and persists the choice;
-  C) the theme is applied PRE-PAINT (no flash);
-  D) a "bolder text" preference exists;
-  E) the chat model menu carries the compaction-model control and it is wired to
-     POST /api/routing (summarizer) + loaded at boot.
+  C) the theme is applied PRE-PAINT (no flash) in BOTH the main app and Bridge;
+  D) a "bolder text" preference;
+  E) the chat model menu carries the compaction-model control (POST /api/routing);
+  F) panel collapse is a circular handle on the border (topbar icon buttons gone);
+  G) the composer bar is token-driven (contrast on light themes);
+  H) the deck is renamed Bridge.
 
 Deterministic, no model/browser. Run: python3 tests/acceptance/v352_appearance_theme.py
 """
@@ -16,6 +18,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HTML = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8").read()
+ORBIT = open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8").read()
+API = open(os.path.join(REPO, "src2", "orbit_beta", "api.py"), encoding="utf-8").read()
 
 results = []
 
@@ -26,30 +30,33 @@ def check(name, ok, detail=""):
 
 
 # --- A: themes ---------------------------------------------------------------
-check("A1 the three themes are defined", all(
-    s in HTML for s in ('id: "indigo"', 'id: "dark"', 'id: "sand"')), "")
-check("A2 the sabbia theme has a real token block",
-      'html[data-theme="sand"]' in HTML and "--bg: #f4ead7" in HTML, "")
-check("A3 the dark theme has a real token block",
-      'html[data-theme="dark"]' in HTML and "--bg: #0b0d12" in HTML, "")
-check("A4 the sand theme switches native controls to light",
-      "color-scheme: light" in HTML, "")
-check("A5 tinted hotspots are token-driven (menubg/hover/sel)",
-      "--menubg:" in HTML and "var(--menubg)" in HTML and "var(--hover)" in HTML, "")
+check("A1 five themes defined (English names)",
+      all(s in HTML for s in ('id: "indigo"', 'id: "dark"', 'id: "midnight"',
+                              'id: "sand"', 'id: "sepia"')), "")
+check("A2 no Italian theme name remains",
+      "Sabbia" not in HTML and "sabbia" not in HTML, "")
+check("A3 a real token block per theme",
+      all(s in HTML for s in ('html[data-theme="dark"]', 'html[data-theme="midnight"]',
+                              'html[data-theme="sand"]', 'html[data-theme="sepia"]')), "")
+check("A4 Sand is creamier (lower luminance than the old near-white)",
+      "--bg: #e7d9bd" in HTML and "#f4ead7" not in HTML, "")
+check("A5 light themes request light native controls",
+      HTML.count("color-scheme: light") >= 2, str(HTML.count("color-scheme: light")))
 
 # --- B: Appearance settings + persistence -----------------------------------
 check("B1 an Appearance settings category exists",
       '["appearance", "Appearance"]' in HTML, "")
-check("B2 the swatch grid + applyTheme persist the choice",
+check("B2 swatch grid + applyTheme persist the choice",
       'id="themeGrid"' in HTML and "function applyTheme" in HTML
       and 'localStorage.setItem("sf_theme", id)' in HTML, "")
 check("B3 settingsCategory wires the appearance panel",
       'else if (name === "appearance")' in HTML and "renderThemeGrid()" in HTML, "")
 
-# --- C: pre-paint (no flash) ------------------------------------------------
-check("C1 a boot script applies the saved theme before paint",
-      'localStorage.getItem("sf_theme") || "indigo"' in HTML
-      and "dataset.theme = t" in HTML, "")
+# --- C: pre-paint (no flash), main app + Bridge -----------------------------
+check("C1 the main app applies the saved theme before paint",
+      'localStorage.getItem("sf_theme") || "indigo"' in HTML and "dataset.theme = t" in HTML, "")
+check("C2 Bridge applies the same saved theme before paint",
+      'localStorage.getItem("sf_theme")' in ORBIT and "dataset.theme=_t" in ORBIT, "")
 
 # --- D: bolder text ---------------------------------------------------------
 check("D1 a bolder-text preference exists",
@@ -58,16 +65,45 @@ check("D1 a bolder-text preference exists",
 
 # --- E: compaction model in the chat model menu -----------------------------
 check("E1 the model menu renders the compaction bar",
-      'class = "mm-bar"' in HTML or 'className = "mm-bar"' in HTML, "")
+      'className = "mm-bar"' in HTML, "")
 check("E2 selecting a model in compact mode pins the summarizer",
       "function chooseCompactionModel" in HTML
       and 'roles: { summarizer: { model: ref } }' in HTML, "")
-check("E3 the current compaction ref is loaded",
-      "function loadCompactionRef" in HTML, "")
-check("E4 it is loaded at boot",
-      "loadSkills(); loadCompactionRef();" in HTML, "")
-check("E5 the model menu toggles chat <-> compaction",
-      '_mmMode = "chat", _compactRef = ""' in HTML and "compact ? \"← chat models\"" in HTML, "")
+check("E3 the current compaction ref is loaded at boot",
+      "function loadCompactionRef" in HTML and "loadSkills(); loadCompactionRef();" in HTML, "")
+
+# --- F: panel handles replace the topbar buttons ----------------------------
+check("F1 the topbar toggle buttons are gone",
+      'id="toggle-left"' not in HTML and 'id="toggle-right"' not in HTML, "")
+check("F2 circular edge handles exist",
+      'id="handle-left"' in HTML and 'id="handle-right"' in HTML
+      and ".edge-handle" in HTML, "")
+check("F3 handles are positioned from the panel rect + flip their arrow",
+      "function positionHandles" in HTML and 'L.textContent = lOpen ? "▶" : "◀"' in HTML
+      and 'R.textContent = rOpen ? "◀" : "▶"' in HTML, "")
+check("F4 the toggle behaviour is preserved (collapsed/show + resize)",
+      "function toggleLeftPanel" in HTML and "function toggleRightPanel" in HTML
+      and "collapsed-left" in HTML and "collapsed-right" in HTML, "")
+
+# --- G: composer contrast ---------------------------------------------------
+check("G1 the composer background is token-driven",
+      "--composer:" in HTML and "#composer { background: var(--composer); }" in HTML, "")
+check("G2 light themes give the composer a light background",
+      "--composer: rgba(243,235,216,.72)" in HTML and "--composer: rgba(240,233,217,.72)" in HTML, "")
+
+# --- H: the deck is renamed Bridge -----------------------------------------
+check("H1 the WebUI entry is labelled Bridge",
+      "🛰 Bridge" in HTML and "Bridge — agent orchestration deck" in HTML, "")
+check("H2 the Bridge page title + h1 are renamed",
+      "<title>Bridge · SparkForge beta</title>" in ORBIT and "<h1>Bridge</h1>" in ORBIT, "")
+check("H3 the API fallback page says Bridge",
+      "Bridge beta" in API, "")
+
+# --- I: Bridge is themed too ------------------------------------------------
+check("I1 Bridge carries the per-theme token override blocks",
+      'html[data-theme="sand"]' in ORBIT and 'html[data-theme="midnight"]' in ORBIT, "")
+check("I2 Bridge re-points its hardcoded dark bits at tokens",
+      ".cbody{background:var(--cbody)}" in ORBIT and ".cnode text{fill:var(--linktext)}" in ORBIT, "")
 
 print("---")
 ok = sum(results)

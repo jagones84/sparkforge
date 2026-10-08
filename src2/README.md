@@ -1,6 +1,6 @@
-# src2 — Orbit beta (detachable)
+# src2 — Bridge beta (detachable)
 
-`src2/` holds **Orbit**, a beta command deck for SparkForge. It lives *outside* the
+`src2/` holds **Bridge** (formerly Orbit), a beta command deck for SparkForge. It lives *outside* the
 application (`src/`) on purpose: the app only reaches it through two guarded hooks in
 `sparkforge.server`, so the whole folder can be **deleted at any time without touching
 the app**.

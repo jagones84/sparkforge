@@ -88,9 +88,11 @@ cloud models, and the strongest (still cheap) cloud goes to the leads.
 
 **Interfaces**
 - 🖥️ **WebUI** (`/`) — dark glassmorphism, live CoT, task graph, sessions labelled with their team.
-- 🛰️ **Orbit** (`/orbit`) — the mission-control deck: **org chart, live constellation, job create/dispatch, team selector, model policy**, one column, mobile-style.
+- 🛰️ **Bridge** (`/orbit`) — the mission-control deck: **org chart, live constellation, job create/dispatch, team selector, model policy**, one column, mobile-style.
 - ⌨️ **CLI** (`forge.py`) and a **mobile-ready HTTP API** — command the DGX from your phone over Tailscale.
 - 🔌 **Bidirectional MCP** — use SparkForge *from* any MCP client, and connect *external* MCP servers as native tools.
+
+All views share one theme: pick **Indigo / Dark / Midnight / Sand / Sepia** in ⚙ → Appearance.
 
 ---
 

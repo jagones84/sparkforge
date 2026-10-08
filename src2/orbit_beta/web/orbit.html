@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Orbit · SparkForge beta</title>
+<title>Bridge · SparkForge beta</title>
+<script>try{var _t=localStorage.getItem("sf_theme")||"indigo";document.documentElement.dataset.theme=_t;}catch(e){}</script>
 <style>
   :root{
     --bg:#070810; --panel:#0e1320; --panel2:#121829; --line:#1f2940;
@@ -128,12 +129,47 @@
   .orgrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #feed{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim);padding:8px 12px;max-height:24vh;overflow:auto}
   #feed b{color:var(--ice);font-weight:600}
+  /* JAG-353: Bridge honours the app theme (shared localStorage) so it matches the
+     WebUI. Per-theme token overrides + the few rules that were hardcoded dark. */
+  :root{ --ga:#101a30; --hdr:rgba(10,14,24,.72); --cbody:#060912;
+         --linktext:#dbe3f4; --link:rgba(120,160,220,.45); --brief:rgba(9,14,26,.6);
+         --cjob-f:#1a1408; --csub-f:#08202a; --cagent-f:#0b1a22; color-scheme:dark; }
+  html[data-theme="dark"]{ --bg:#0b0d12; --panel:#16191f; --panel2:#1b1f26; --line:#2a2f38;
+    --txt:#e9edf3; --dim:#8b93a3; --acc:#8fa6c8; --acc2:#9fb0cb; --ice:#dbe3ee;
+    --ga:#1b2029; --hdr:rgba(11,13,18,.8); --cbody:#0d1015; --brief:rgba(255,255,255,.04);
+    --cjob-f:#1c1913; --csub-f:#12181c; --cagent-f:#131a17; color-scheme:dark; }
+  html[data-theme="midnight"]{ --bg:#070d18; --panel:#0e1626; --panel2:#101c30; --line:#1a2740;
+    --txt:#d7e0f2; --dim:#7d89a6; --acc:#6b8cff; --acc2:#7fd4c8; --ice:#bfe3ff;
+    --ga:#101c38; --hdr:rgba(8,14,26,.84); --cbody:#060c16; --brief:rgba(107,140,255,.06);
+    --cjob-f:#1a1408; --csub-f:#08202a; --cagent-f:#0b1a22; color-scheme:dark; }
+  html[data-theme="sand"]{ --bg:#e7d9bd; --panel:#f3ebd8; --panel2:#ece2cb; --line:#d3c2a1;
+    --txt:#3a3123; --dim:#6d5c43; --acc:#a86a30; --acc2:#8a6a3f; --ice:#5a4a30;
+    --ga:#ece0c1; --hdr:rgba(238,229,209,.94); --cbody:#efe6d2; --linktext:#4a4034;
+    --link:rgba(120,92,52,.5); --brief:rgba(120,92,52,.08);
+    --cjob-f:#f0e2c2; --csub-f:#e4edf2; --cagent-f:#e7efe6;
+    --ok:#3f8f5b; --warn:#a8791f; --err:#b04f38; color-scheme:light; }
+  html[data-theme="sepia"]{ --bg:#e6dcc4; --panel:#f0e9da; --panel2:#e9e0cd; --line:#d0c4a8;
+    --txt:#40382a; --dim:#746344; --acc:#8a6a3f; --acc2:#6f6350; --ice:#514734;
+    --ga:#ebe4cf; --hdr:rgba(236,230,214,.94); --cbody:#ece5d6; --linktext:#4a4034;
+    --link:rgba(110,92,64,.5); --brief:rgba(110,92,64,.08);
+    --cjob-f:#efe6d2; --csub-f:#e6ebe6; --cagent-f:#e9ece0;
+    --ok:#4a8560; --warn:#9c7a2e; --err:#a35543; color-scheme:light; }
+  body{background:radial-gradient(1200px 600px at 70% -10%,var(--ga) 0%,var(--bg) 60%)}
+  header{background:var(--hdr)}
+  .cbody{background:var(--cbody)}
+  .cnode text{fill:var(--linktext)}
+  .clink{stroke:var(--link)}
+  table.at tr.brief td{background:var(--brief)}
+  .cjob{fill:var(--cjob-f)} .csub{fill:var(--csub-f)} .cagent{fill:var(--cagent-f)}
+  .btn:hover{color:var(--txt)}
+  .btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  .btn.on{background:var(--brief);color:var(--txt)}
 </style>
 </head>
 <body>
 <header>
   <span class="led" id="led"></span>
-  <h1>Orbit</h1>
+  <h1>Bridge</h1>
   <span class="tag beta">beta · detachable</span>
   <span class="tag" id="agTag">agents —</span>
   <select class="inp" id="teamSel" title="team — scope the whole board"
