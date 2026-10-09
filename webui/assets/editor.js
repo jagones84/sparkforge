@@ -529,14 +529,24 @@ function toggleRender() {
   renderActive();
 }
 
+/* JAG-368: opening/closing the dock changes the row width, so the app must re-fit the
+   side panels (and re-glue every grip) — otherwise the row can stay over-constrained
+   and a panel border ends up off the screen where it cannot be dragged. */
+function _notifyLayout() { try { if (window._settleHandles) window._settleHandles(); } catch (e) {} }
 function show() {
   buildDock();
   state.dock.hidden = false;
   localStorage.setItem(LS_OPEN, "true");   // JAG-157: an explicit open sticks
   applyResponsive();
   if (state.treeEl && !state.treeEl.hidden && !state.treeEl.childElementCount) loadTree();
+  _notifyLayout();
 }
-function close() { syncActive(); if (state.dock) state.dock.hidden = true; localStorage.setItem(LS_OPEN, "false"); }
+function close() {
+  syncActive();
+  if (state.dock) state.dock.hidden = true;
+  localStorage.setItem(LS_OPEN, "false");
+  _notifyLayout();
+}
 function toggle(e) {
   if (!$id("editorDock")) buildDock();
   if (state.dock.hidden) { if (!state.tabs.length) restoreTabs(); else show(); } else close();

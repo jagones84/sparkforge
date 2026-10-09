@@ -546,7 +546,8 @@
   .pal-item:hover, .pal-item.hl { background: var(--hl); }
   #palette-results { max-height: 56vh; overflow: auto; }
   /* v0.8.1 resizable columns + panel toggles */
-  .resizer { flex: 0 0 5px; width: 5px; cursor: col-resize; background: transparent; }
+  .resizer { flex: 0 0 5px; width: 5px; cursor: col-resize; background: transparent;
+    position: relative; z-index: 31; touch-action: none; }
   .resizer:hover, .resizer.active { background: var(--accent); }
   #palette-open { color: var(--txt); border-color: var(--accent); }
   /* JAG-322: the Orbit entry must be as remarkable as Orbit's own "main app ↗"
@@ -563,7 +564,12 @@
   @media (max-width: 1100px) {
     [data-col="context"] { display: none; }
     .resizer { display: none; }
-    body.show-right [data-col="context"] { display: flex !important; position: fixed; right: 0; top: 44px; bottom: 0; width: 300px; transform: none; z-index: 15; box-shadow: -12px 0 30px rgba(0,0,0,.5); }
+    body.show-right [data-col="context"] { display: flex !important; position: fixed; right: 0; top: 44px; bottom: 0; width: var(--drawer-w-right, 300px) !important; transform: none; z-index: 15; box-shadow: -12px 0 30px rgba(0,0,0,.5); }
+    /* JAG-368: a fixed DRAWER gets a draggable grip on its INNER edge (left, for the
+       right drawer) so the inspector can be widened on a phone too. Positioned in JS. */
+    body.show-right #resize-right { display: block !important; position: fixed; top: 44px; bottom: 0;
+      width: 8px; z-index: 16; background: transparent; touch-action: none; }
+    body.show-right #resize-right.active { background: var(--accent); }
   }
   /* JAG-358: the sessions drawer must cover the SAME range the fixed #aside uses
      (<=900) — it stopped at 820, so between 821-900 the left arrow toggled a class
@@ -572,7 +578,11 @@
      drawer never actually slid in on screen. */
   @media (max-width: 900px) {
     [data-col="sessions"] { display: none; }
-    body.show-left #aside { display: flex !important; position: fixed; left: 0; right: auto; top: 44px; bottom: 0; width: 260px; transform: none; z-index: 15; box-shadow: 12px 0 30px rgba(0,0,0,.5); }
+    body.show-left #aside { display: flex !important; position: fixed; left: 0; right: auto; top: 44px; bottom: 0; width: var(--drawer-w-left, 260px) !important; transform: none; z-index: 15; box-shadow: 12px 0 30px rgba(0,0,0,.5); }
+    /* JAG-368: the left DRAWER gets a draggable grip on its inner (right) edge. */
+    body.show-left #resize-left { display: block !important; position: fixed; top: 44px; bottom: 0;
+      width: 8px; z-index: 16; background: transparent; touch-action: none; }
+    body.show-left #resize-left.active { background: var(--accent); }
   }
   /* JAG-124: workspace file tree + editor */
   #fileTree { max-height: 300px; overflow: auto; font-family: monospace; }
@@ -5561,7 +5571,17 @@ function _panelRoom(col) {
   const oe = document.querySelector(other);
   const ow = (oe && getComputedStyle(oe).display !== "none")
     ? oe.getBoundingClientRect().width / z : 0;
-  return Math.max(150, Math.min(1200, avail - ow - CHAT_MIN_W));
+  return Math.max(150, Math.min(1200, avail - ow - CHAT_MIN_W - _dockRoomW(z)));
+}
+/* JAG-368: the editor dock, when it is a real layout COLUMN (not a fixed overlay),
+   steals room from the row. The panel clamps must account for it, otherwise the chat
+   floor is violated and _fitPanels() can never bring the row back inside the viewport. */
+function _dockRoomW(z) {
+  const d = document.getElementById("editorDock");
+  if (!d || d.hidden) return 0;
+  if (getComputedStyle(d).position === "fixed") return 0;   // overlay: takes no layout room
+  const w = d.getBoundingClientRect().width;
+  return w > 1 ? w / z : 0;
 }
 /* Clamp BOTH panels so the chat keeps CHAT_MIN_W. Runs when a width is restored,
    the window resizes or the zoom changes — never while you drag (so the drag is
@@ -5570,14 +5590,15 @@ function _fitPanels() {
   const z = _pageScale();
   const sess = document.querySelector('[data-col="sessions"]');
   const ctx = document.querySelector('[data-col="context"]');
-  const shown = el => !!el && getComputedStyle(el).display !== "none";
+  const shown = el => !!el && getComputedStyle(el).display !== "none"
+    && getComputedStyle(el).position !== "fixed";   // JAG-368: a fixed DRAWER is not a column
   const lv = shown(sess), rv = shown(ctx);
   if (!lv && !rv) return;
   const app = document.getElementById("app");
   const avail = ((app || document.body).getBoundingClientRect().width / z) - 10;
   let lw = lv ? sess.getBoundingClientRect().width / z : 0;
   let rw = rv ? ctx.getBoundingClientRect().width / z : 0;
-  let over = (lw + rw) - (avail - CHAT_MIN_W);
+  let over = (lw + rw) - (avail - CHAT_MIN_W - _dockRoomW(z));
   if (over <= 0) return;
   const order = (lv && rv)
     ? (lw >= rw ? [[sess, "l"], [ctx, "r"]] : [[ctx, "r"], [sess, "l"]])
@@ -5595,6 +5616,30 @@ function _fitPanels() {
   }
   positionHandles();
 }
+/* JAG-368: a panel is either a real flex COLUMN (wide layouts) or a fixed DRAWER
+   (narrow layouts). The same grip resizes whichever it currently is — and it now runs
+   on POINTER events, so a MOUSE, a finger or a pen all work (before it was mouse-only,
+   so on a phone the panels could not be resized at all). */
+function _isDrawer(col) {
+  return !!col && getComputedStyle(col).position === "fixed";
+}
+function _drawerVar(key) { return key === "sf_w_left" ? "--drawer-w-left" : "--drawer-w-right"; }
+/* Place each grip on the INNER edge of its panel while that panel is an on-screen
+   drawer (its flex position is meaningless then — it is position:fixed). */
+function positionDrawerResizers() {
+  const spec = [
+    { el: $("resize-left"), sel: '[data-col="sessions"]', side: "left" },
+    { el: $("resize-right"), sel: '[data-col="context"]', side: "right" },
+  ];
+  for (const s of spec) {
+    if (!s.el) continue;
+    const col = document.querySelector(s.sel);
+    if (!_isDrawer(col) || !_panelShown(s.sel)) { s.el.style.left = ""; s.el.style.right = ""; continue; }
+    const r = col.getBoundingClientRect();
+    s.el.style.left = Math.round(s.side === "left" ? r.right : r.left) + "px";
+    s.el.style.right = "";
+  }
+}
 function bindResizer(handle, colSel, sign, key) {
   const col = document.querySelector(colSel);
   if (!handle || !col) return;
@@ -5602,16 +5647,20 @@ function bindResizer(handle, colSel, sign, key) {
   // JAG-361: a FIXED width (0 0) so a drag moves the panel by exactly the pixels
   // you drag; _fitPanels() then clamps it against the centre column's floor.
   if (saved) { col.style.width = saved + "px"; col.style.flex = "0 0 " + saved + "px"; }
+  const dSaved = parseInt(localStorage.getItem(key + "_d") || "", 10);
+  if (dSaved) document.documentElement.style.setProperty(_drawerVar(key), dSaved + "px");
   _fitPanels();
-  handle.addEventListener("mousedown", e => {
+  handle.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     // JAG-363: a CLICK on the border — or a press-and-hold — must NEVER move the
-    // panel. A physical click wiggles the pointer 1-3px, and the old handler
-    // resized by exactly that much, so the panel shifted on contact. The resize
-    // only engages once the pointer really travels (> 4px): below that it is a
-    // dead click; above it the panel tracks the cursor exactly (no dead start).
+    // panel. The resize engages only once the pointer really travels (> 4px).
     e.preventDefault();
+    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
     const z = _pageScale();
-    const startX = e.clientX, startW = col.getBoundingClientRect().width / z;
+    const drawer = _isDrawer(col);
+    const startX = e.clientX;
+    const startW = drawer ? col.getBoundingClientRect().width
+                          : col.getBoundingClientRect().width / z;
     const room = _panelRoom(col);
     let dragging = false;
     const move = ev => {
@@ -5620,21 +5669,33 @@ function bindResizer(handle, colSel, sign, key) {
         if (Math.abs(dx) < 4) return;   // a click (1-3px wobble) is not a drag
         dragging = true; handle.classList.add("active");
       }
-      // JAG-361: bounded by the room the centre column leaves — so the panel stops
-      // growing at the floor instead of being redistributed by the flex algorithm.
-      const w = Math.max(150, Math.min(room, startW + sign * dx / z));
-      col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
-      positionHandles();   // JAG-357: keep the handle glued to the border we move
+      if (drawer) {
+        // a fixed drawer is bounded by the viewport, not by the chat floor
+        const w = Math.max(180, Math.min(Math.round(_vw() - 40), startW + sign * dx));
+        document.documentElement.style.setProperty(_drawerVar(key), w + "px");
+        localStorage.setItem(key + "_d", String(Math.round(w)));
+        positionDrawerResizers();
+      } else {
+        // JAG-361: bounded by the room the centre column leaves — so the panel stops
+        // growing at the floor instead of being redistributed by the flex algorithm.
+        const w = Math.max(150, Math.min(room, startW + sign * dx / z));
+        col.style.width = w + "px"; col.style.flex = "0 0 " + w + "px";
+        positionHandles();   // JAG-357: keep the handle glued to the border we move
+      }
     };
     const up = () => {
-      document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
       handle.classList.remove("active");
-      if (dragging) {
-        localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width / _pageScale())));
-      }
+      if (!dragging) { try { handle.releasePointerCapture(e.pointerId); } catch (_) {} return; }
+      if (!drawer) localStorage.setItem(key, String(Math.round(col.getBoundingClientRect().width / _pageScale())));
+      positionDrawerResizers();
       positionHandles();
     };
-    document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
   });
 }
 bindResizer($("resize-left"), '[data-col="sessions"]', 1, "sf_w_left");
@@ -5718,6 +5779,7 @@ function positionHandles() {
   L.textContent = lOpen ? "◀" : "▶";
   R.style.left = (rx / s) + "px";
   R.textContent = rOpen ? "▶" : "◀";
+  positionDrawerResizers();   // JAG-368: keep a drawer's inner grip glued to its edge
 }
 /* JAG-358: re-glue for a few frames after anything that can move a panel (a
    toggle, a load, a CSS transition) — one call can land before layout settles. */

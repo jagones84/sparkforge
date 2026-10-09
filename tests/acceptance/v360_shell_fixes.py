@@ -58,7 +58,8 @@ check("B4 the press guard against the resize grip is kept",
 check("B5 the resize border ignores a click (no shift on a 1-px wobble)",
       "if (Math.abs(dx) < 4) return;" in HTML and "let dragging = false;" in HTML, "")
 check("B6 a click never persists a width (only a real drag does)",
-      "if (dragging) {\n        localStorage.setItem(key," in HTML, "")
+      "if (!dragging) { try { handle.releasePointerCapture(e.pointerId); } catch (_) {} return; }" in HTML
+      and "if (!drawer) localStorage.setItem(key," in HTML, "")
 
 # --- C: the chat cannot be crushed -------------------------------------------
 check("C1 the centre column has a min-width floor and a 0 basis (never steals the panels' space)",

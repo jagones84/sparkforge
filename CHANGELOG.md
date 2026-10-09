@@ -269,8 +269,28 @@ All notable changes to SparkForge are documented here. The format follows
   what lets it win (the first attempt put it in the earlier `max-width:900` block and lost).
   Verified on the device via CDP: `scrollWidth == clientWidth == 363`, the send button and all five
   tabs (`chat/sessions/tasks/context/feed`) now fully visible.
+- **The side panels could not be resized on a phone — nor at the border's centre on desktop
+  (JAG-368).** Two independent causes: (a) the border grip listened to MOUSE events only, so a
+  finger (touch) did nothing; and (b) the circular collapse handle is centred ON the border and its
+  `mousedown` called `stopPropagation()`, so pressing the border at its vertical centre was swallowed
+  by the handle — which then toggled the panel — and the border never moved. On a narrow layout the
+  panels are also fixed DRAWERS whose grips were `display:none`, so there was nothing to grab at all.
+  Now: the grip runs on POINTER events (mouse / finger / pen) with `touch-action:none` and captures
+  the pointer; it carries `position:relative; z-index:31` so it out-stacks the handle (30) and is the
+  hit target across its whole band — verified with `elementFromPoint` that the 5 px border wins at
+  every y, including the handle's centre; and a fixed DRAWER gets its own grip glued to its inner edge
+  (`positionDrawerResizers`) that resizes the drawer through a CSS var (`--drawer-w-left` /
+  `--drawer-w-right`) with its own persisted size (key `_d`). The panel clamps also now account for
+  the open editor dock (`_dockRoomW`), and opening/closing the dock re-fits the panels so the row can
+  never stay over-constrained (which is how a border ends up off-screen and undraggable).
 
 ### Added
+- **`tests/acceptance/v368_panel_resize.py` (11 checks)** — the border grip runs on pointer
+  events (mouse/finger/pen), carries `touch-action:none` and out-stacks the collapse handle; a
+  fixed DRAWER is resized through a CSS var with a grip glued to its inner edge and its own
+  persisted size; a drawer is not treated as a layout column by the fit maths; and the panel
+  clamps account for the open editor dock while opening/closing the dock re-fits the panels.
+  Battery 119 → 120 (the README badge/one-liner were updated to match).
 - **`src/sparkforge/agency.py` + `scripts/seed_agent_roles.py` (JAG-365)** — map an org agent
   NAME to its role prompt in the local `agency-agents` clone (`by_name`, `role_for`,
   `fill_roles`) and backfill `data/roles/<sid>.md`, non-destructively. `v341_team_seed` grew four
