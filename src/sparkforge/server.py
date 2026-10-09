@@ -211,7 +211,7 @@ from .agent import (SYSTEM_PROMPT, PMCP_PROMPT, system_prompt, RULES_POLICY,
                     maybe_reflect, _apply_skill_slash, assemble_turn,
                     _HARNESS_ACTION_NAMES, _TERMINAL_ACTIONS, _term_action,
                     _normalize_action, _dsml_action, _looks_like_dsml,
-                    _harness_start_note, chat_once, generate_plan,
+                    _extract_action, _harness_start_note, chat_once, generate_plan,
                     AGENT_ACTIONS, AGENT_PROMPT, apply_agent_action, _mirror_graph,
                     _agent_history, agent_run)
 

@@ -143,11 +143,14 @@ All notable changes to SparkForge are documented here. The format follows
   every turn and one raw markup message leaked into the visible chat (observed live: the
   user typed "?"). The harness now recognises the dialect: `_dsml_action` parses the
   first invocation into `{"action":"tool","tool":<name>,"args":{...}}` (a
-  `string="false"` parameter is JSON-decoded), wired into `chat_once` right after the
-  JSON parse; `_looks_like_json_action` treats the markup as machine text so it is never
-  shown as a reply. Verified against the real session: all 3 stored DSML messages parse
-  to their `shell` calls. Guarded by `tests/acceptance/v369_dsml_tool_calls.py` (12/12).
-  Battery 120 → 121.
+  `string="false"` parameter is JSON-decoded). The JSON→DSML pipeline is factored into
+  `_extract_action(answer)`: `extract_json` returns an EMPTY LIST/DICT on failure (not
+  `None`), so the fallback uses a **falsy** check, not `is None` — a first attempt with
+  `if act is None:` silently skipped the fallback (caught by a live WebUI test).
+  `_looks_like_json_action` treats the markup as machine text so it is never shown as a
+  reply. Verified against the real session: all stored DSML messages parse to their
+  `shell` calls. Guarded by `tests/acceptance/v369_dsml_tool_calls.py` (17/17, including a
+  brace-carrying DSML sample that reproduces the falsy-check trap). Battery 120 → 121.
 - **Determinism of the regression battery.** Four acceptance tests awaited async
   side-effects with fixed `time.sleep()` calls (v204 memory TTL, v222 concurrent
   late-write, v281 terminal output, v287 routine dispatch) — wall-clock races that

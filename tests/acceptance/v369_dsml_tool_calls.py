@@ -53,6 +53,15 @@ MULTI = (
     + CLOSE + " calls>"
 )
 
+SAMPLE_BRACED = (
+    OPEN + " calls>\n"
+    + OPEN + ' invoke name="shell">\n'
+    + OPEN + ' parameter name="command" string="true">python3 -c "import json; print(json.loads(\'{}\'))"</'
+    + D + " parameter>\n"
+    + CLOSE + " invoke>\n"
+    + CLOSE + " calls>"
+)
+
 results = []
 
 
@@ -100,6 +109,26 @@ check("a normal prose answer still passes the guard",
 # `_normalize_action` must leave the DSML-derived tool call untouched.
 check("the parsed action survives _normalize_action unchanged",
       a._normalize_action(a._dsml_action(SAMPLE)) == act)
+
+# ------------------------------- FULL pipeline (the trap that slipped) ----
+# `extract_json` returns an EMPTY LIST on failure, NOT None — so chat_once must
+# use a FALSY check to fall back to DSML. This regression is why the fix must be
+# exercised end-to-end, not only `_dsml_action` in isolation.
+check("_extract_action resolves a plain DSML answer (extract_json -> None)",
+      a._extract_action(SAMPLE) == act, str(a._extract_action(SAMPLE)))
+# The REAL-world shape: the command carries `{ }` so extract_json returns a FALSY
+# non-None (an empty list/dict) — the exact case the `is None` check missed.
+_br = a.extract_json(SAMPLE_BRACED)
+check("a brace-carrying DSML answer makes extract_json falsy (not None)",
+      (_br is not None) and (not _br), repr(_br))
+check("_extract_action resolves it via the falsy-check fallback",
+      (a._extract_action(SAMPLE_BRACED) or {}).get("tool") == "shell",
+      str(a._extract_action(SAMPLE_BRACED)))
+check("_extract_action still prefers a valid JSON action",
+      a._extract_action('{"action":"tool","tool":"shell","args":{"command":"ls"}}')
+      == {"action": "tool", "tool": "shell", "args": {"command": "ls"}})
+check("_extract_action returns no action for plain prose",
+      not a._extract_action("just a normal answer"))
 
 print("---")
 passed = sum(results)

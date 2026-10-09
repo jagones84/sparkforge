@@ -1351,6 +1351,18 @@ def _dsml_action(text):
     return {"action": "tool", "tool": name, "args": args}
 
 
+def _extract_action(answer):
+    """JAG-369: turn the model's raw answer into a harness action (or None).
+
+    Tries the JSON protocol first; if that yields NOTHING usable — `extract_json`
+    returns `[]` on failure, not `None`, so a falsy check is required, not an
+    `is None` one — fall back to the model's native DSML tool-call markup."""
+    act = _normalize_action(extract_json(answer))
+    if not act:
+        act = _dsml_action(answer)
+    return act
+
+
 def _harness_start_note(sess):
     """JAG-332: ONE durable "session started" harness marker, written on the first turn.
 
@@ -1757,11 +1769,7 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                 on_event("bestofn.chosen", session=sess["id"], n=len(_cands),
                          scores=[round(s, 3) for _, s in _scores])
                 answer = _best
-        act = _normalize_action(extract_json(answer))
-        if act is None:
-            # JAG-369: the model answered a tool request with its native DSML
-            # markup (not JSON). Parse it instead of dropping the call and looping.
-            act = _dsml_action(answer)
+        act = _extract_action(answer)
         if isinstance(act, dict) and act.get("action") == "write_todos":
             _user_pivot = False   # JAG-189: the model re-engaged the plan
             n = _apply_chat_todos(sess, act, on_event, after=_after())
