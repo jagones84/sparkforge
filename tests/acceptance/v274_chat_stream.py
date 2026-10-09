@@ -24,6 +24,8 @@ with open(UI, encoding="utf-8") as f:
     html = f.read()
 with open(SRV, encoding="utf-8") as f:
     srv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+    srv += f.read()
 
 results = []
 

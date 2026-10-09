@@ -69,6 +69,8 @@ check("`state` still names the open step", "beta open" in cs, cs)
 # --- 2) injections no longer duplicate the full list -------------------------
 srv_src = open(os.path.join(REPO, "src", "sparkforge", "server.py"),
                encoding="utf-8").read()
+srv_src += open(os.path.join(REPO, "src", "sparkforge", "agent.py"),
+                encoding="utf-8").read()
 check("keepgoing injections stopped re-rendering the full list",
       "render_todos(taskgraph.load" not in srv_src)
 check("keepgoing injections use the open-only brief",

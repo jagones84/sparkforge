@@ -91,6 +91,8 @@ check("_term_action rejects a harness action", not S._term_action({"action": "up
 # --- 4) the retry NAMES the emitted action + the UI shows the reason ----------
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     srv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+    srv += f.read()
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the retry message names the emitted action", "You emitted:" in srv)

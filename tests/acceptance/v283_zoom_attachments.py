@@ -27,6 +27,8 @@ with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     srv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+    srv += f.read()
 
 # --- 1) gradual app zoom ------------------------------------------------------
 check("Ctrl+±/0 do a gradual 5% app zoom",

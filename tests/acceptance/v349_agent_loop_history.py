@@ -51,6 +51,7 @@ check("C2 a huge observation is truncated per row",
 
 # --- D: the LIVE loop actually uses it (source wiring) -----------------------
 src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8").read()
 check("D1 _agent_history is defined", "def _agent_history(" in src, "")
 check("D2 the agent-run user turn injects the history",
       "_agent_history(actions)" in src, "")

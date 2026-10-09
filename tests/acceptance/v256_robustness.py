@@ -62,6 +62,8 @@ except Exception as e:  # noqa: BLE001
 # B) static guards
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     sv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+    sv += f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "tools.py"), encoding="utf-8") as f:
     tv = f.read()
 check("JAG-256 system-prompt inject de-duplicated per session",

@@ -42,6 +42,8 @@ check("the gate does NOT fire on a user pivot", kg.hitl_gate("user_pivot", [1]) 
 # --- server wiring ---------------------------------------------------------
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     srv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+    srv += f.read()
 check("the server gates via keepgoing.hitl_gate",
       '_kg.hitl_gate(_dec["reason"], _open, autonomous)' in srv)
 check("the server persists the open list (hitl_open)",

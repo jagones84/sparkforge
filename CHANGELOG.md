@@ -106,6 +106,29 @@ All notable changes to SparkForge are documented here. The format follows
   boot smoke test (`/api/build`, `/api/selfcheck` reporting version + auth, `/api/status`).
   Repointed the source-text guards (27 tests now read `server.py` + `httpapi.py`) and
   `v214`'s summarizer monkeypatch (retargeted to `httpapi`, which owns `compact_session`).
+- **`server.py` split, phase 5: `agent.py` (JAG-380).** The agent core moved out — the
+  prompt/context assemblers (`system_prompt`, `rules_context`, `self_summary`,
+  `self_knowledge`, `context_summary`, `state_block`, `harness_wrap`), the run-graph
+  bookkeeping (`start_run_graph`/`finish_run_graph`/`graph_post`), the chat loop
+  (`chat_once`, `assemble_turn`, the JSON-action normaliser `_normalize_action`/
+  `_term_action` and the pivot/stuck/nudge machinery), the planner (`generate_plan`) and
+  the multi-step agent run (`agent_run`, `apply_agent_action`, `_mirror_graph`,
+  `_agent_history`) — 72 DEFINES, the harness's whole decision layer. The module is
+  imported at the **bottom** of `server.py` (before the `httpapi` import) so its
+  `from .server import (...)` resolves against a fully-populated module with no cycle;
+  `server.py` re-exports all 72 names.
+  Unlike the earlier leaves, this block is the HUB of the test monkeypatches: ~14
+  acceptance tests stub `server.stream_with_fallback`, and others stub
+  `server._tool_context` / `server._system_prompt` / `server.context_display`, all of which
+  the agent core consumes. Rather than retarget every test, the five app-level names the
+  agent core does not own — `VERSION` and `stream_with_fallback` (defined in `server`) plus
+  `_tool_context` / `_system_prompt` / `context_display` (re-exported from `httpapi`) — are
+  now read through the module object (`server.<name>`). Patching `server.X` therefore keeps
+  reaching the agent core with **zero test changes** for those monkeypatches; only the 12
+  source-text guards were repointed to read `server.py` + `agent.py`. `server.py`
+  2,582 → 245 lines. Battery 120/120 GREEN plus a live boot smoke test
+  (`trash/smoke379.sh`: `/api/build`, `/api/selfcheck`, `/api/status`). The god-file is now
+  a thin façade — imports, constants, `stream_with_fallback` and the re-export blocks.
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async

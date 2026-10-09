@@ -56,6 +56,8 @@ check("A6 the marker is idempotent (never duplicated)", len(_markers()) == 1)
 
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     src = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+    src += f.read()
 check("B1 chat_once calls it on the FIRST turn only",
       "_harness_start_note(sess)" in src
       and 'if len(sess.get("messages") or []) <= 1:' in src)

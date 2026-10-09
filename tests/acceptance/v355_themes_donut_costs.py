@@ -92,7 +92,7 @@ check("C14 a failed refresh returns an error, never raises",
       bad.get("ok") is False and "error" in bad, str(bad))
 
 # --- B: static guards --------------------------------------------------------
-SRV = _read("src", "sparkforge", "server.py")
+SRV = _read("src", "sparkforge", "server.py") + _read("src", "sparkforge", "agent.py")
 API = _read("src", "sparkforge", "api_v02.py")
 HTML = _read("webui", "index.html")
 BATT = _read("tests", "battery.sh")

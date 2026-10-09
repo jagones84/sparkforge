@@ -78,6 +78,7 @@ check("B4 a plan-only turn caps the real-tool budget",
       hasattr(server, "PLAN_ONLY_MAX_STEPS") and int(server.PLAN_ONLY_MAX_STEPS) > 0)
 
 srv_src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+srv_src += open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8").read()
 check("B5 the loop stops with a typed 'plan_only' reason",
       'reason="plan_only"' in srv_src and '_kg_stop_reason = "plan_only"' in srv_src)
 check("B6 the plan_only stop precedes the keepgoing decide",

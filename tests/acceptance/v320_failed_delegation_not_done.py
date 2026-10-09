@@ -106,6 +106,7 @@ check("D1 a failure on one step does not block an unrelated step",
 # ---- E: source wiring ------------------------------------------------------
 _tg = open(os.path.join(REPO, "src", "sparkforge", "taskgraph.py"), encoding="utf-8").read()
 src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8").read()
 check("E1 taskgraph exposes the durable recorder", "def record_delegation(" in _tg)
 check("E2 taskgraph exposes the marker consumer", "def clear_delegation(" in _tg)
 check("E3 the guard is in the todo-done path", "refusing 'done'" in src)
