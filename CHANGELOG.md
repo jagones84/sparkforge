@@ -26,6 +26,18 @@ All notable changes to SparkForge are documented here. The format follows
   `providers`/`mcp_client`). `server.py` re-exports the names, so `server.set_key`
   / `server.ENV_FILE` / `server.keys_status` still resolve. `server.py` 6,190 →
   6,048 lines. Battery 120/120 GREEN; verified by compile + import + re-export.
+- **`server.py` split, phase 2b: `events.py` (JAG-372).** The durable event log
+  (sqlite `db()`, `prune_events`, `_start_event_pruning`), the live SSE feed
+  (`publish`, `events_since`, `query_events`, `MAX_FEED_EVENTS`), the per-session
+  turn bracket (`turn_begin`/`turn_end`) and the turn locks (`_turn_lock`) moved to
+  `events.py`. Its shared mutable state (`_ACTIVE_CHAT`, `_sse_queues`, `_feed`,
+  `_TURN_LOCKS`, the locks) is mutated and never rebound, so `server.py` re-imports
+  the **same objects** — mutations stay visible both ways. The one rebound global,
+  the feed high-water mark `_feed_seq`, is now read through `events.feed_seq()` (the
+  single external reader was the streaming turn registration). `server.py` 6,048 →
+  5,818 lines. Battery 120/120 GREEN; two source-text tests repointed to `events.py`
+  (`v298_perf` WAL/NORMAL pragmas, `v325` bracket definition) and `v325`'s C4 updated
+  to the `feed_seq()` form.
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async

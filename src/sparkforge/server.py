@@ -19,13 +19,11 @@ import queue
 import re
 import select
 import socket
-import sqlite3
 import threading
 import time
 import urllib.error
 import urllib.request
 import uuid
-from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import api_v02  # v0.2 surface: tool registry, approvals, HITL control, MCP
@@ -43,6 +41,11 @@ from . import taskgraph  # v0.6: per-run LLM task graph (write_todos, live, inte
 # (`server.sse_pump`, `server.extract_json`, `server.ThinkCoalescer`, ...) keeps
 # working unchanged.
 from .bridge import _orbit_handle, _orbit_page
+from .events import (DB_PATH, EVENTS_KEEP, MAX_FEED_EVENTS, PRUNE_BATCH,
+                     PRUNE_INTERVAL_S, _ACTIVE_CHAT, _ACTIVE_CHAT_LOCK, _TURN_LOCKS,
+                     _TURN_LOCKS_GUARD, _db_lock, _feed, _sse_queues, db, events_since,
+                     feed_seq, prune_events, publish, query_events,
+                     _start_event_pruning, _turn_lock, turn_begin, turn_end)
 from .keys import ENV_FILE, KNOWN_ENV_KEYS, keys_status, reveal_key, set_key
 from .sse import (CHAT_THINK_FLUSH_S, CHAT_THINK_LIVE_CAP, ThinkCoalescer,
                   sse_response, sse_pump)
@@ -81,7 +84,7 @@ ASSET_CTYPES = {
 }
 
 ROUTER_BASE = os.environ.get("SPARKFORGE_ROUTER", "http://127.0.0.1:8080")
-MAX_FEED_EVENTS = 800
+# JAG-372: MAX_FEED_EVENTS moved to events.py (imported above).
 # JAG-208 (v208): cap the request body we buffer (memory-DoS guard). Larger
 # bodies are drained, not allocated; the endpoint then sees an empty body.
 MAX_BODY_BYTES = int(os.environ.get("SPARKFORGE_MAX_BODY", str(8 * 1024 * 1024)))
@@ -110,244 +113,11 @@ CHAT_STREAM_IDLE = float(os.environ.get("SPARKFORGE_CHAT_STREAM_IDLE", 900.0))
 # JAG-370: the think-coalescing constants + ThinkCoalescer moved to `sse.py`
 # (imported above, so `server.CHAT_THINK_FLUSH_S` and friends still resolve).
 
-# --------------------------------------------------------------- sqlite ----
-
-DB_PATH = os.environ.get("SPARKFORGE_DB", os.path.join(DATA_DIR, "events.db"))
-_db_lock = threading.Lock()
-_db = None
-# JAG-300: the durable event log is a REPLAY buffer, not an archive — it must not
-# grow without bound (it had reached 1.12M rows / 159 MB, ~95% streaming deltas).
-# Keep only the newest EVENTS_KEEP rows; prune in bounded batches (see prune_events).
-EVENTS_KEEP = int(os.environ.get("SPARKFORGE_EVENTS_KEEP", "200000"))
-PRUNE_INTERVAL_S = float(os.environ.get("SPARKFORGE_EVENTS_PRUNE_S", "900"))
-PRUNE_BATCH = 50000
+# JAG-372: the durable event log (sqlite) moved to `events.py` (imported above).
 
 
-def db():
-    global _db
-    if _db is None:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        _db = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=5.0)
-        # JAG-300: the events log writes ONE ROW PER STREAMING DELTA (hundreds of
-        # thousands per session) under a global lock. With the default rollback
-        # journal + synchronous=FULL every publish did an fsync — measured at
-        # 6.0 ms/call, throttling every token of every turn. WAL turns commits into
-        # appends and NORMAL drops the per-commit fsync. Still crash-safe (WAL +
-        # NORMAL); only a power loss can drop the last few transactions of this
-        # REPLAY log — the session transcripts are the source of truth for messages.
-        try:
-            _db.execute("PRAGMA journal_mode=WAL")
-            _db.execute("PRAGMA synchronous=NORMAL")
-            _db.execute("PRAGMA busy_timeout=5000")
-        except sqlite3.Error:
-            pass
-        _db.execute("""CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts REAL NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL)""")
-        _db.execute("""CREATE TABLE IF NOT EXISTS runs (
-            id TEXT PRIMARY KEY, kind TEXT NOT NULL, goal TEXT,
-            model TEXT, ts REAL NOT NULL, tokens_in INTEGER DEFAULT 0,
-            tokens_out INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0.0,
-            status TEXT DEFAULT 'running', spans TEXT DEFAULT '[]')""")
-        _db.commit()
-    return _db
-
-
-def prune_events(keep=None):
-    """JAG-300: keep the durable replay log bounded — newest `keep` rows only.
-
-    Deletes the OLDEST rows beyond the cap in PRUNE_BATCH-sized statements (each
-    holds _db_lock only briefly) so pruning a 1M-row log never stalls the server.
-    Returns the number of rows removed.
-    """
-    keep = EVENTS_KEEP if keep is None else int(keep)
-    if keep <= 0:
-        return 0
-    removed = 0
-    while True:
-        with _db_lock:
-            mx = db().execute("SELECT MAX(id) FROM events").fetchone()[0]
-            if not mx:
-                return removed
-            cut = mx - keep
-            if cut <= 0:
-                return removed
-            cur = db().execute(
-                "DELETE FROM events WHERE id IN (SELECT id FROM events "
-                "WHERE id <= ? ORDER BY id LIMIT ?)", (cut, PRUNE_BATCH))
-            db().commit()
-            n = cur.rowcount
-        removed += n
-        if n < PRUNE_BATCH:
-            return removed
-
-
-def _start_event_pruning():
-    """JAG-300: prune once at start, then every PRUNE_INTERVAL_S (daemon thread)."""
-    def loop():
-        while True:
-            try:
-                prune_events()
-            except Exception:  # noqa: BLE001
-                pass
-            time.sleep(PRUNE_INTERVAL_S)
-    threading.Thread(target=loop, daemon=True, name="events-prune").start()
-
-
-# ---------------------------------------------------------------- events ----
-
-_feed_lock = threading.Lock()
-_feed = deque(maxlen=MAX_FEED_EVENTS)
-_feed_seq = 0
-_sse_queues = set()  # each: queue.Queue of str chunks
-# JAG-181: per-session registry of chat turns that are STILL running. The worker
-# thread is independent of the HTTP request, so a page refresh/session switch does
-# NOT stop the turn — it only drops the browser's SSE channel. This lets the WebUI
-# re-attach (see /api/chat/attach) and resume following the live turn.
-_ACTIVE_CHAT = {}    # sid -> {"ev0": feed id at turn start, "ts": time}
-_ACTIVE_CHAT_LOCK = threading.Lock()
-
-# JAG-201: one chat TURN at a time per session. Two overlapping turns on the same
-# session used to race the transcript: read-modify-write on two independent copies
-# (lost update) plus the shared ".tmp" collision (unhandled crash → dropped turn).
-_TURN_LOCKS = {}
-_TURN_LOCKS_GUARD = threading.Lock()
-
-
-def _turn_lock(sid):
-    """Return a re-entrant lock serialising turns for `sid` (created on demand)."""
-    with _TURN_LOCKS_GUARD:
-        lk = _TURN_LOCKS.get(sid)
-        if lk is None:
-            lk = threading.RLock()
-            _TURN_LOCKS[sid] = lk
-        return lk
-
-
-def publish(kind, **data):
-    """Record an event in the SQLite store + memory cache, fan out to SSE.
-
-    Payload keys never override the envelope: the event's own `id`/`ts` are
-    the monotonic feed coordinates, so payloads that carry a domain `id`
-    (checkpoints, approvals, ...) are stored under `<kind>_id` instead.
-    """
-    global _feed_seq
-    with _feed_lock:
-        # JAG-295-fix: rename the payload's own domain `id`/`ts` BEFORE persisting.
-        # Otherwise the SQLite row stored a payload `id`, and on replay
-        # (events_since: {**json.loads(r[3])}) it overwrote the integer envelope id
-        # — the durable store diverged from the in-memory feed.
-        for k in ("id", "ts"):
-            if k in data:
-                data[k + "_id"] = data.pop(k)
-        ts = round(time.time(), 3)
-        with _db_lock:
-            cur = db().execute("INSERT INTO events(ts, kind, data) VALUES(?,?,?)",
-                               (ts, kind, json.dumps(data, ensure_ascii=False)))
-            db().commit()
-        _feed_seq = cur.lastrowid
-        event = {"id": _feed_seq, "ts": ts, "kind": kind, **data}
-        _feed.append(event)
-        payload = "id: {id}\nevent: {kind}\ndata: {data}\n\n".format(
-            id=event["id"], kind=kind, data=json.dumps(event, ensure_ascii=False)
-        )
-    for q in list(_sse_queues):
-        try:
-            q.put_nowait(payload)
-        except Exception:
-            pass
-    return event
-
-
-def turn_begin(sid):
-    """JAG-325: bracket ANY turn — stream, sync or in-process MCP — as running.
-
-    `_ACTIVE_CHAT` is the SERVER TRUTH the session list reports as `running`
-    (JAG-323). Only the STREAMING path used to register, so a turn driven by the
-    synchronous `POST /api/chat` or by the in-process MCP `chat` ran with NO
-    graphical signal: the left panel showed the session idle while the model burned
-    GPU/tokens — the same "phantom run" (SEVERE). Every entry point MUST call this
-    before the model call and `turn_end` after it, whatever the outcome.
-
-    Returns a per-turn token so a newer turn that replaced this registration is
-    never un-marked by an older one finishing late.
-    """
-    tok = object()
-    with _ACTIVE_CHAT_LOCK:
-        _ACTIVE_CHAT[sid] = {"ev0": _feed_seq, "ts": time.time(), "tok": tok}
-    publish("chat.run", session=sid)
-    return tok
-
-
-def turn_end(sid, tok=None):
-    """Release a `turn_begin` bracket and clear the session's running signal."""
-    with _ACTIVE_CHAT_LOCK:
-        cur = _ACTIVE_CHAT.get(sid)
-        if tok is None or (cur or {}).get("tok") is tok:
-            _ACTIVE_CHAT.pop(sid, None)
-    publish("chat.done", session=sid)
-
-
-def events_since(last_id, limit=None):
-    """Replay events after last_id: memory cache first, SQLite as source of truth.
-    An empty in-memory buffer must NOT short-circuit replay — the store is durable.
-
-    JAG-295-fix: `limit` caps the replay to the NEWEST `limit` rows. The durable log
-    can hold millions of events; an unbounded replay both materialises the whole log
-    server-side and hands the client an enormous backlog frame.
-    """
-    with _feed_lock:
-        if _feed and _feed[0]["id"] <= last_id + 1:
-            out = [e for e in _feed if e["id"] > last_id]
-            return out[-limit:] if limit else out
-    with _db_lock:
-        if limit:
-            rows = db().execute(
-                "SELECT id, ts, kind, data FROM (SELECT id, ts, kind, data FROM events "
-                "WHERE id > ? ORDER BY id DESC LIMIT ?) ORDER BY id",
-                (last_id, int(limit))).fetchall()
-        else:
-            rows = db().execute(
-                "SELECT id, ts, kind, data FROM events WHERE id > ? ORDER BY id", (last_id,)
-            ).fetchall()
-    return [{"id": r[0], "ts": r[1], "kind": r[2], **json.loads(r[3])} for r in rows]
-
-
-def query_events(session=None, kind=None, since=None, until=None, limit=200):
-    """JAG-262: filtered history from the durable event log (post-mortem).
-
-    The live feed only replays by id. This answers "what happened to session X"
-    (or a kind / time window) after the fact — the evidence needed to diagnose a
-    stuck or killed turn. Newest first.
-    """
-    where, args = [], []
-    if kind:
-        where.append("kind = ?")
-        args.append(kind)
-    try:
-        if since is not None and str(since) != "":
-            where.append("ts >= ?")
-            args.append(float(since))
-        if until is not None and str(until) != "":
-            where.append("ts <= ?")
-            args.append(float(until))
-    except (TypeError, ValueError):
-        pass
-    if session:
-        where.append("data LIKE ?")
-        args.append('%"session": "' + str(session) + '"%')
-    sql = "SELECT id, ts, kind, data FROM events"
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY id DESC LIMIT ?"
-    try:
-        lim = max(1, min(int(limit or 200), 5000))
-    except (TypeError, ValueError):
-        lim = 200
-    args.append(lim)
-    with _db_lock:
-        rows = db().execute(sql, args).fetchall()
-    return [{"id": r[0], "ts": r[1], "kind": r[2], "data": json.loads(r[3])} for r in rows]
+# JAG-372: the live SSE feed, publish(), turn locks and event queries moved to
+# `events.py` (imported above).
 
 
 # ---------------------------------------------------------------- stores ----
@@ -4493,7 +4263,7 @@ def chat_stream_gen(sess, message, model, mark=None, autonomous=False, jid=None,
     # attach could not resume a turn that was in fact still running.
     _turn_tok = object()
     with _ACTIVE_CHAT_LOCK:
-        _ACTIVE_CHAT[sess["id"]] = {"ev0": _feed_seq, "ts": time.time(), "tok": _turn_tok}
+        _ACTIVE_CHAT[sess["id"]] = {"ev0": feed_seq(), "ts": time.time(), "tok": _turn_tok}
 
     def _delta(channel, text):
         q.put("event: chat.delta\ndata: %s\n\n" % json.dumps(

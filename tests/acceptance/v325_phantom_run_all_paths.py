@@ -89,15 +89,16 @@ check("B2 the current token clears it", _row(SID2).get("running") is False)
 
 # ---- wiring: every entry point uses the bracket ---------------------------
 srv = read("src", "sparkforge", "server.py")
-check("C1 server exposes the shared bracket",
-      "def turn_begin(" in srv and "def turn_end(" in srv)
+ev = read("src", "sparkforge", "events.py")
+check("C1 the shared bracket lives in events.py and is re-exported by server",
+      "def turn_begin(" in ev and "def turn_end(" in ev and "turn_begin" in srv)
 check("C2 the sync /api/chat path brackets its turn",
       '_turn_tok = turn_begin(sess["id"])' in srv
       and 'turn_end(sess["id"], _turn_tok)' in srv)
 check("C3 the sync path releases in a finally (any outcome)",
       "finally:" in srv and 'turn_end(sess["id"], _turn_tok)' in srv)
 check("C4 the streaming path still registers (JAG-323 regression)",
-      '_ACTIVE_CHAT[sess["id"]] = {"ev0": _feed_seq' in srv)
+      '_ACTIVE_CHAT[sess["id"]] = {"ev0": feed_seq()' in srv)
 
 api2 = read("src", "sparkforge", "api_v02.py")
 check("C5 the in-process MCP chat bridge brackets its turn",

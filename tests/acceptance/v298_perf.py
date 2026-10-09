@@ -61,8 +61,9 @@ check("prune dropped the OLDEST rows", mn_after > 0 and (mx_after - mn_after) < 
 check("prune is a no-op under the cap", srv.prune_events(keep=100) == 0)
 
 src = read("src", "sparkforge", "server.py")
-check("WAL pragma is set", "PRAGMA journal_mode=WAL" in src)
-check("NORMAL pragma is set", "PRAGMA synchronous=NORMAL" in src)
+ev = read("src", "sparkforge", "events.py")
+check("WAL pragma is set", "PRAGMA journal_mode=WAL" in ev)
+check("NORMAL pragma is set", "PRAGMA synchronous=NORMAL" in ev)
 check("pruner is started in main()", "_start_event_pruning()" in src)
 
 # JAG-300: the attention route must not read the roster twice per poll.
