@@ -131,6 +131,23 @@ All notable changes to SparkForge are documented here. The format follows
   a thin façade — imports, constants, `stream_with_fallback` and the re-export blocks.
 
 ### Fixed
+- **A tool request answered in the model's NATIVE markup was silently dropped,
+  freezing the turn (JAG-369).** The A8 "Master" agent runs on
+  `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire
+  (SparkForge's protocol is text-based JSON actions) — replies to a tool request with
+  DeepSeek's native tool-call markup: an envelope carrying the marker `DSML` wrapped in
+  full-width vertical bars (U+FF5C), holding an `invoke name="X"` with `parameter
+  name="Y"` children. `extract_json` found no JSON and `_looks_like_json_action` was
+  False (the text does not start with `{`/`[`), so the call was silently dropped and the
+  harness looped forever on "no valid action" — the model re-emitted the same markup
+  every turn and one raw markup message leaked into the visible chat (observed live: the
+  user typed "?"). The harness now recognises the dialect: `_dsml_action` parses the
+  first invocation into `{"action":"tool","tool":<name>,"args":{...}}` (a
+  `string="false"` parameter is JSON-decoded), wired into `chat_once` right after the
+  JSON parse; `_looks_like_json_action` treats the markup as machine text so it is never
+  shown as a reply. Verified against the real session: all 3 stored DSML messages parse
+  to their `shell` calls. Guarded by `tests/acceptance/v369_dsml_tool_calls.py` (12/12).
+  Battery 120 → 121.
 - **Determinism of the regression battery.** Four acceptance tests awaited async
   side-effects with fixed `time.sleep()` calls (v204 memory TTL, v222 concurrent
   late-write, v281 terminal output, v287 routine dispatch) — wall-clock races that

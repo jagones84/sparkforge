@@ -510,10 +510,29 @@ def _next_stale(prev_stale, prev_hash, cur_hash, worked):
     return prev_stale + 1
 
 
+# JAG-369: some models (DeepSeek V4 via OpenRouter) answer a tool request with
+# their NATIVE tool-call markup instead of the harness' JSON protocol. The marker
+# is "DSML" wrapped in full-width vertical bars (U+FF5C); the payload is an
+# <invoke name="X"> holding <parameter name="Y">V</parameter> children. The harness
+# used to ignore the whole thing and loop forever on "no valid action" (observed on
+# the A8 "Master" session: the model re-emitted the same markup every turn). We now
+# recognise and parse it, exactly like the near-miss dialects `_normalize_action`
+# already accepts.
+_DSML = "\uff5c\uff5cDSML\uff5c\uff5c"
+
+
+def _looks_like_dsml(text):
+    """True when `text` carries the model's native (DSML) tool-call markup."""
+    return _DSML in (text or "")
+
+
 def _looks_like_json_action(text):
-    """True when `text` is a (possibly malformed/truncated) tool-call JSON —
-    i.e. something we must NEVER show to the user as a chat reply."""
+    """True when `text` is a (possibly malformed/truncated) tool-call JSON OR the
+    model's native DSML markup — i.e. machine text we must NEVER show to the user
+    as a chat reply."""
     t = (text or "").strip()
+    if _DSML in t:
+        return True
     if not t.startswith(("{", "[")):
         return False
     return ('"action"' in t) or ('"tool"' in t) or ('"args"' in t)
@@ -1302,6 +1321,36 @@ def _normalize_action(act):
     return act
 
 
+def _dsml_action(text):
+    """JAG-369: convert the model's native DSML tool-call markup into the harness
+    action. Returns the FIRST invocation as
+    ``{"action":"tool","tool":<name>,"args":{...}}``, or ``None`` when `text` is
+    not DSML or carries no parseable invocation. A parameter marked
+    ``string="false"`` (a number / array / object) is decoded from JSON when it
+    parses, otherwise kept verbatim."""
+    if not _looks_like_dsml(text):
+        return None
+    m = re.search(_DSML + r'\s*invoke\s+name="([^"]+)"\s*>(.*?)</' + _DSML
+                  + r'\s*invoke>', text, re.S)
+    if not m:
+        return None
+    name = m.group(1).strip()
+    args = {}
+    for pm in re.finditer(_DSML + r'\s*parameter\s+name="([^"]+)"([^>]*)>(.*?)</'
+                          + _DSML + r'\s*parameter>', m.group(2), re.S):
+        key = pm.group(1).strip()
+        val = pm.group(3)
+        if 'string="false"' in pm.group(2):
+            try:
+                val = json.loads(val)
+            except Exception:  # noqa: BLE001
+                pass
+        args[key] = val
+    if not name:
+        return None
+    return {"action": "tool", "tool": name, "args": args}
+
+
 def _harness_start_note(sess):
     """JAG-332: ONE durable "session started" harness marker, written on the first turn.
 
@@ -1709,6 +1758,10 @@ def chat_once(sess, message, model=None, on_delta=None, trace=None, on_event=Non
                          scores=[round(s, 3) for _, s in _scores])
                 answer = _best
         act = _normalize_action(extract_json(answer))
+        if act is None:
+            # JAG-369: the model answered a tool request with its native DSML
+            # markup (not JSON). Parse it instead of dropping the call and looping.
+            act = _dsml_action(answer)
         if isinstance(act, dict) and act.get("action") == "write_todos":
             _user_pivot = False   # JAG-189: the model re-engaged the plan
             n = _apply_chat_todos(sess, act, on_event, after=_after())
