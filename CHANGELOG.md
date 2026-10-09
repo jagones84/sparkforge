@@ -223,7 +223,22 @@ All notable changes to SparkForge are documented here. The format follows
   big → small, with a short label (`sys instr`, `tool out`, `harness`, …) so the bars get the
   width; the full label, token count and % stay in the tooltip. The donut is kept above it.
 
+- **The Bridge agent prompts were VOID — now filled from `agency-agents` (JAG-365).** The roster
+  was seeded from the local `agency-agents` clone, but the seed stored only the short LABEL
+  (`agents.json.role`); the agent's role PROMPT (the clone's `.md` body) was never written, so the
+  Bridge `✎ prompt` editor AND the main-app ROLE.md opened empty for all 30 seeded agents. The new
+  `sparkforge.agency` module reads the clone and `scripts/seed_agent_roles.py` materialises each
+  agent's body into `data/roles/<session>.md` — the SAME file both UIs read, so the Bridge prompt
+  and the main-app ROLE.md are now identical. `scripts/seed_teams.py` calls it after seeding, so a
+  seeded agent is never left without its role. Non-destructive: only an EMPTY role is filled
+  (`--force` overwrites), so a role you wrote is never clobbered. Applied live: **30 roles filled**
+  (the 3 custom agents — Master, coder 1/2 — kept their own).
+
 ### Added
+- **`src/sparkforge/agency.py` + `scripts/seed_agent_roles.py` (JAG-365)** — map an org agent
+  NAME to its role prompt in the local `agency-agents` clone (`by_name`, `role_for`,
+  `fill_roles`) and backfill `data/roles/<sid>.md`, non-destructively. `v341_team_seed` grew four
+  checks (Q1–Q4) to lock the materialised role + the no-clobber guarantee. Battery stays 119.
 - **`tests/acceptance/v364_queue_theme_links_ctx.py` (24 checks)** — a queued message carries its
   attachments and the chip shows the text + a marker (not the raw blob); every theme previews its
   text + accent colour and no hardcoded status text colour survives; `_resolve_fs_arg` walks the

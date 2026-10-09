@@ -55,13 +55,14 @@ os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
 os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
 os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
+os.environ["SPARKFORGE_ROLES_DIR"] = os.path.join(TMP, "roles")
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 
 import seed_teams  # noqa: E402
-from sparkforge import agents, teams  # noqa: E402
+from sparkforge import agents, teams, roles, agency  # noqa: E402
 
 results = []
 
@@ -94,6 +95,20 @@ res2 = seed_teams.seed(["alpha", "beta", "gamma"])
 check("P1 re-running is idempotent (no new agents)", res2["agents_created"] == 0,
       "created=%d" % res2["agents_created"])
 check("P2 re-running keeps the same teams", len(teams.REGISTRY.list()["teams"]) == 3)
+
+# --- Q: the agent ROLE.md is materialised from the clone (JAG-365) -----------
+eng_role = roles.read(eng["session"])
+check("Q1 the seeder wrote the agent's ROLE.md from the clone body",
+      eng_role.strip().startswith("# Alpha Engineer"), eng_role[:44].replace("\n", " "))
+check("Q2 every seeded agent matched a clone agent (roles filled, none unmatched)",
+      res["roles"]["filled"] and not res["roles"]["unmatched"]
+      and not res["roles"]["failed"], str(res["roles"]))
+check("Q3 the role the seeder wrote IS what both UIs read (same file)",
+      roles.read(eng["session"]) == agency.role_for("Alpha Engineer"), "")
+roles.write(eng["session"], "MY CUSTOM ROLE")
+res3 = seed_teams.seed(["alpha"])
+check("Q4 a user-written role is NOT clobbered on a re-seed",
+      roles.read(eng["session"]) == "MY CUSTOM ROLE", str(res3["roles"].get("kept")))
 
 print("---")
 ok = sum(1 for r in results if r)

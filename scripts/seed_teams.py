@@ -150,8 +150,15 @@ def seed(slugs=None, apply_models=False):
         if apply_models:                       # JAG-343: leads cloud, cap local per machine
             teams.REGISTRY.assign_models(tid)
 
+    # JAG-365: the seed used to carry ONLY the short label, so each agent's role
+    # PROMPT (ROLE.md — the very file the Bridge prompt and the main app edit) stayed
+    # VOID. Materialise it now from the clone's `.md` body. Non-destructive: only an
+    # EMPTY role is filled, so a role the user wrote is never clobbered.
+    from sparkforge import agency
+    role_report = agency.fill_roles()
+
     return {"ok": True, "teams": created["teams"], "agents_created": created["agents"],
-            "missing": sorted(missing)}
+            "missing": sorted(missing), "roles": role_report}
 
 
 def main(argv):
