@@ -47,6 +47,12 @@ All notable changes to SparkForge are documented here. The format follows
   `_REAL_PROMPT_TOKENS`/`_REAL_CACHED_TOKENS` token dicts moved to `tracing.py`
   (deps: `events.db`/`events._db_lock` + `otel_tracing`). `server.py` re-exports them;
   the token dicts are re-imported as the same objects (mutated, never rebound).
+- **`server.py` split, phase 2e: `steering.py` (JAG-375).** The mid-run steer / abort
+  inboxes (`STEER_INBOX`, `ABORT_INBOX`, `_steer_lock`/`_abort_lock`,
+  `push_steer`/`drain_steer`/`has_steer`, `push_abort`/`_is_aborted`/`clear_abort`)
+  moved to `steering.py`. The inboxes + locks are re-imported as the same objects, so
+  `_forget_session_runtime`'s cleanup sees the same state. `v302`'s source-lock for
+  `drain_steer` repointed to `steering.py`.
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async

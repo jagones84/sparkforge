@@ -49,6 +49,9 @@ from .events import (DB_PATH, EVENTS_KEEP, MAX_FEED_EVENTS, PRUNE_BATCH,
 from .keys import ENV_FILE, KNOWN_ENV_KEYS, keys_status, reveal_key, set_key
 from .sse import (CHAT_THINK_FLUSH_S, CHAT_THINK_LIVE_CAP, ThinkCoalescer,
                   sse_response, sse_pump)
+from .steering import (ABORT_INBOX, STEER_INBOX, _abort_lock, _is_aborted,
+                       _steer_lock, clear_abort, drain_steer, has_steer, push_abort,
+                       push_steer)
 from .textkit import extract_json, strip_think
 from .tracing import (MODEL_PRICES, RunTrace, _REAL_CACHED_TOKENS, _REAL_PROMPT_TOKENS,
                       count_tokens, get_run_trace, runs_summary)
@@ -1526,62 +1529,7 @@ MEMORY_POLICY = (
 # the chat stream was experienced as "si blocca" and let mobile NAT kill the SSE.
 CHAT_APPROVAL_WAIT = 30
 
-# JAG-127b: mid-run steering. A message the user types while a turn is still
-# streaming (or a queued message the app flushes) is dropped here and injected
-# as a user message at the next loop boundary — the modern-IDE "steer" behaviour,
-# with no second turn and no second SSE stream.
-STEER_INBOX = {}
-_steer_lock = threading.Lock()
-
-
-def push_steer(sess_id, text):
-    """Queue a steering message for a running session. Returns the new depth."""
-    text = str(text or "").strip()
-    if not sess_id or not text:
-        return 0
-    with _steer_lock:
-        q = STEER_INBOX.setdefault(sess_id, [])
-        q.append(text)
-        return len(q)
-
-
-def drain_steer(sess_id):
-    """Pop all steering messages for a session (called per loop iteration)."""
-    with _steer_lock:
-        # JAG-302: pop the key instead of re-inserting an empty list — the old
-        # `STEER_INBOX[sess_id] = []` left a permanent empty entry for every
-        # session that ever ran a turn (an unbounded dict).
-        return STEER_INBOX.pop(sess_id, [])
-
-
-def has_steer(sess_id):
-    """JAG-129A: True when there is at least one steering message queued."""
-    with _steer_lock:
-        return bool(STEER_INBOX.get(sess_id))
-
-
-# JAG-129A: abort of an in-flight chat turn (distinct from steer: steer
-# redirects, abort stops). The loop checks the flag on every iteration.
-ABORT_INBOX = set()
-_abort_lock = threading.Lock()
-
-
-def push_abort(sess_id):
-    if not sess_id:
-        return False
-    with _abort_lock:
-        ABORT_INBOX.add(sess_id)
-    return True
-
-
-def _is_aborted(sess_id):
-    with _abort_lock:
-        return sess_id in ABORT_INBOX
-
-
-def clear_abort(sess_id):
-    with _abort_lock:
-        ABORT_INBOX.discard(sess_id)
+# JAG-375: the steer/abort inboxes moved to `steering.py` (imported above).
 
 SKILLS_POLICY = (
     "Skills: you have an installed skill library — the SKILLS list below is "
