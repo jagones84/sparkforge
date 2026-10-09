@@ -22,7 +22,7 @@ deliberate and load-bearing, so please respect it.
 ```bash
 git clone https://github.com/jagones84/sparkforge && cd sparkforge
 cp .env.template .env
-bash tests/battery.sh          # → === battery: 118/118 GREEN ===
+bash tests/battery.sh          # → === battery: 119/119 GREEN ===
 ```
 
 ## The loop

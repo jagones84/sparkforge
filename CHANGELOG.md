@@ -202,7 +202,34 @@ All notable changes to SparkForge are documented here. The format follows
   is a dead no-op, a drag tracks the cursor exactly (verified live: click 0px, 2px wobble 0px,
   drag +10/+30/−10 = exactly +10/+30/−10), and a plain click no longer persists a width.
 
+- **A queued message now shows its attachments (JAG-364).** A message typed while a turn is
+  running is queued as `{raw, text, atts}`, and the queue chip shows the text you typed plus a
+  marker for what it carries — `🖼 2 images · 📄 1 file · 📝 1 text` — instead of the raw blob
+  (skipping the model-only attachment block). Steering and flushing send the raw payload but
+  display the human text.
+- **A theme sets the TEXT colours, not just the background (JAG-364).** Each theme card now
+  previews its own text colour (`Aa`) and accent on the swatch, and the text/colour surfaces
+  that were hardcoded are token-driven now: the code blocks and inline code in a reply, the todo
+  statuses, the session running/done rings, the queue-dropdown options, and the ghost/copy hover
+  borders — all follow the active theme (Sand included).
+- **Chat links to a SIBLING project now open (JAG-364).** A relative link like
+  `sparkpulse-server/status_server.py` failed with "not a file" because it was only resolved
+  inside the session workspace (`Repositories/TESTS/Jago`). `_resolve_fs_arg` now resolves a
+  relative path against the workspace **and each of its ancestors** that stays inside a browse
+  root (bounded to 12 levels), so a link to a sibling project under `Repositories/` resolves to
+  the real file. Verified live: the link opened `/home/jagones/Repositories/sparkpulse-server/status_server.py`.
+- **The context breakdown is a list of horizontal bars (JAG-364).** Instead of a wrapping legend
+  of words, each category is now a horizontal bar coloured exactly like its donut segment, sorted
+  big → small, with a short label (`sys instr`, `tool out`, `harness`, …) so the bars get the
+  width; the full label, token count and % stay in the tooltip. The donut is kept above it.
+
 ### Added
+- **`tests/acceptance/v364_queue_theme_links_ctx.py` (24 checks)** — a queued message carries its
+  attachments and the chip shows the text + a marker (not the raw blob); every theme previews its
+  text + accent colour and no hardcoded status text colour survives; `_resolve_fs_arg` walks the
+  workspace ancestors so a SIBLING-project link resolves (with a real temp-dir check that a
+  workspace-local path still wins and a missing path falls back); and the context breakdown is
+  sorted horizontal bars with short labels (the donut is kept). Battery 118 → 119.
 - **`tests/acceptance/v362_agent_identity.py` (12 checks)** — every designated agent announces
   its roster identity in the `agent-role` prompt section even with no ROLE.md (and two agents
   get DIFFERENT sections), the ROLE.md is appended under the identity, a plain session still

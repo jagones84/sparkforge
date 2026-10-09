@@ -22,7 +22,7 @@
   }
   /* the queue/steer picker next to "send" — dark popup, no white flash */
   #qmode { color-scheme: inherit; }
-  #qmode option { background: #121722; color: #dfe4ff; }
+  #qmode option { background: var(--menubg); color: var(--txt); }
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
   /* JAG-127b: scrollbars themed to the blue/purple GUI (the native blue-grey
    * default clashed). Thin, accent-tinted, transparent track. */
@@ -204,15 +204,15 @@
   .sess:hover { background: var(--hover); }
   .sess.active { border-color: var(--accent); background: var(--sel); }
   /* JAG-168: a session busy with a chat turn keeps running in the background. */
-  .sess.running { border-color: rgba(52,211,153,.5); }
+  .sess.running { border-color: var(--ok); }
   /* JAG-218: a live turn shows a spinning CIRCULAR ring on the rail row. */
   .sess.running::before { content: ""; width: 11px; height: 11px; flex-shrink: 0;
     box-sizing: border-box; border-radius: 50%;
-    border: 2px solid rgba(52,211,153,.28); border-top-color: #34d399;
+    border: 2px solid var(--line); border-top-color: var(--ok);
     animation: sfspin .7s linear infinite; }
   @keyframes sfspin { to { transform: rotate(360deg); } }
   /* JAG-218: a turn that finished while you were on ANOTHER session -> a bell. */
-  .sess.done { border-color: rgba(250,204,21,.55); }
+  .sess.done { border-color: var(--warn); }
   .sess.done::before { content: "🔔"; font-size: 10px; flex-shrink: 0;
     animation: sfpulse 1.2s ease-in-out infinite; }
   @keyframes sfpulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
@@ -266,18 +266,21 @@
   .ctxmeter b { color: var(--txt); font-weight: 600; }
   /* JAG-355: the context breakdown is a DONUT (part-to-whole) + a compact legend,
      replacing the old stacked micro-bar with its 12-row wrapping legend. */
-  .ctxdonut { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .ctxdonut { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; }
   .ctxdonut svg { flex: 0 0 auto; width: 102px; height: 102px; }
   .ctxdonut .seg { transition: opacity .12s; }
   .ctxdonut .seg:hover { opacity: .72; }
   .ctxdonut .dc { fill: var(--txt); font-size: 9px; font-weight: 600; }
   .ctxdonut .dl { fill: var(--dim); font-size: 6.2px; letter-spacing: .04em; }
-  .ctxlegend { display: flex; flex-direction: column; gap: 3px; margin: 0; min-width: 0;
-    flex: 1; font-size: 10.5px; color: var(--dim); }
-  .ctxlegend .bdrow { display: flex; align-items: center; gap: 5px; min-width: 0; }
-  .ctxlegend .bdrow > i { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
-  .ctxlegend .bdrow .bl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ctxlegend .bdrow b { color: var(--txt); font-weight: 600; }
+  /* JAG-364: the breakdown is a list of HORIZONTAL bars (coloured like the donut
+     segments, sorted big -> small) instead of a wrapping legend of words. */
+  .ctxbd { display: flex; flex-direction: column; gap: 4px; margin-top: 9px; }
+  .ctxbd .bdbar { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--dim); }
+  .ctxbd .bdbar .bl { flex: 0 0 auto; width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ctxbd .bdbar .bt { flex: 1; height: 8px; border-radius: 5px; background: var(--line); overflow: hidden; }
+  .ctxbd .bdbar .bt > i { display: block; height: 100%; border-radius: 5px; transition: width .3s; }
+  .ctxbd .bdbar b { color: var(--txt); font-weight: 600; min-width: 30px; text-align: right; }
+  .ctxbd .bdbar .cn { min-width: 34px; text-align: right; }
   .ctxchips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
   .ctxchip { background: transparent; border: 1px solid var(--line); color: var(--dim);
     font-size: 11px; padding: 3px 9px; border-radius: 999px; cursor: pointer; font-weight: 400; }
@@ -310,7 +313,7 @@
     border-radius: var(--radius); padding: 12px 22px; font: inherit; font-weight: 600; cursor: pointer; }
   button:active { transform: scale(.97); }
   button.ghost { background: transparent; border: 1px solid var(--line); color: var(--dim); font-weight: 400; padding: 8px 14px; }
-  button.ghost:hover { color: var(--txt); border-color: rgba(108,140,255,.4); }
+  button.ghost:hover { color: var(--txt); border-color: var(--acc); }
   /* JAG-159: the settings gear gets an accent (blue) border so it stands out. */
   #settingsBtn { border-color: rgba(108,140,255,.55); color: var(--accent, #8b7bf0); }
   .feed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
@@ -346,7 +349,7 @@
   #nowbar .nid { font-family: ui-monospace, monospace; color: var(--acc2); flex-shrink: 0; }
   #nowbar .nst { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 6px;
     border-radius: 999px; border: 1px solid var(--line); flex-shrink: 0; }
-  #nowbar .nst.doing { color: #ffcf6a; border-color: rgba(255,207,106,.5); }
+  #nowbar .nst.doing { color: var(--warn); border-color: var(--warn); }
   #nowbar .nlbl { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #nowbar .nlast { color: var(--dim); font-size: 10px; flex-shrink: 0; max-width: 40%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .msg { margin-bottom: 14px; max-width: 860px; }
@@ -363,7 +366,7 @@
   .msg .who { display: flex; align-items: center; gap: 6px; }
   .msg .copy { margin-left: auto; background: transparent; border: 1px solid var(--line); color: var(--dim); font-size: 10px;
     padding: 1px 7px; border-radius: 6px; cursor: pointer; }
-  .msg .copy:hover { color: var(--txt); border-color: rgba(108,140,255,.4); }
+  .msg .copy:hover { color: var(--txt); border-color: var(--acc); }
   .toolcard { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 2px 0 10px; padding: 6px 10px;
     border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); font-size: 12px; max-width: 640px; }
   .toolcard-head { display: flex; align-items: center; gap: 8px; }
@@ -379,10 +382,10 @@
   .tctree[open] > summary { border-color: var(--accent); }
   .tctree .st { font-size: 10px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); }
   .tctree .st.todo { color: var(--dim); }
-  .tctree .st.doing { color: #fbbf24; border-color: rgba(251,191,36,.5); }
-  .tctree .st.done { color: #34d399; border-color: rgba(52,211,153,.5); }
-  .tctree .st.blocked { color: #ff7777; border-color: rgba(255,119,119,.5); }
-  .tctree .st.superseded { color: #94a3b8; text-decoration: line-through; opacity: .7; }
+  .tctree .st.doing { color: var(--warn); border-color: var(--warn); }
+  .tctree .st.done { color: var(--ok); border-color: var(--ok); }
+  .tctree .st.blocked { color: var(--err); border-color: var(--err); }
+  .tctree .st.superseded { color: var(--dim); text-decoration: line-through; opacity: .7; }
   .tctree .tc-kids { margin: 6px 0 6px 16px; padding-left: 10px; border-left: 2px solid rgba(108,140,255,.25); }
   /* JAG-169: the todo id AX.nY, monospaced and visible in chat + panel. */
   .tctree .tcid { font-family: ui-monospace, monospace; font-size: 10px; color: var(--acc2); margin-right: 6px; }
@@ -453,6 +456,9 @@
     padding: 3px 6px 3px 10px; font-size: 11px; color: var(--txt); }
   .qchip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px; }
   .qchip button { font-size: 11px; padding: 0 5px; line-height: 1.4; }
+  /* JAG-364: the attachment marker on a queued message (images / files / text) */
+  .qchip .qatt { flex: 0 0 auto; color: var(--acc2); font-size: 10.5px; font-weight: 600;
+    max-width: 190px; }
   #inp:focus, .inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,140,255,.12); }
 
   /* JAG-290: in a short or zoomed (narrow) window the composer's send/stop row must
@@ -725,8 +731,10 @@
   .bubble.md-content ul, .bubble.md-content ol { margin: 2px 0 4px; padding-left: 18px; }
   .bubble.md-content li { margin: 0; }
   .bubble.md-content li > p { margin: 0; }
-  .bubble.md-content code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; font-size: 11.5px; }
-  .bubble.md-content pre { background: rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 8px;
+  /* JAG-364: code surfaces follow the theme too (a white veil / dark block looked
+     wrong on the light Sand theme and the text lost contrast). */
+  .bubble.md-content code { background: var(--chipbg); padding: 1px 5px; border-radius: 5px; font-size: 11.5px; }
+  .bubble.md-content pre { background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 8px;
     padding: 8px 10px; overflow: auto; margin: 4px 0; }
   .bubble.md-content pre code { background: none; padding: 0; }
   .bubble.md-content table { border-collapse: collapse; margin: 6px 0; font-size: 12px; }
@@ -862,7 +870,10 @@
     padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); color: var(--txt); }
   .themecard:hover { border-color: var(--accent); }
   .themecard.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .themecard .sw { height: 40px; border-radius: 8px; border: 1px solid var(--line); }
+  .themecard .sw { height: 40px; border-radius: 8px; border: 1px solid var(--line);
+    display: flex; align-items: center; gap: 8px; padding: 0 11px; }
+  .themecard .sw .tv { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+  .themecard .sw .ta { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
   .themecard .nm { font-weight: 600; font-size: 12.5px; }
   .themecard .ds { color: var(--dim); font-size: 11px; }
   /* bolder text preference (default on) */
@@ -2005,29 +2016,64 @@ function pushThink(text) {
  * Default: they wait in a visible queue and are flushed one-by-one when the
  * turn ends. The "⇢" chip steers them into the RUNNING turn instead (injected
  * server-side at the next loop boundary — no second turn). */
-let msgQueue = {};   // JAG-174: sessionId -> [messages] waiting for THAT session
+let msgQueue = {};   // JAG-174: sessionId -> [{raw,text,atts}] waiting for THAT session
 function _q(sid) { const k = sid || sessionId; return (msgQueue[k] = msgQueue[k] || []); }
 function enqueueMsg(m) { _q().push(m); renderQueue(); }
+/* JAG-364: a queued message is now {raw,text,atts} — `raw` is what the model gets
+   (the attachment block + the text), `text` is what the user typed, `atts` the
+   attachment snapshot. A bare string (older code paths) is tolerated. */
+function _qNorm(m) {
+  if (m && typeof m === "object") return m;
+  const s = String(m == null ? "" : m);
+  return { raw: s, text: s, atts: [] };
+}
+/* JAG-364: a short marker for the attachments carried by a message, e.g.
+   "🖼 1 image · 📄 2 files" — the queue chip must show WHAT is attached, not just
+   the text (the user asked for parity with the composer). */
+function _attMark(atts) {
+  if (!atts || !atts.length) return null;
+  let img = 0, file = 0, txt = 0;
+  atts.forEach(a => {
+    const v = (a && a.value) ? String(a.value) : "";
+    const p = v.indexOf("file: ") === 0 ? v.slice(6).trim() : "";
+    if (!p) txt++; else if (_isImage(p)) img++; else file++;
+  });
+  const parts = [];
+  if (img) parts.push("🖼 " + img + (img > 1 ? " images" : " image"));
+  if (file) parts.push("📄 " + file + (file > 1 ? " files" : " file"));
+  if (txt) parts.push("📝 " + txt + (txt > 1 ? " texts" : " text"));
+  if (!parts.length) return null;
+  return { text: parts.join(" · "), title: atts.map(a => (a && a.label) || "").filter(Boolean).join("\n") };
+}
 function renderQueue() {
   const bar = $("queueBar"); if (!bar) return;
   const q = _q();
   bar.innerHTML = ""; bar.hidden = !q.length;
   q.forEach((m, i) => {
+    const it = _qNorm(m);
     const chip = document.createElement("span"); chip.className = "qchip";
-    const t = document.createElement("span"); t.textContent = (i + 1) + ". " + m; t.title = m;
+    const t = document.createElement("span"); t.textContent = (i + 1) + ". " + it.text; t.title = it.text;
+    chip.appendChild(t);
+    const mk = _attMark(it.atts);
+    if (mk) {
+      const a = document.createElement("span"); a.className = "qatt";
+      a.textContent = mk.text; a.title = mk.title; chip.appendChild(a);
+    }
     const st = document.createElement("button"); st.className = "ghost"; st.textContent = "⇢";
     st.title = "steer into the running turn now";
     st.onclick = () => steerQueued(i);
     const x = document.createElement("button"); x.className = "ghost"; x.textContent = "×";
     x.title = "remove from queue";
     x.onclick = () => { q.splice(i, 1); renderQueue(); };
-    chip.appendChild(t); chip.appendChild(st); chip.appendChild(x); bar.appendChild(chip);
+    chip.appendChild(st); chip.appendChild(x); bar.appendChild(chip);
   });
 }
 function steerQueued(i) {
-  const q = _q(); const m = q.splice(i, 1)[0]; if (m === undefined) return renderQueue();
-  who("user", "🎯 steer: " + m);
-  api("POST", "/api/chat/steer", { session: sessionId, message: m }).catch(() => {});
+  const q = _q(); const it = _qNorm(q.splice(i, 1)[0]);
+  if (!it.raw) return renderQueue();
+  const mk = _attMark(it.atts);
+  who("user", "🎯 steer: " + it.text + (mk ? "  " + mk.text : ""));
+  api("POST", "/api/chat/steer", { session: sessionId, message: it.raw }).catch(() => {});
 }
 function flushQueue(sid) {
   // JAG-174: never flush a message queued in session A into session B — only the
@@ -2036,7 +2082,8 @@ function flushQueue(sid) {
   if (sessionId !== s || turnSSE[s]) return;
   const q = _q(s);
   if (!q.length) return;
-  const m = q.shift(); renderQueue(); send(m);
+  const it = _qNorm(q.shift()); renderQueue();
+  if (it.raw) send(it.raw, it.text);
 }
 
 /* ---- JAG-278/279: composer extras — attachments, "+" menu, pickers, voice ---- */
@@ -2376,7 +2423,7 @@ function _bindAttachmentChips(root) {
   });
 }
 
-function send(text) {
+function send(text, display) {
   const inp = $("inp");
   let raw = (text !== undefined ? text : inp.value).trim();
   if (!raw) return;
@@ -2396,7 +2443,9 @@ function send(text) {
       who("user", "🎯 steer: " + raw + _attNote);
       api("POST", "/api/chat/steer", { session: sessionId, message: _rawMsg }).catch(() => {});
     } else {
-      enqueueMsg(_rawMsg);
+      // JAG-364: keep the user text + the attachment snapshot so the queue chip
+      // can show WHAT is attached (raw is what the model will receive).
+      enqueueMsg({ raw: _rawMsg, text: raw, atts: _attSnap });
     }
     inp.value = ""; if (inp.style) inp.style.height = ""; return;
   }
@@ -2405,7 +2454,7 @@ function send(text) {
   // the model plans (write_todos) then executes end-to-end without asking.
   let mode = "";
   if (/^\/goal\b/i.test(msg)) { mode = "&mode=goal"; msg = msg.replace(/^\/goal[\s:]*/i, "").trim(); }
-  const _disp = msg;
+  const _disp = (display !== undefined ? display : msg);
   if (_attBlock) msg = _attBlock + "\n\n" + msg;   // the model reads attachments first
   inp.value = ""; if (inp.style) inp.style.height = "";
   const _uNode = who("user", (mode ? "🎯 /goal " : "") + _disp + _attNote);
@@ -2953,6 +3002,17 @@ function _fmtTok(n) { n = n || 0; return n >= 1000 ? (n / 1000).toFixed(n >= 100
    exactly 100, so each stroke-dasharray value IS the segment percentage. */
 const CTX_COLS = ["#6c8cff", "#8b7bf0", "#39d3c3", "#e0a458", "#d96a8f", "#5bd08a",
                   "#b07be0", "#7f9ac0", "#c9a227", "#d97a7a", "#8a94a8", "#4a5568"];
+/* JAG-364: short labels for the context breakdown bars (the full label stays in the
+   tooltip) — keeps the bars wide instead of the words. */
+const CTX_ABBR = {
+  "system instructions": "sys instr", "tool schemas": "tools", "rules": "rules",
+  "skills": "skills", "plan / task list": "plan", "files (reads)": "files",
+  "other tool output": "tool out", "harness messages": "harness",
+  "conversation": "conversation", "measured overhead": "overhead",
+};
+function _shortLabel(l) {
+  return CTX_ABBR[String(l || "").toLowerCase().trim()] || String(l || "");
+}
 function _ctxDonut(bd, total) {
   const R = 15.9155, C = 100;
   let off = 0, segs = "";
@@ -2991,13 +3051,21 @@ function renderCtxItems() {
   let bdHtml = "";
   if (bd.length) {
     const total = bd.reduce((a, x) => a + (x.tokens || 0), 0) || 1;
-    const legend = bd.map((x, i) => {
-      const pct = Math.round(x.tokens / total * 100);
-      return `<span class="bdrow"><i style="background:${CTX_COLS[i % CTX_COLS.length]}"></i>` +
-             `<span class="bl" title="${esc(x.label)}">${esc(x.label)}</span>` +
-             `<b>${pct}%</b><span class="cn">${_fmtTok(x.tokens)}</span></span>`;
-    }).join("");
-    bdHtml = `<div class="ctxdonut">${_ctxDonut(bd, total)}<div class="ctxlegend">${legend}</div></div>`;
+    // JAG-364: the breakdown is a list of HORIZONTAL bars, coloured exactly like
+    // the donut segments, sorted big -> small, with short labels so the bars get
+    // the width instead of the words.
+    const items = bd.map((x, i) => ({
+      label: x.label, tokens: x.tokens || 0,
+      pct: Math.round((x.tokens || 0) / total * 100),
+      col: CTX_COLS[i % CTX_COLS.length],
+    })).sort((a, b) => b.tokens - a.tokens);
+    const bars = items.map(x =>
+      '<div class="bdbar" title="' + esc(x.label) + " \u00b7 " + _fmtTok(x.tokens) + " tok \u00b7 " + x.pct + '%">' +
+      '<span class="bl">' + esc(_shortLabel(x.label)) + '</span>' +
+      '<span class="bt"><i style="width:' + Math.max(x.pct, 1) + "%;background:" + x.col + '"></i></span>' +
+      '<b>' + x.pct + '%</b><span class="cn">' + _fmtTok(x.tokens) + "</span></div>").join("");
+    bdHtml = '<div class="ctxdonut">' + _ctxDonut(bd, total) + "</div>" +
+             '<div class="ctxbd">' + bars + "</div>";
   }
   const chips = nonEmpty.map(([k, label]) => {
     const n = (_ctxItems[k] || []).length;
@@ -4645,17 +4713,17 @@ const SETTINGS_CATS = [
    by the inline boot script above, these helpers just re-render and save. */
 const THEMES = [
   { id: "indigo", name: "Indigo", desc: "Blue & purple — the house style",
-    sw: "linear-gradient(120deg,#141a3a,#241638 58%,#8b7bf0)" },
+    sw: "linear-gradient(120deg,#141a3a,#241638 58%,#8b7bf0)", t: "#e2e6ff", a: "#7c8cff" },
   { id: "dark", name: "Dark", desc: "Neutral graphite, low glare",
-    sw: "linear-gradient(120deg,#0e1116,#1a1f28 58%,#9fb0cb)" },
+    sw: "linear-gradient(120deg,#0e1116,#1a1f28 58%,#9fb0cb)", t: "#e9edf3", a: "#8fa6c8" },
   { id: "midnight", name: "Midnight", desc: "Deep blue-black — night eye-saver",
-    sw: "linear-gradient(120deg,#0a1020,#101a2e 58%,#6b8cff)" },
+    sw: "linear-gradient(120deg,#0a1020,#101a2e 58%,#6b8cff)", t: "#d7e0f2", a: "#6b8cff" },
   { id: "forest", name: "Forest", desc: "Deep muted green — calm focus",
-    sw: "linear-gradient(120deg,#16281f,#0c1410 58%,#6fae8b)" },
+    sw: "linear-gradient(120deg,#16281f,#0c1410 58%,#6fae8b)", t: "#d8e6dc", a: "#6fae8b" },
   { id: "sand", name: "Sand", desc: "Warm cream, low glare — soft daylight",
-    sw: "linear-gradient(120deg,#ddc9a3,#cbb588 58%,#9c5f24)" },
+    sw: "linear-gradient(120deg,#ddc9a3,#cbb588 58%,#9c5f24)", t: "#382f21", a: "#9c5f24" },
   { id: "sepia", name: "Sepia", desc: "Dark warm amber — night reading",
-    sw: "linear-gradient(120deg,#2a2015,#17120c 58%,#c99a5b)" },
+    sw: "linear-gradient(120deg,#2a2015,#17120c 58%,#c99a5b)", t: "#e6d8bf", a: "#c99a5b" },
 ];
 function renderThemeGrid() {
   const g = $("themeGrid"); if (!g) return;
@@ -4663,7 +4731,10 @@ function renderThemeGrid() {
   g.innerHTML = THEMES.map(t =>
     '<button type="button" class="themecard' + (t.id === cur ? " active" : "") +
     '" onclick="applyTheme(\'' + t.id + '\')" aria-pressed="' + (t.id === cur) + '">' +
-    '<span class="sw" style="background:' + t.sw + '"></span>' +
+    // JAG-364: a theme is not only its background — the swatch previews the TEXT
+    // colour (Aa) and the accent too, so you can see what the reading will look like.
+    '<span class="sw" style="background:' + t.sw + '"><b class="tv" style="color:' + t.t +
+    '">Aa</b><i class="ta" style="background:' + t.a + '"></i></span>' +
     '<span class="nm">' + t.name + '</span><span class="ds">' + t.desc + '</span></button>').join("");
 }
 function applyTheme(id) {

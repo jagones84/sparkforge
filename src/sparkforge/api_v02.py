@@ -1429,13 +1429,16 @@ def _ws_root(qs=None) -> str:
 
 
 def _resolve_fs_arg(path, qs=None) -> str:
-    """Resolve a caller-supplied path for the fs endpoints (JAG-354).
+    """Resolve a caller-supplied path for the fs endpoints (JAG-354, JAG-364).
 
     An absolute path is used as-is. A RELATIVE path — agents emit links like
-    `viz/trend.png` or `insights.md` — is resolved against the SESSION workspace
-    first, then the process CWD, then the first browse root, so a link in the
-    chat opens the file the agent actually wrote. Returns "" for an empty path;
-    the sandbox check still runs afterwards on the resolved absolute path.
+    `viz/trend.png` or `insights.md` — is resolved against the SESSION workspace,
+    then each ANCESTOR of that workspace that is still inside a browse root, then
+    the process CWD and the browse roots, so a link in the chat opens the file the
+    agent actually wrote. The ancestor walk matters because agents work across
+    SIBLING projects: a link like `sparkpulse-server/x.py` is correct when the
+    workspace is `Repositories/TESTS/Jago` (the file lives in `Repositories/`).
+    Returns "" for an empty path; the sandbox check still runs afterwards.
     """
     import os as _os
     raw = str(path or "").strip()
@@ -1449,10 +1452,25 @@ def _resolve_fs_arg(path, qs=None) -> str:
         root = _ws_root(qs)
     except Exception:  # noqa: BLE001 — a lookup hint must never be fatal
         root = ""
+    try:
+        roots = _browse_roots()
+    except Exception:  # noqa: BLE001
+        roots = []
     if root:
-        candidates.append(_os.path.join(root, p))
+        # JAG-364: the workspace, then its ancestors while they stay inside a
+        # browse root (bounded to 12 levels, so it can never walk up to `/`).
+        d = _os.path.abspath(_os.path.expanduser(root))
+        for _ in range(12):
+            candidates.append(_os.path.join(d, p))
+            parent = _os.path.dirname(d)
+            if parent == d:
+                break
+            if roots and not any(parent == r or parent.startswith(r + _os.sep)
+                                 for r in roots):
+                break
+            d = parent
     candidates.append(_os.path.join(_os.getcwd(), p))
-    for r in _browse_roots():
+    for r in roots:
         candidates.append(_os.path.join(r, p))
     for c in candidates:
         try:

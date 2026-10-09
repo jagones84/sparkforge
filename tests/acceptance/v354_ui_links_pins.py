@@ -69,7 +69,8 @@ check("A1 the image preview URL carries the session",
 check("A2 `_resolve_fs_arg` exists in the fs API",
       "def _resolve_fs_arg(" in API, "")
 check("A3 a relative path is tried against the workspace root FIRST",
-      "candidates.append(_os.path.join(root, p))" in API, "")
+      "d = _os.path.abspath(_os.path.expanduser(root))" in API
+      and "candidates.append(_os.path.join(d, p))" in API, "")
 check("A4 every fs handler resolves the path argument",
       '_safe_fs_path(_resolve_fs_arg(q.get("path"), q) or root' in API
       and API.count('_safe_fs_path(_resolve_fs_arg(q.get("path"), q), _browse_roots()') == 2
