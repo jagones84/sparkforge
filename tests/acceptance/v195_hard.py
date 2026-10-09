@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 from sparkforge import registry, taskgraph, tools  # noqa: E402
 from sparkforge import server as _srv  # noqa: E402
+from sparkforge import rllm as _rllm  # noqa: E402  (owns _router_stream + router cfg)
 
 results = []
 
@@ -193,8 +194,8 @@ check("G5 _missing does NOT drop a re-used label from an old plan",
 import socket as _socket  # noqa: E402
 import time as _time  # noqa: E402
 
-_real_open = _srv._open_with_retry
-_real_idle = _srv.ROUTER_IDLE_TIMEOUT
+_real_open = _rllm._open_with_retry
+_real_idle = _rllm.ROUTER_IDLE_TIMEOUT
 
 
 class _SilentResp:
@@ -223,21 +224,21 @@ class _SilentResp:
 
 
 _sock_stream, _sock_peer = _socket.socketpair()  # peer never writes -> silent
-_srv._open_with_retry = lambda req, timeout: _SilentResp(_sock_stream)
-_srv.ROUTER_IDLE_TIMEOUT = 30.0
+_rllm._open_with_retry = lambda req, timeout: _SilentResp(_sock_stream)
+_rllm.ROUTER_IDLE_TIMEOUT = 30.0
 _cancel = {"flag": False}
 _timer = threading.Timer(1.0, lambda: _cancel.__setitem__("flag", True))
 _t0 = _time.time()
 _timer.start()
 try:
-    _srv._router_stream([{"role": "user", "content": "x"}], "m",
-                        lambda ch, t: None, timeout=30,
-                        cancel=lambda: _cancel["flag"])
+    _rllm._router_stream([{"role": "user", "content": "x"}], "m",
+                         lambda ch, t: None, timeout=30,
+                         cancel=lambda: _cancel["flag"])
     _elapsed = _time.time() - _t0
 finally:
     _timer.cancel()
-    _srv._open_with_retry = _real_open
-    _srv.ROUTER_IDLE_TIMEOUT = _real_idle
+    _rllm._open_with_retry = _real_open
+    _rllm.ROUTER_IDLE_TIMEOUT = _real_idle
     _sock_stream.close()
     _sock_peer.close()
 check("H1 cancel breaks a SILENT router stream fast (<5s; idle budget 30s)",
@@ -253,12 +254,12 @@ def _open_dies(req, timeout):
     raise RuntimeError("router down")
 
 
-_srv._open_with_retry = _open_dies
+_rllm._open_with_retry = _open_dies
 try:
-    _srv._router_stream([{"role": "user", "content": "x"}], "m",
-                        lambda ch, t: None, timeout=5, cancel=lambda: True)
+    _rllm._router_stream([{"role": "user", "content": "x"}], "m",
+                         lambda ch, t: None, timeout=5, cancel=lambda: True)
 finally:
-    _srv._open_with_retry = _real_open
+    _rllm._open_with_retry = _real_open
 check("H2 abort does NOT enter the blocking non-streaming fallback",
       _calls["n"] == 1, "open_calls=%d" % _calls["n"])
 

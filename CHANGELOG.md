@@ -68,6 +68,22 @@ All notable changes to SparkForge are documented here. The format follows
   v315, v316, v321, v323). This extraction was driven by a new AST tool,
   `trash/split_move.py`, that moves a byte-exact line range, computes its DEFINES +
   FREE-NAMES dependency report and auto-generates the re-export import.
+- **`server.py` split, phase 3a: `rllm.py` (JAG-377).** The router / LLM backend I/O
+  moved to `rllm.py`: the model roster (`router_models`, `model_context_window`,
+  `default_model`, `model_loaded`, `router_ping`), the warm-up / load path
+  (`_router_load`, `ensure_model`, `_local_ref`, `_fire`), the token budget
+  (`context_budget` + the `CONTEXT_*`/`AUTOCOMPACT_*`/`COMPACT_*`/`SUMMARIZER_*`
+  constants), the streaming completion (`_router_stream`, `_open_with_retry`,
+  `_set_read_idle`, `_chat_endpoint`, `_completion_body`, `_reachable`,
+  `_reasoning_effort`, `MAX_TOKENS` + the repetition guard) and the
+  `selfcheck_payload` diagnostic. The router config (`ROUTER_BASE`/`ROUTER_RETRIES`/
+  `ROUTER_BACKOFF`/`ROUTER_BACKOFF_MAX`/`MODEL_LOAD_TIMEOUT`/`ROUTER_IDLE_TIMEOUT`)
+  now lives here and is re-exported. Two app-level globals stay in `server`
+  (`VERSION`, `AUTH_TOKEN`) and are read lazily from `selfcheck_payload` via
+  `from . import server`, so no import cycle. `server.py` 4,821 → 4,284 lines.
+  Battery 120/120 GREEN; three source-text tests repointed to `rllm.py` (v281, v305)
+  and `v195`'s H-section monkeypatches retargeted to `rllm` (it owns `_router_stream`
+  and the router config, so patching through `server` had stopped taking effect).
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async

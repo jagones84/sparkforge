@@ -52,7 +52,7 @@ off = server._completion_body("m", [], True, None)
 check("a None cap is omitted (router decides)", "max_tokens" not in off)
 
 # ------------------------------------------------------------------ source locks
-s = read("src", "sparkforge", "server.py")
+s = read("src", "sparkforge", "rllm.py")
 check("the default is 16384 and env-overridable",
       'os.environ.get("SPARKFORGE_MAX_TOKENS", "16384")' in s)
 check("the chat call passes the cap", "MAX_TOKENS or None" in s)

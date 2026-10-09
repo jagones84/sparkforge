@@ -102,7 +102,7 @@ check("the body keeps the OpenAI-compatible shape",
       S._completion_body("m", [{"role": "user", "content": "x"}], True).get("stream") is True)
 
 # --- 4) source wiring --------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "rllm.py"), encoding="utf-8") as f:
     srv = f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8") as f:
     av = f.read()
