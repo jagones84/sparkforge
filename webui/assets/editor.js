@@ -217,17 +217,23 @@ function buildDock() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTreeMenu(); });
 
   const saved = parseInt(localStorage.getItem(LS_W) || "", 10);
-  if (saved) dock.style.width = saved + "px";
+  if (saved) dock.style.width = Math.min(saved, _dockMaxW()) + "px";
   let dragging = false;
   state.resizeEl.addEventListener("mousedown", (e) => { dragging = true; e.preventDefault(); });
   window.addEventListener("mousemove", (e) => {
     if (!dragging) return;
+    // JAG-369: never let the dock grow so wide that it shoves the inspector off-screen.
+    // The app owns the panel widths + the chat floor and exports the cap; the drag is
+    // bounded by it (and by the viewport) so the inspector stays put. Only the arrows
+    // may hide a panel — a resize must not.
+    const z = (typeof window._pageScale === "function") ? window._pageScale() : 1;
     const right = dock.getBoundingClientRect().right;
-    const w = Math.min(_vw() - 120, Math.max(320, right - e.clientX));
+    const cap = Math.min(_vw() - 120, _dockMaxW());
+    const w = Math.min(cap, Math.max(320, (right - e.clientX) / z));
     dock.style.width = w + "px";
-    localStorage.setItem(LS_W, String(w));
+    localStorage.setItem(LS_W, String(Math.round(w)));
   });
-  window.addEventListener("mouseup", () => { dragging = false; });
+  window.addEventListener("mouseup", () => { if (dragging) { dragging = false; _notifyLayout(); } });
 
   // JAG-252: drag the splitter between the file tree and the editor to give more
   // room to the file being read. Width is remembered per browser.
@@ -256,11 +262,16 @@ function buildDock() {
    the dock's overlay decision matches the real layout even when window.innerWidth
    is stale (device emulation / visual viewport / zoom). */
 function _vw() { return document.documentElement.clientWidth || window.innerWidth; }
+/* JAG-369: the widest the dock may be without shoving the inspector (#rail) off-screen.
+   The app owns the panel widths and the chat floor, so it exports window._dockMaxW; fall
+   back to a plain viewport bound only if it is missing (should never happen). */
+function _dockMaxW() { return (typeof window._dockMaxW === "function") ? window._dockMaxW() : (_vw() - 120); }
 function applyResponsive() {
   if (!state.dock) return;
   const overlay = _vw() < 1024;
   state.dock.classList.toggle("ed-overlay", overlay);
-  state.dock.style.width = overlay ? "" : (parseInt(localStorage.getItem(LS_W) || "420", 10) + "px");
+  const saved = parseInt(localStorage.getItem(LS_W) || "420", 10);
+  state.dock.style.width = overlay ? "" : (Math.min(saved, _dockMaxW()) + "px");
 }
 
 function activeTab() { return state.tabs[state.active] || null; }

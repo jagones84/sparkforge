@@ -11,7 +11,9 @@ Locked here:
   * a panel that is a fixed DRAWER (narrow layout) is resized through a CSS var, with
     a grip glued to its inner edge (positionDrawerResizers);
   * the panel clamps account for the open editor dock (_dockRoomW), and opening or
-    closing the dock re-fits the panels (editor.js _notifyLayout -> _settleHandles).
+    closing the dock re-fits the panels (editor.js _notifyLayout -> _settleHandles);
+  * the dock itself can never grow so wide that it shoves the inspector off the right
+    edge (JAG-369): only the collapse arrows may hide a panel, a resize must not.
 Deterministic, no browser. Run: python3 tests/acceptance/v368_panel_resize.py
 """
 import os
@@ -70,7 +72,29 @@ check("C1 the panel clamp accounts for the open editor dock",
       and "over = (lw + rw) - (avail - CHAT_MIN_W - _dockRoomW(z))" in HTML, "")
 check("C2 opening/closing the dock re-fits the panels",
       "function _notifyLayout()" in EDITOR and "window._settleHandles" in EDITOR
-      and EDITOR.count("_notifyLayout();") == 2, "")
+      and EDITOR.count("_notifyLayout();") == 3, "")
+
+# --- D: the dock can NEVER shove the inspector off-screen (JAG-369) ------------
+# The dock is `flex: 0 0 auto`, so the flex algorithm never shrinks it. Dragging its
+# left edge wider than the room the two panels + the chat floor leave over-constrains
+# the row: it overflows to the RIGHT and #rail is pushed out of the viewport (clipped),
+# looking like the inspector vanished. Only the collapse arrows may hide a panel.
+check("D1 the app caps the dock by the room the panels + chat floor leave",
+      "function _dockMaxW()" in HTML
+      and "avail - side - CHAT_MIN_W" in HTML
+      and "window._dockMaxW = _dockMaxW;" in HTML, "")
+check("D2 the dock drag is bounded by that cap (not only the viewport)",
+      "function _dockMaxW()" in EDITOR
+      and "const cap = Math.min(_vw() - 120, _dockMaxW());" in EDITOR
+      and "Math.min(cap, Math.max(320," in EDITOR, "")
+check("D3 releasing the dock resize re-fits the panels",
+      "if (dragging) { dragging = false; _notifyLayout(); }" in EDITOR, "")
+check("D4 a restored dock width is clamped on (re)build and on every responsive pass",
+      "Math.min(saved, _dockMaxW())" in EDITOR
+      and EDITOR.count("_dockMaxW()") >= 4, "")
+check("D5 the fit maths also caps an already-too-wide dock (self-heal on resize/zoom)",
+      "dk.getBoundingClientRect().width / z > cap + 0.5" in HTML
+      and "dk.style.width = Math.round(cap)" in HTML, "")
 
 print("---")
 ok = sum(results)

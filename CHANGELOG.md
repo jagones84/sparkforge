@@ -283,13 +283,26 @@ All notable changes to SparkForge are documented here. The format follows
   `--drawer-w-right`) with its own persisted size (key `_d`). The panel clamps also now account for
   the open editor dock (`_dockRoomW`), and opening/closing the dock re-fits the panels so the row can
   never stay over-constrained (which is how a border ends up off-screen and undraggable).
+- **Dragging the editor's left edge shoved the inspector off-screen (JAG-369).** The editor dock is a
+  `flex: 0 0 auto` column, so the flex algorithm never shrinks it; once the chat column hit its 420 px
+  floor, widening the dock past the room the two side panels + the chat floor leave over-constrained
+  the row, which overflowed to the RIGHT and pushed `#rail` out of the viewport — the inspector was
+  clipped away, as if it had vanished. Only the collapse arrows may hide a panel; a resize must not.
+  Now the app exports `window._dockMaxW()` (the mirror of `_panelRoom()`, from the dock's side) and the
+  dock's drag/restore is capped by it (`editor.js`), the fit maths also caps an already-too-wide dock
+  so ANY re-fit (window resize, zoom, dock open) heals it, and releasing the drag re-fits the panels.
+  Verified live at a 1267 px viewport: a persisted 848 px dock is clamped to 320 and the inspector
+  returns to `ctxRight == vw`; dragging the grip to `clientX:-800` leaves `ctxRight == vw` (on-screen).
 
 ### Added
-- **`tests/acceptance/v368_panel_resize.py` (11 checks)** — the border grip runs on pointer
+- **`tests/acceptance/v368_panel_resize.py` (16 checks)** — the border grip runs on pointer
   events (mouse/finger/pen), carries `touch-action:none` and out-stacks the collapse handle; a
   fixed DRAWER is resized through a CSS var with a grip glued to its inner edge and its own
-  persisted size; a drawer is not treated as a layout column by the fit maths; and the panel
-  clamps account for the open editor dock while opening/closing the dock re-fits the panels.
+  persisted size; a drawer is not treated as a layout column by the fit maths; the panel
+  clamps account for the open editor dock while opening/closing the dock re-fits the panels;
+  and (JAG-369) the app caps the dock by the room the panels + chat floor leave, the dock drag
+  is bounded by that cap, the release re-fits the panels, a restored width is clamped, and the
+  fit maths self-heals an already-too-wide dock.
   Battery 119 → 120 (the README badge/one-liner were updated to match).
 - **`src/sparkforge/agency.py` + `scripts/seed_agent_roles.py` (JAG-365)** — map an org agent
   NAME to its role prompt in the local `agency-agents` clone (`by_name`, `role_for`,

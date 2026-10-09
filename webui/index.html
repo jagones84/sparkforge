@@ -5583,6 +5583,25 @@ function _dockRoomW(z) {
   const w = d.getBoundingClientRect().width;
   return w > 1 ? w / z : 0;
 }
+/* JAG-369: the editor dock is a `flex: 0 0 auto` column, so the flex algorithm never
+   shrinks it. If it grows wider than the room the two side panels + the chat floor
+   leave, the row overflows to the RIGHT and the inspector (#rail) is pushed off the
+   viewport — clipped away, as if it vanished. That must not happen: only the collapse
+   arrows may hide a panel. This is the mirror of _panelRoom(), from the dock's side. */
+function _dockMaxW() {
+  const z = _pageScale();
+  const app = document.getElementById("app");
+  const avail = ((app || document.body).getBoundingClientRect().width / z) - 10;  // 2 resizers
+  const shown = el => !!el && getComputedStyle(el).display !== "none"
+    && getComputedStyle(el).position !== "fixed";
+  let side = 0;
+  const sess = document.querySelector('[data-col="sessions"]');
+  const ctx = document.querySelector('[data-col="context"]');
+  if (shown(sess)) side += sess.getBoundingClientRect().width / z;
+  if (shown(ctx)) side += ctx.getBoundingClientRect().width / z;
+  return Math.max(320, avail - side - CHAT_MIN_W);
+}
+window._dockMaxW = _dockMaxW;
 /* Clamp BOTH panels so the chat keeps CHAT_MIN_W. Runs when a width is restored,
    the window resizes or the zoom changes — never while you drag (so the drag is
    exact), only when something else changed the available space. */
@@ -5593,6 +5612,13 @@ function _fitPanels() {
   const shown = el => !!el && getComputedStyle(el).display !== "none"
     && getComputedStyle(el).position !== "fixed";   // JAG-368: a fixed DRAWER is not a column
   const lv = shown(sess), rv = shown(ctx);
+  // JAG-369: the dock (a `0 0 auto` column) can shove the inspector off the right edge.
+  // Cap it here so ANY event that re-fits the row (window resize, zoom, dock open) heals it.
+  const dk = document.getElementById("editorDock");
+  if (dk && !dk.hidden && getComputedStyle(dk).position !== "fixed") {
+    const cap = _dockMaxW();
+    if (dk.getBoundingClientRect().width / z > cap + 0.5) dk.style.width = Math.round(cap) + "px";
+  }
   if (!lv && !rv) return;
   const app = document.getElementById("app");
   const avail = ((app || document.body).getBoundingClientRect().width / z) - 10;
