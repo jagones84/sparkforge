@@ -121,8 +121,8 @@ check("reconcile is idempotent (a second run fixes nothing)",
 
 # ------------------------------------------------------------------ source locks
 s = read("src", "sparkforge", "server.py")
-check("the single writer exists", "def _set_session_model(sid, model):" in s)
-check("the startup reconcile exists", "def reconcile_agent_models():" in s)
+check("the single writer exists", "def _set_session_model(sid, model):" in read("src", "sparkforge", "stores.py"))
+check("the startup reconcile exists", "def reconcile_agent_models():" in read("src", "sparkforge", "stores.py"))
 check("the session-model endpoint uses the single writer",
       'ref = _set_session_model(sid, body.get("model"))' in s)
 check("startup runs the reconcile",

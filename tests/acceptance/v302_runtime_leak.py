@@ -83,8 +83,8 @@ st = read("src", "sparkforge", "steering.py")
 check("drain_steer pops its key (no empty re-insert)",
       "return STEER_INBOX.pop(sess_id, [])" in st)
 check("delete path forgets the session runtime", "_forget_session_runtime(sid)" in s)
-check("runtime cleanup pops the ctx cache", "_REAL_PROMPT_TOKENS.pop(sid, None)" in s)
-check("runtime cleanup pops the turn lock", "_TURN_LOCKS.pop(sid, None)" in s)
+check("runtime cleanup pops the ctx cache", "_REAL_PROMPT_TOKENS.pop(sid, None)" in read("src", "sparkforge", "stores.py"))
+check("runtime cleanup pops the turn lock", "_TURN_LOCKS.pop(sid, None)" in read("src", "sparkforge", "stores.py"))
 
 print("---")
 passed = sum(results)

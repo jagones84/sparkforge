@@ -84,8 +84,8 @@ check("B4 a fresh session keeps climbing after a wipe", d > c, "c=%s d=%s" % (c,
 
 # ---- C: source wiring ------------------------------------------------------
 src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-check("C1 the counter persists a high-water mark", "_write_seq(n)" in src)
-check("C2 _max_job starts from the persisted seq", "best = _read_seq()" in src)
+check("C1 the counter persists a high-water mark", "_write_seq(n)" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
+check("C2 _max_job starts from the persisted seq", "best = _read_seq()" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
 
 print("---")
 ok = sum(1 for r in results if r)

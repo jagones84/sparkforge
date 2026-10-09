@@ -53,6 +53,21 @@ All notable changes to SparkForge are documented here. The format follows
   moved to `steering.py`. The inboxes + locks are re-imported as the same objects, so
   `_forget_session_runtime`'s cleanup sees the same state. `v302`'s source-lock for
   `drain_steer` repointed to `steering.py`.
+- **`server.py` split, phase 2f: `stores.py` (JAG-376).** The session / plan / task
+  persistence layer moved to `stores.py`: the on-disk session transcripts
+  (`load_session`/`save_session`/`append_message`), the plan + task stores, the
+  tombstone bookkeeping, the job / workspace numbering, the per-session runtime
+  clean-up (`clear_session`/`_forget_session_runtime`/`_purge_session_artifacts`) and
+  the append/persist helpers (`persist_tool_card`/`persist_inject`/`session_mark`/
+  `has_reply_since`/`reconcile_orphan_turns`). The path constants
+  (`DATA_DIR`/`SESSIONS_DIR`/`_JOBSEQ_FILE`/`WEBUI_DIR`) moved to `paths.py` so the
+  new module shares them without a cycle. `server.py` re-exports all 45 names, so
+  every `server.load_session` / `server.append_message` reference still resolves.
+  `server.py` 5,521 → 4,809 lines. Battery 120/120 GREEN; nine source-text
+  assertions repointed from `server.py` to `stores.py` (v293, v302, v309, v311, v314,
+  v315, v316, v321, v323). This extraction was driven by a new AST tool,
+  `trash/split_move.py`, that moves a byte-exact line range, computes its DEFINES +
+  FREE-NAMES dependency report and auto-generates the re-export import.
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async

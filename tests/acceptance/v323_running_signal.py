@@ -68,7 +68,7 @@ srv = read("src", "sparkforge", "server.py")
 check("B1 the server publishes chat.run on the global feed",
       'publish("chat.run"' in srv)
 check("B2 the session list reads the live active-turn registry",
-      "_active = set(_ACTIVE_CHAT.keys())" in srv)
+      "_active = set(_ACTIVE_CHAT.keys())" in read("src", "sparkforge", "stores.py"))
 
 ui = read("webui", "index.html")
 check("C1 the feed marks a session busy on chat.run",

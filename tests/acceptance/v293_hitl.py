@@ -47,7 +47,7 @@ check("the server gates via keepgoing.hitl_gate",
 check("the server persists the open list (hitl_open)",
       '"hitl_open": _hitl["open"]' in srv)
 check("append_message merges meta FLAT into the message",
-      "msg.update(meta)" in srv)
+      "msg.update(meta)" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
 
 # --- WebUI replay ----------------------------------------------------------
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:

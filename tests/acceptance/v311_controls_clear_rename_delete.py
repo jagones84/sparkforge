@@ -55,7 +55,7 @@ check("clear keeps the title", server.load_session(sid).get("title") == "clear-m
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     srv = f.read()
 check("POST /api/sessions/<sid>/clear route exists", 'path.endswith("/clear")' in srv)
-check("clear publishes session.cleared", 'publish("session.cleared"' in srv)
+check("clear publishes session.cleared", 'publish("session.cleared"' in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
 
 # ---- B: session RENAME (server-side contract) ------------------------------
 check("POST /api/sessions/<sid>/rename route exists", 'path.endswith("/rename")' in srv)

@@ -73,7 +73,8 @@ check("C1 clearing a missing session returns None", server.clear_session("nope-n
 src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
 check("D1 the endpoint uses the shared clearer", "clear_session(sid)" in src)
 check("D2 the clearer wipes the side stores",
-      'sess["tool_cards"] = []' in src and 'sess["injects"] = []' in src)
+      'sess["tool_cards"] = []' in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read()
+      and 'sess["injects"] = []' in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
 
 print("---")
 ok = sum(1 for r in results if r)
