@@ -38,6 +38,10 @@ All notable changes to SparkForge are documented here. The format follows
   5,818 lines. Battery 120/120 GREEN; two source-text tests repointed to `events.py`
   (`v298_perf` WAL/NORMAL pragmas, `v325` bracket definition) and `v325`'s C4 updated
   to the `feed_seq()` form.
+- **`server.py` split, phase 2c: `voice.py` (JAG-373).** The whisper STT /
+  sherpa-onnx TTS block moved to `voice.py` (self-contained: only `os`/`uuid`,
+  `DATA_DIR`, and `events.publish`). `server.py` re-exports `voice_status`/`voice_stt`/
+  `voice_tts` + the `WHISPER_*`/`SHERPA_*` constants for the `/api/voice` routes.
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async
