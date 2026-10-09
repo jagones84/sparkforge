@@ -223,7 +223,7 @@ function buildDock() {
   window.addEventListener("mousemove", (e) => {
     if (!dragging) return;
     const right = dock.getBoundingClientRect().right;
-    const w = Math.min(window.innerWidth - 120, Math.max(320, right - e.clientX));
+    const w = Math.min(_vw() - 120, Math.max(320, right - e.clientX));
     dock.style.width = w + "px";
     localStorage.setItem(LS_W, String(w));
   });
@@ -239,7 +239,7 @@ function buildDock() {
   window.addEventListener("mousemove", (e) => {
     if (!treeDragging) return;
     const left = state.treeEl.getBoundingClientRect().left;
-    const w = Math.min(window.innerWidth - 200, Math.max(90, e.clientX - left));
+    const w = Math.min(_vw() - 200, Math.max(90, e.clientX - left));
     state.treeEl.style.width = w + "px";
     localStorage.setItem(LS_TREE_W, String(w));
   });
@@ -252,9 +252,13 @@ function buildDock() {
   });
 }
 
+/* JAG-366: the LAYOUT viewport (clientWidth) — what the CSS media queries use — so
+   the dock's overlay decision matches the real layout even when window.innerWidth
+   is stale (device emulation / visual viewport / zoom). */
+function _vw() { return document.documentElement.clientWidth || window.innerWidth; }
 function applyResponsive() {
   if (!state.dock) return;
-  const overlay = window.innerWidth < 1024;
+  const overlay = _vw() < 1024;
   state.dock.classList.toggle("ed-overlay", overlay);
   state.dock.style.width = overlay ? "" : (parseInt(localStorage.getItem(LS_W) || "420", 10) + "px");
 }

@@ -210,9 +210,16 @@ def preview(session, message=None, budget_tokens=DEFAULT_BUDGET, keep_recent=DEF
     sess = server.load_session(session) if session else None
     if not sess:
         return {"error": "session not found: %s" % session}
-    sysp = server.SYSTEM_PROMPT
+    # JAG-366: use the REAL section-registry prompt (what `assemble_turn` sends),
+    # not the legacy monolithic constant — otherwise the budget/compaction maths
+    # ran against a ~64-token prompt and the preview LIED about what would be sent.
+    try:
+        sysp = server._system_prompt(sess)
+    except Exception:  # noqa: BLE001 — a dry-run must never raise
+        sysp = server.SYSTEM_PROMPT
     msgs, stats = build(sysp, sess.get("messages", []), message,
                         budget_tokens, keep_recent, retrieve_memory=False)
+    stats["system_prompt_tokens"] = count_tokens(sysp)
     # retrieval is reported separately so the check can observe memory hits
     hits = retrieve(message or (sess["messages"][-1]["content"] if sess["messages"] else ""))
     stats["retrieval_hits"] = len(hits)

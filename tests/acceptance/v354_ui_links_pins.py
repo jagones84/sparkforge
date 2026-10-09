@@ -124,6 +124,12 @@ check("B5 the task graph itself is untouched by compaction",
 check("B6 the always-on state section still names the open step",
       "open task XY" in S.context_summary(session_id="cc1"), "")
 
+# --- B7: the context PREVIEW uses the REAL system prompt (JAG-366) -----------
+_pv = CE.preview(S.get_or_create_session(None, title="preview-probe")["id"])
+check("B7 preview reports the REAL section-registry system prompt (not the legacy constant)",
+      "error" not in _pv and _pv.get("system_prompt_tokens", 0) > 1000,
+      "sys_tokens=%s" % _pv.get("system_prompt_tokens"))
+
 print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))

@@ -23,6 +23,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     HTML = f.read()
+with open(os.path.join(REPO, "webui", "assets", "editor.js"), encoding="utf-8") as f:
+    EDITOR = f.read()
 
 sys.path.insert(0, os.path.join(REPO, "src"))
 
@@ -136,6 +138,19 @@ check("D5 the bar colour comes from the same palette as the donut",
       "col: CTX_COLS[i % CTX_COLS.length]" in HTML, "")
 check("D6 the old stacked-bar class is still gone (no ctxbar substring)",
       ".ctxbar" not in HTML, "")
+
+# --- E: the JS responsiveness matches the CSS viewport (JAG-366) -------------
+check("E1 the app's overlay thresholds use the layout viewport (clientWidth)",
+      "function _vw() { return document.documentElement.clientWidth" in HTML
+      and "function _overlayLeft() { return _vw() <= 900; }" in HTML
+      and "function _overlayRight() { return _vw() <= 1100; }" in HTML
+      and "r.left < _vw() - 1" in HTML, "")
+check("E2 the editor dock's overlay decision + drag clamps use the layout viewport",
+      "function _vw() { return document.documentElement.clientWidth" in EDITOR
+      and "const overlay = _vw() < 1024;" in EDITOR
+      and "_vw() - 120" in EDITOR and "_vw() - 200" in EDITOR, "")
+check("E3 the viewport meta is mobile-ready (device-width + viewport-fit)",
+      'name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"' in HTML, "")
 
 print("---")
 ok = sum(results)

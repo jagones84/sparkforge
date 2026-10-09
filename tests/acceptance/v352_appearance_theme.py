@@ -143,11 +143,12 @@ check("K4 the handle position compensates the real page scale (engine-agnostic)"
 check("K5 a zoom change re-glues the handles",
       "_settleHandles();    // JAG-358: a zoom change rescales the page" in HTML, "")
 check("K6 a panel parked off screen is not treated as shown",
-      "r.right > 1 && r.left < innerWidth - 1" in HTML, "")
+      "r.right > 1 && r.left < _vw() - 1" in HTML, "")
 check("K7 the toggle thresholds match the CSS overlays (900 / 1100)",
       '_overlayLeft() ? "show-left" : "collapsed-left"' in HTML
       and '_overlayRight() ? "show-right" : "collapsed-right"' in HTML
-      and "return innerWidth <= 900" in HTML, "")
+      and "return _vw() <= 900" in HTML
+      and "return _vw() <= 1100" in HTML, "")
 
 print("---")
 ok = sum(results)

@@ -234,17 +234,36 @@ All notable changes to SparkForge are documented here. The format follows
   (`--force` overwrites), so a role you wrote is never clobbered. Applied live: **30 roles filled**
   (the 3 custom agents — Master, coder 1/2 — kept their own).
 
+- **The context PREVIEW understated the system prompt by thousands of tokens (JAG-366).** The
+  dry-run `context_engine.preview()` sized its budget, compaction and "messages that fit" maths
+  against the legacy monolithic `server.SYSTEM_PROMPT` (~64 tokens) instead of the REAL
+  section-registry prompt that `assemble_turn()` sends. The preview therefore LIED about what
+  would be sent. `preview()` now calls `server._system_prompt(sess)` (with a dry-run fallback
+  that can never raise) and reports `system_prompt_tokens`.
+- **The WebUI overflowed on a phone — the JS read a stale `window.innerWidth` (JAG-366).** The
+  app's overlay thresholds (`_overlayLeft`/`_overlayRight` and the "is this panel shown" test) and
+  the editor dock's overlay decision + both drag clamps read `window.innerWidth`, which can be
+  stale under device emulation / the visual viewport / zoom, while the CSS media queries use the
+  LAYOUT viewport (`document.documentElement.clientWidth`). Emulated at 390×844 the `#editorDock`
+  stayed ~1039px wide and the page scrolled sideways (scrollWidth 1438 vs clientWidth 390). Both
+  `webui/index.html` and `webui/assets/editor.js` now resolve the viewport through a shared
+  `_vw() = document.documentElement.clientWidth || window.innerWidth`, so the JS thresholds and
+  the CSS overlays can never disagree. The `width=device-width, initial-scale=1,
+  viewport-fit=cover` meta is asserted as well.
+
 ### Added
 - **`src/sparkforge/agency.py` + `scripts/seed_agent_roles.py` (JAG-365)** — map an org agent
   NAME to its role prompt in the local `agency-agents` clone (`by_name`, `role_for`,
   `fill_roles`) and backfill `data/roles/<sid>.md`, non-destructively. `v341_team_seed` grew four
   checks (Q1–Q4) to lock the materialised role + the no-clobber guarantee. Battery stays 119.
-- **`tests/acceptance/v364_queue_theme_links_ctx.py` (24 checks)** — a queued message carries its
+- **`tests/acceptance/v364_queue_theme_links_ctx.py` (27 checks)** — a queued message carries its
   attachments and the chip shows the text + a marker (not the raw blob); every theme previews its
   text + accent colour and no hardcoded status text colour survives; `_resolve_fs_arg` walks the
   workspace ancestors so a SIBLING-project link resolves (with a real temp-dir check that a
-  workspace-local path still wins and a missing path falls back); and the context breakdown is
-  sorted horizontal bars with short labels (the donut is kept). Battery 118 → 119.
+  workspace-local path still wins and a missing path falls back); the context breakdown is sorted
+  horizontal bars with short labels (the donut is kept); and (E1–E3) the app + editor dock resolve
+  the viewport through `document.documentElement.clientWidth`, with a mobile-ready viewport meta.
+  Battery 118 → 119. (`v354_ui_links_pins` gained B7: the preview reports the REAL system prompt.)
 - **`tests/acceptance/v362_agent_identity.py` (12 checks)** — every designated agent announces
   its roster identity in the `agent-role` prompt section even with no ROLE.md (and two agents
   get DIFFERENT sections), the ROLE.md is appended under the identity, a plain session still

@@ -5641,8 +5641,12 @@ bindResizer($("resize-right"), '[data-col="context"]', -1, "sf_w_right");
    The thresholds must match the CSS exactly — the sessions panel is a drawer at
    <=900, the inspector at <=1100 — otherwise the arrow toggles a class that has
    no CSS and the click looks dead. */
-function _overlayLeft() { return innerWidth <= 900; }
-function _overlayRight() { return innerWidth <= 1100; }
+/* JAG-366: use the LAYOUT viewport (clientWidth) — the SAME width the CSS media
+   queries use — so the JS thresholds can never disagree with the CSS overlays.
+   `window.innerWidth` can be stale (device emulation / visual viewport / zoom). */
+function _vw() { return document.documentElement.clientWidth || window.innerWidth; }
+function _overlayLeft() { return _vw() <= 900; }
+function _overlayRight() { return _vw() <= 1100; }
 function toggleLeftPanel() {
   document.body.classList.toggle(_overlayLeft() ? "show-left" : "collapsed-left");
   _settleHandles();
@@ -5662,7 +5666,7 @@ function _panelShown(sel) {
   if (cs.display === "none" || cs.visibility === "hidden") return false;
   const r = el.getBoundingClientRect();
   if (r.width <= 1 || r.height <= 1) return false;
-  return r.right > 1 && r.left < innerWidth - 1;
+  return r.right > 1 && r.left < _vw() - 1;
 }
 /* JAG-357: the topbar shows the active session's name whenever the sessions panel
    is not on screen, so hiding the panel never hides which session you are in. */
