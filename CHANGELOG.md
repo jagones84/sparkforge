@@ -42,6 +42,11 @@ All notable changes to SparkForge are documented here. The format follows
   sherpa-onnx TTS block moved to `voice.py` (self-contained: only `os`/`uuid`,
   `DATA_DIR`, and `events.publish`). `server.py` re-exports `voice_status`/`voice_stt`/
   `voice_tts` + the `WHISPER_*`/`SHERPA_*` constants for the `/api/voice` routes.
+- **`server.py` split, phase 2d: `tracing.py` (JAG-374).** `RunTrace`, `get_run_trace`,
+  `runs_summary`, the `count_tokens` proxy, `MODEL_PRICES` and the shared
+  `_REAL_PROMPT_TOKENS`/`_REAL_CACHED_TOKENS` token dicts moved to `tracing.py`
+  (deps: `events.db`/`events._db_lock` + `otel_tracing`). `server.py` re-exports them;
+  the token dicts are re-imported as the same objects (mutated, never rebound).
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async
