@@ -84,6 +84,11 @@ All notable changes to SparkForge are documented here. The format follows
   Battery 120/120 GREEN; three source-text tests repointed to `rllm.py` (v281, v305)
   and `v195`'s H-section monkeypatches retargeted to `rllm` (it owns `_router_stream`
   and the router config, so patching through `server` had stopped taking effect).
+- **`server.py` split, phase 3b: `evals.py` (JAG-378).** The gold-task eval harness
+  (`EVAL_DIR`/`GOLD_PATH`/`EVAL_RESULTS_DIR`, `eval_list_tasks`, `_is_subsequence`,
+  `eval_score`, `eval_run`) moved to `evals.py`. It calls the agent loop via a lazy
+  `from .server import agent_run` inside `eval_run`, so there is no import cycle.
+  `server.py` re-exports the names. `server.py` 4,284 → 4,215 lines. Battery 120/120.
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async
