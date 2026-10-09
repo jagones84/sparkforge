@@ -108,6 +108,17 @@ with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encodin
     oui = f.read()
 check("the Orbit deck edits the same role API",
       '"/api/roles?session="' in oui and 'data-p="role"' in oui)
+# JAG-367: the Orbit prompt editor must SHOW the fetched ROLE.md. It loads it ASYNC,
+# but render()'s dirty-guard (added to protect an in-progress edit from the 5s poll)
+# also blocked that load render, so the textarea stayed "" and looked VOID even though
+# the same ROLE.md the primary UI shows had content. The fix writes the fetched text
+# straight into the textarea instead of relying on a (blocked) re-render.
+check("the Orbit prompt editor writes the fetched ROLE.md into the textarea",
+      "if (this.open !== sid) return;" in oui
+      and "const ta = $(\"agBody\").querySelector('textarea[data-p=\"role\"]');" in oui
+      and "if (ta) ta.value = this.openText;" in oui, "")
+check("the Orbit prompt load no longer depends on a render the poll guard can block",
+      "this.openText = (r && r.text) || \"\";\n      this.render(null, null);" not in oui, "")
 
 print("---")
 passed = sum(results)

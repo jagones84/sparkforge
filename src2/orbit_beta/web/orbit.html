@@ -358,8 +358,15 @@ class AgentsView {
       if (this.open === sid){ this.open = null; this.openText = null; this.render(null, null); return; }
       this.open = sid; this.openText = ""; this.render(null, null);
       const r = await this.api.get("/api/roles?session=" + encodeURIComponent(sid));
+      if (this.open !== sid) return;
+      // JAG-367: the ROLE.md loads ASYNC, but render()'s dirty-guard (meant to protect
+      // an in-progress edit from the 5s poll) blocked THIS render too: the textarea
+      // still held "" while openText became the fetched text, so roleDirty was true and
+      // the box stayed VOID even though the SAME ROLE.md the main app shows had content.
+      // Write the fetched role straight into the textarea instead of re-rendering.
       this.openText = (r && r.text) || "";
-      this.render(null, null);
+      const ta = $("agBody").querySelector('textarea[data-p="role"]');
+      if (ta) ta.value = this.openText;
     }; });
     body.querySelectorAll("[data-close]").forEach(b => { b.onclick = () => { this.open = null; this.openText = null; this.render(null, null); }; });
     body.querySelectorAll("[data-save]").forEach(b => { b.onclick = async () => {

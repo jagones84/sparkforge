@@ -250,20 +250,42 @@ All notable changes to SparkForge are documented here. The format follows
   `_vw() = document.documentElement.clientWidth || window.innerWidth`, so the JS thresholds and
   the CSS overlays can never disagree. The `width=device-width, initial-scale=1,
   viewport-fit=cover` meta is asserted as well.
+- **The Bridge agent prompt was VOID while the primary UI showed the same ROLE.md (JAG-367).**
+  In the Bridge (`/orbit`) the `✎ prompt` box opened EMPTY even though the SAME `ROLE.md` the
+  primary Inspector § Role shows had content (the JAG-365 backfill). Root cause: the box loads the
+  role ASYNC, but `render()`'s anti-poll dirty-guard — added to protect an in-progress edit from
+  the 5 s table refresh — ALSO blocked the LOAD render: the textarea still held `""` while
+  `openText` became the fetched text, so `roleDirty` was true and the box was never filled. JAG-365
+  merely EXPOSED this latent race (before it, the fetched text was `""` too, so nothing diverged).
+  The fetched role is now written straight into the textarea (with an `open !== sid` guard against
+  a stale response). Verified live on the Bridge: the editor shows the EXACT ROLE.md (e.g. 15 455
+  chars == the API response), i.e. the Bridge prompt and the primary UI are finally identical.
+- **On a phone the WebUI clipped its right edge (JAG-367).** The desktop
+  `[data-col="chat"] { min-width: 420px }` floor forced the page wider than the screen — measured
+  on the REAL Pixel 8: visual viewport 363 px but the layout was forced to 420 px — and
+  `body{overflow-x:hidden}` then CUT the right edge (the send button and the 5th tab were partly
+  unreachable). A `@media (max-width: 900px) { [data-col="chat"] { min-width: 0; } }` override now
+  drops that floor. It sits AFTER the base rule on purpose: same specificity, so source order is
+  what lets it win (the first attempt put it in the earlier `max-width:900` block and lost).
+  Verified on the device via CDP: `scrollWidth == clientWidth == 363`, the send button and all five
+  tabs (`chat/sessions/tasks/context/feed`) now fully visible.
 
 ### Added
 - **`src/sparkforge/agency.py` + `scripts/seed_agent_roles.py` (JAG-365)** — map an org agent
   NAME to its role prompt in the local `agency-agents` clone (`by_name`, `role_for`,
   `fill_roles`) and backfill `data/roles/<sid>.md`, non-destructively. `v341_team_seed` grew four
   checks (Q1–Q4) to lock the materialised role + the no-clobber guarantee. Battery stays 119.
-- **`tests/acceptance/v364_queue_theme_links_ctx.py` (27 checks)** — a queued message carries its
+- **`tests/acceptance/v364_queue_theme_links_ctx.py` (28 checks)** — a queued message carries its
   attachments and the chip shows the text + a marker (not the raw blob); every theme previews its
   text + accent colour and no hardcoded status text colour survives; `_resolve_fs_arg` walks the
   workspace ancestors so a SIBLING-project link resolves (with a real temp-dir check that a
   workspace-local path still wins and a missing path falls back); the context breakdown is sorted
-  horizontal bars with short labels (the donut is kept); and (E1–E3) the app + editor dock resolve
-  the viewport through `document.documentElement.clientWidth`, with a mobile-ready viewport meta.
-  Battery 118 → 119. (`v354_ui_links_pins` gained B7: the preview reports the REAL system prompt.)
+  horizontal bars with short labels (the donut is kept); and (E1–E4) the app + editor dock resolve
+  the viewport through `document.documentElement.clientWidth`, the viewport meta is mobile-ready,
+  and on a phone the chat column drops its desktop 420 px floor (no right-edge clip).
+  Battery 118 → 119. (`v354_ui_links_pins` gained B7: the preview reports the REAL system prompt;
+  `v292_roles` gained two checks: the Orbit prompt editor writes the fetched ROLE.md into the
+  textarea and no longer depends on a re-render the poll guard can block.)
 - **`tests/acceptance/v362_agent_identity.py` (12 checks)** — every designated agent announces
   its roster identity in the `agent-role` prompt section even with no ROLE.md (and two agents
   get DIFFERENT sections), the ROLE.md is appended under the identity, a plain session still

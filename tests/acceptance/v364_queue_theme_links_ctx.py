@@ -151,6 +151,9 @@ check("E2 the editor dock's overlay decision + drag clamps use the layout viewpo
       and "_vw() - 120" in EDITOR and "_vw() - 200" in EDITOR, "")
 check("E3 the viewport meta is mobile-ready (device-width + viewport-fit)",
       'name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"' in HTML, "")
+check("E4 on a phone the chat column drops its desktop 420px floor (no right-edge clip)",
+      '[data-col="chat"] { min-width: 0; }' in HTML
+      and 'min-width: 420px; display: flex; flex-direction: column' in HTML, "")
 
 print("---")
 ok = sum(results)

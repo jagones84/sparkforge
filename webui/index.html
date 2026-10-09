@@ -514,6 +514,12 @@
   [data-col="sessions"] { flex: 0 0 220px; width: 220px; min-width: 150px; border-right: 1px solid var(--line); overflow-y: auto; }
   [data-col="chat"]     { flex: 1 1 0%; min-width: 420px; display: flex; flex-direction: column; min-height: 0; }
   [data-col="context"]  { flex: 0 0 238px; width: 238px; min-width: 150px; border-left: 1px solid var(--line); border-right: 0; overflow: hidden; min-height: 0; }
+  /* JAG-367: on a phone the desktop 420px chat floor forced the page wider than the
+     screen (real Pixel 8: visual viewport 363px, layout forced to 420px) and
+     body{overflow-x:hidden} CLIPPED the right edge (send button + last tab cut).
+     This override MUST sit AFTER the [data-col="chat"] base rule above: same
+     specificity, so source order decides which min-width wins. */
+  @media (max-width: 900px) { [data-col="chat"] { min-width: 0; } }
   /* JAG-150: the right rail is now a collapsible inspector (see #inspector) */
   .toolcard-head { cursor: pointer; }
   .toolcard.expanded .toolcard-body { display: block; }
