@@ -37,6 +37,16 @@ from . import routing  # v0.3: role-based model selection + fallback chain
 from . import sandbox
 from . import taskgraph  # v0.6: per-run LLM task graph (write_todos, live, interactive)
 
+# JAG-370: mechanical split of this module. The optional beta hooks, the SSE
+# plumbing / think coalescer, and the prose-tolerant text helpers now live in
+# bridge / sse / textkit and are re-exported here, so every existing reference
+# (`server.sse_pump`, `server.extract_json`, `server.ThinkCoalescer`, ...) keeps
+# working unchanged.
+from .bridge import _orbit_handle, _orbit_page
+from .sse import (CHAT_THINK_FLUSH_S, CHAT_THINK_LIVE_CAP, ThinkCoalescer,
+                  sse_response, sse_pump)
+from .textkit import extract_json, strip_think
+
 from .paths import REPO_ROOT as REPO
 DATA_DIR = os.path.join(REPO, "data")
 # Session store. Overridable so tests/CI can run against a scratch directory
@@ -46,46 +56,7 @@ SESSIONS_DIR = os.environ.get("SPARKFORGE_SESSIONS_DIR") or os.path.join(DATA_DI
 _JOBSEQ_FILE = os.path.join(SESSIONS_DIR, ".jobseq")
 WEBUI_DIR = os.path.join(REPO, "webui")
 
-# JAG-285: optional "Orbit" beta console that lives OUTSIDE the app, in `src2/`.
-# It is ENTIRELY detachable: if `src2/` is deleted or fails to import, these hooks
-# become no-ops and the app is untouched. The beta may only ADD routes; it can
-# never shadow an existing one.
-_SRC2_DIR = os.path.join(REPO, "src2")
-_orbit_cache = {"mod": None, "tried": False}
-
-
-def _orbit_module():
-    """Return the optional `orbit_beta` module, or None. Never raises."""
-    if not _orbit_cache["tried"]:
-        _orbit_cache["tried"] = True
-        try:
-            import sys as _sys
-            if os.path.isdir(_SRC2_DIR) and _SRC2_DIR not in _sys.path:
-                _sys.path.insert(0, _SRC2_DIR)
-            import orbit_beta  # type: ignore
-            _orbit_cache["mod"] = orbit_beta
-        except Exception:  # noqa: BLE001 - the beta must never break the app
-            _orbit_cache["mod"] = None
-    return _orbit_cache["mod"]
-
-
-def _orbit_page(handler, path):
-    """Serve the beta shell (public), if present. Return True if it answered."""
-    mod = _orbit_module()
-    try:
-        return bool(mod and mod.serve_page(handler, path))
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _orbit_handle(handler, method, path, qs, body):
-    """Let the beta answer an API route, if present. Return True if it did."""
-    mod = _orbit_module()
-    try:
-        return bool(mod and mod.handle(handler, method, path, qs, body))
-    except Exception:  # noqa: BLE001
-        return False
-
+# The optional "Bridge" (former "Orbit") beta hooks moved to `bridge.py` (JAG-370).
 
 # Static assets for the WebUI (vendored editor libs, css, images). Served
 # read-only from webui/assets with an extension whitelist so a crafted path can
@@ -135,14 +106,8 @@ MODEL_LOAD_TIMEOUT = int(os.environ.get("SPARKFORGE_MODEL_LOAD_TIMEOUT", 900))
 #                        finishes the stream itself (error + done) and closes.
 ROUTER_IDLE_TIMEOUT = float(os.environ.get("SPARKFORGE_ROUTER_IDLE_TIMEOUT", 120.0))
 CHAT_STREAM_IDLE = float(os.environ.get("SPARKFORGE_CHAT_STREAM_IDLE", 900.0))
-# JAG-265: chain-of-thought (`think`) deltas stream per-token. On a fast model that
-# is dozens of `chat.delta` events/s going to BOTH the SSE stream AND the durable
-# feed — the WebUI render queue falls behind and the page LOOKS frozen while the
-# server is perfectly healthy. Coalesce consecutive think chunks into one delta
-# emitted at most every CHAT_THINK_FLUSH_S, and cap the LIVE think text so a runaway
-# monologue cannot flood the client. The full text is still kept on the tool card.
-CHAT_THINK_FLUSH_S = float(os.environ.get("SPARKFORGE_THINK_FLUSH_S", "0.08"))
-CHAT_THINK_LIVE_CAP = int(os.environ.get("SPARKFORGE_THINK_LIVE_CAP", "20000"))
+# JAG-370: the think-coalescing constants + ThinkCoalescer moved to `sse.py`
+# (imported above, so `server.CHAT_THINK_FLUSH_S` and friends still resolve).
 
 # --------------------------------------------------------------- sqlite ----
 
@@ -1491,14 +1456,6 @@ def selfcheck_payload(host="127.0.0.1", port=8790, llm_probe=True):
     }
 
 
-def strip_think(text):
-    """Split optional <think>...</think> out of content."""
-    m = re.search(r"<think>(.*?)</think>", text, re.S)
-    if m:
-        return text[: m.start()] + text[m.end():], m.group(1)
-    return text, None
-
-
 def _open_with_retry(req, timeout):
     """urlopen with exponential backoff on 503 (router: model not loaded).
 
@@ -2245,69 +2202,6 @@ def state_block(session_id=None, graph_key=None):
     """
     return ("Harness state (your persistent task list):\n"
             + context_summary(session_id=session_id, graph_key=graph_key))
-
-
-def _iter_json_objects(text):
-    """Every balanced top-level JSON object/array found in `text`, in order.
-
-    Models frequently wrap their action JSON in prose ("Here is the plan. {..} Now
-    I proceed. {..}") or emit SEVERAL actions in one message. The old
-    first-`{`..last-`}` slice swallowed the prose between the objects and failed
-    to parse, so the turn fell through to "announce and stop". This scanner walks
-    the text with a brace/quote-aware cursor and yields each complete value
-    independently.
-    """
-    objs, i, n = [], 0, len(text)
-    while i < n:
-        if text[i] in "{[":
-            depth, instr, esc, start = 0, False, False, i
-            j = i
-            while j < n:
-                c = text[j]
-                if instr:
-                    if esc:
-                        esc = False
-                    elif c == "\\":
-                        esc = True
-                    elif c == '"':
-                        instr = False
-                else:
-                    if c == '"':
-                        instr = True
-                    elif c in "{[":
-                        depth += 1
-                    elif c in "}]":
-                        depth -= 1
-                        if depth == 0:
-                            break
-                j += 1
-            if depth == 0 and j < n:
-                try:
-                    objs.append(json.loads(text[start:j + 1]))
-                except Exception:  # noqa: BLE001 — skip an unparseable blob
-                    pass
-                i = j + 1
-                continue
-        i += 1
-    return objs
-
-
-def extract_json(text):
-    """First JSON value in `text` (prose-tolerant, multi-object safe).
-
-    Tolerates prose around and BETWEEN objects: returns the FIRST complete
-    {"action": ...} the model emitted, so the chat/agent loop acts on it instead
-    of dropping the whole turn.
-    """
-    text = (text or "").strip()
-    if not text:
-        return None
-    try:
-        return json.loads(text)
-    except Exception:
-        pass
-    objs = _iter_json_objects(text)
-    return objs[0] if objs else None
 
 
 def start_run_graph(run_id, goal, session_id=None, model=None, on_event=None,
@@ -4683,142 +4577,6 @@ def _int_arg(qs, key, default):
     clean response. Any malformed value falls back to `default`.
     """
     return _as_int(qs.get(key, default), default)
-
-
-def sse_close(handler):
-    """v0.6.1 (JAG-48): end an SSE response for good.
-
-    The HTTP/1.0 shutdown was not enough: the generator (and with it the
-    socket) stayed open whenever the upstream model call stalled, so clients
-    that wait for EOF (`curl -N`, the mobile app's HttpURLConnection with
-    readTimeout=0) froze on `busy` and could not send the next message.
-    Flush, mark the connection non-reusable and send the EOF explicitly.
-    """
-    try:
-        handler.wfile.flush()
-    except Exception:  # noqa: BLE001 — client already gone
-        pass
-    handler.close_connection = True
-    try:
-        handler.connection.shutdown(socket.SHUT_WR)  # FIN → client sees EOF now
-    except Exception:  # noqa: BLE001
-        pass
-
-
-def sse_response(handler, gen, keepalive=False):
-    """Write an SSE stream and close it when the generator ends.
-
-    `keepalive=True` is reserved for `/api/feed` (and the blackboard watcher):
-    those streams are loopback tails that stay open on purpose, so the socket
-    gets SO_KEEPALIVE. Every other stream (`/api/chat/stream`,
-    `/api/agent/run`) is terminal: after its `done` event the generator is
-    exhausted and the connection is closed immediately.
-    """
-    handler.send_response(200)
-    handler.send_header("Content-Type", "text/event-stream")
-    handler.send_header("Cache-Control", "no-store")
-    handler.send_header("Connection", "close")
-    handler.end_headers()
-    if keepalive:
-        try:
-            handler.connection.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        except Exception:  # noqa: BLE001
-            pass
-    try:
-        for chunk in gen:
-            handler.wfile.write(chunk.encode("utf-8"))
-            handler.wfile.flush()
-    except (BrokenPipeError, ConnectionResetError):
-        pass
-    finally:
-        sse_close(handler)
-
-
-def sse_pump(q, worker, open_comment=": stream open\n\n", terminal="done",
-             idle_timeout=None):
-    """Drain a producer queue into SSE frames, then stop for good.
-
-    v0.6.1 (JAG-48): the stream is *terminal* — it ends with exactly one
-    terminal `done` and the caller closes the socket.
-    Two guards make that unconditional, so the connection can never linger:
-      * the producer thread dying without its sentinel ends the stream, and
-      * `idle_timeout` seconds without a single event ends the stream with an
-        `error` + `done` instead of waiting on a stalled upstream forever.
-    v1.6.9 (JAG-60): while the producer is silent (blocked on the approval
-    gate, or a slow first token) we emit an SSE comment `: ping` every ~10s so
-    mobile networks/proxies don't idle-abort the channel ("connection abort").
-    """
-    yield open_comment  # first bytes out immediately → the client sees 200
-    deadline = time.time() + idle_timeout if idle_timeout else None
-    idle_s = 0.0
-    while True:
-        try:
-            item = q.get(timeout=1.0)
-        except queue.Empty:
-            if deadline is not None and time.time() > deadline:
-                yield "event: error\ndata: %s\n\n" % json.dumps(
-                    {"error": "chat stream timed out after %.0fs of silence" % idle_timeout})
-                break
-            if not worker.is_alive():
-                break  # producer gone without a sentinel: never hang the client
-            idle_s += 1.0
-            # JAG-79: shorter heartbeat (5s) so mobile NAT/proxies don't idle-abort
-            # a chat stream during a silent gap (a tool call, an MCP recovery).
-            if idle_s >= 5.0:
-                idle_s = 0.0
-                yield ": ping\n\n"  # heartbeat: keeps the SSE channel alive
-            continue
-        if item is None:
-            break
-        idle_s = 0.0
-        if deadline is not None:
-            deadline = time.time() + idle_timeout
-        yield item
-    yield "event: %s\ndata: {}\n\n" % terminal
-
-
-class ThinkCoalescer:
-    """JAG-265: coalesce per-token chain-of-thought deltas into bounded flushes.
-
-    `feed(channel, text)` accumulates consecutive `think` chunks and emits them as
-    ONE delta at most every `flush_s` seconds (and once the live text hits `cap`),
-    so a fast reasoning model cannot flood the SSE stream / durable feed with
-    dozens of events per second. Any non-think channel flushes the pending CoT
-    first, preserving ordering. `flush()` is called at turn end for the tail.
-    """
-
-    def __init__(self, emit, flush_s=None, cap=None, clock=time.time):
-        self._emit = emit
-        self._flush_s = CHAT_THINK_FLUSH_S if flush_s is None else flush_s
-        self._cap = CHAT_THINK_LIVE_CAP if cap is None else cap
-        self._clock = clock
-        self._buf = ""
-        self._t0 = clock()
-        self._total = 0
-        self._capped = False
-
-    def feed(self, channel, text):
-        if channel != "think":
-            self.flush()
-            self._emit(channel, text)
-            return
-        if self._capped:
-            return
-        self._total += len(text)
-        self._buf += text
-        if self._total >= self._cap:
-            self._capped = True
-            self._buf += "\n… (live thinking truncated)"
-        if self._capped or (self._clock() - self._t0) >= self._flush_s:
-            self.flush()
-
-    def flush(self):
-        if not self._buf:
-            return
-        text = self._buf
-        self._buf = ""
-        self._t0 = self._clock()
-        self._emit("think", text)
 
 
 def _should_autoplan(jid, graph, autonomous, message):

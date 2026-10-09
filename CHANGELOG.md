@@ -6,6 +6,21 @@ All notable changes to SparkForge are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **`server.py` split, phase 1 (JAG-370).** The external review was right on one
+  point: `server.py` was a 6,432-line / 309 KB god-file. Three self-contained leaf
+  clusters moved out, mechanically, with the module keeping thin re-exports so every
+  existing `server.<name>` reference still resolves (`server.sse_pump`,
+  `server.extract_json`, `server.ThinkCoalescer`, ...):
+  - `bridge.py` — the optional `src2/` "Bridge" beta hooks; the app's only coupling
+    to the beta is now one file wide.
+  - `sse.py` — SSE plumbing (`sse_close`/`sse_response`/`sse_pump`) + `ThinkCoalescer`
+    and the two think-coalescing constants.
+  - `textkit.py` — `strip_think`, `_iter_json_objects`, `extract_json`.
+  `server.py` 6,432 → 6,190 lines. Battery 120/120 GREEN; the split is proven by
+  compile + import + re-export checks. One source-text assertion in
+  `tests/acceptance/v285_orbit_beta.py` was repointed from `server.py` to `bridge.py`.
+
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async
   side-effects with fixed `time.sleep()` calls (v204 memory TTL, v222 concurrent
@@ -295,6 +310,9 @@ All notable changes to SparkForge are documented here. The format follows
   returns to `ctxRight == vw`; dragging the grip to `clientX:-800` leaves `ctxRight == vw` (on-screen).
 
 ### Added
+- **`src/README.md` (JAG-370)** — states plainly which tree ships: `src/sparkforge/`
+  is the application (what `run.sh` / `python3 server.py` import and what `tests/`
+  exercise); the sibling `src2/` is the optional, detachable Bridge beta.
 - **`tests/acceptance/v368_panel_resize.py` (16 checks)** — the border grip runs on pointer
   events (mouse/finger/pen), carries `touch-action:none` and out-stacks the collapse handle; a
   fixed DRAWER is resized through a CSS var with a grip glued to its inner edge and its own

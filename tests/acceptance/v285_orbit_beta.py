@@ -134,17 +134,20 @@ if orbit_beta:
           ok is True and fh6.sent["obj"].get("ok") is False)
 
 # --- 5) detachability: server reaches the beta only via guarded hooks ---------
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+# JAG-370: the hooks moved to `bridge.py`; server.py imports them from there.
+with open(os.path.join(REPO, "src", "sparkforge", "bridge.py"), encoding="utf-8") as f:
     srv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+    server_src = f.read()
 check("the server never imports the beta at the top level (no hard dependency)",
-      "\nimport orbit_beta" not in srv)
-check("the server exposes a swallowing _orbit_module()",
+      "\nimport orbit_beta" not in server_src and "\nimport orbit_beta" not in srv)
+check("the bridge exposes a swallowing _orbit_module()",
       "def _orbit_module(" in srv and "except Exception:" in srv
       and "_orbit_cache[\"mod\"] = None" in srv)
 check("the server serves the beta page only behind a guarded hook",
-      "if _orbit_page(self, path):" in srv)
+      "if _orbit_page(self, path):" in server_src)
 check("the server delegates beta API routes on every method",
-      all(("_orbit_handle(self, %r" % m).replace("'", '"') in srv
+      all(("_orbit_handle(self, %r" % m).replace("'", '"') in server_src
           for m in ("GET", "POST", "PATCH", "DELETE")))
 
 # --- 6) the UI is OOP + self-contained ---------------------------------------
