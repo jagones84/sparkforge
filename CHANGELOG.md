@@ -20,6 +20,12 @@ All notable changes to SparkForge are documented here. The format follows
   `server.py` 6,432 → 6,190 lines. Battery 120/120 GREEN; the split is proven by
   compile + import + re-export checks. One source-text assertion in
   `tests/acceptance/v285_orbit_beta.py` was repointed from `server.py` to `bridge.py`.
+- **`server.py` split, phase 2a: `keys.py` (JAG-371).** API-key management
+  (`ENV_FILE`, `KNOWN_ENV_KEYS`, `_env_file_upsert`, `set_key`, `reveal_key`,
+  `keys_status`) extracted to `keys.py` — a clean leaf (only `os` + lazy
+  `providers`/`mcp_client`). `server.py` re-exports the names, so `server.set_key`
+  / `server.ENV_FILE` / `server.keys_status` still resolve. `server.py` 6,190 →
+  6,048 lines. Battery 120/120 GREEN; verified by compile + import + re-export.
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async
