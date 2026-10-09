@@ -74,6 +74,8 @@ check("decide(int id) -> clean error dict",
 # ---- _body() must yield {} for a non-object JSON body (static guard) ----
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     py = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+    py += f.read()
 check("_body returns a dict only",
       "return parsed if isinstance(parsed, dict) else {}" in py)
 

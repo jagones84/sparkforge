@@ -139,6 +139,8 @@ with open(os.path.join(REPO, "src", "sparkforge", "bridge.py"), encoding="utf-8"
     srv = f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     server_src = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+    server_src += f.read()
 check("the server never imports the beta at the top level (no hard dependency)",
       "\nimport orbit_beta" not in server_src and "\nimport orbit_beta" not in srv)
 check("the bridge exposes a swallowing _orbit_module()",

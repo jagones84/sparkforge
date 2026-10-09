@@ -53,6 +53,8 @@ check("meter budget follows the resolved model",
 # static guard: the /api/context handler routes through the resolver
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     sv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+    sv += f.read()
 check("JAG-258 /api/context uses resolve_ctx_model",
       "resolve_ctx_model(load_session(_sid)" in sv)
 check("JAG-258 resolver is the single source (explicit > session > default)",

@@ -78,7 +78,7 @@ check("the live turn's active-chat entry is still dropped",
 srv.clear_abort(SID2)
 
 # ------------------------------------------------------------- source locks
-s = read("src", "sparkforge", "server.py")
+s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 st = read("src", "sparkforge", "steering.py")
 check("drain_steer pops its key (no empty re-insert)",
       "return STEER_INBOX.pop(sess_id, [])" in st)

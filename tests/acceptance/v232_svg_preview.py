@@ -77,6 +77,8 @@ with open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8
     av = f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     sv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+    sv += f.read()
 check("_fs_raw uses an allow-list (_SAFE_PREVIEW)", "_SAFE_PREVIEW" in av)
 check("_fs_raw no longer blanket-allows image/*",
       'ctype.startswith("image/")' not in av)

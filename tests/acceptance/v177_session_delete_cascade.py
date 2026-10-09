@@ -79,6 +79,7 @@ assert len(survivors) == 6, "delete touched another session: %r" % survivors
 
 # wiring: the HTTP DELETE handler must call the cascade helper
 src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
 assert "_purge_session_artifacts(sid)" in src, "DELETE handler is not wired to the cascade"
 
 print("RESULT: ALL OK")

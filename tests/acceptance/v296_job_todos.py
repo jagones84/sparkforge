@@ -89,7 +89,7 @@ check("add_node tags the node with the graph jid", '"jid": graph.get("jid")' in 
 
 # JAG-301: the job tag is per-TURN — a manual turn must clear it, else a finished
 # job's tag lingered and mislabelled later todos (the same J2/J3 confusion).
-s = read("src", "sparkforge", "server.py")
+s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 check("chat_stream_gen takes a per-turn jid",
       "def chat_stream_gen(sess, message, model, mark=None, autonomous=False, jid=None," in s)
 check("the turn writes its jid onto the graph", '_existing["jid"] = jid' in s)

@@ -110,7 +110,7 @@ check("replayed event id stays int", bool(replayed) and isinstance(replayed[-1].
       "got %r" % (replayed[-1].get("id") if replayed else None))
 
 # ------------------------------------------------------------- raw upload cap
-s = read("src", "sparkforge", "server.py")
+s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 check("raw uploads cap the Content-Length read", s.count("self.rfile.read(min(n, MAX_BODY_BYTES))") >= 2)
 
 # --------------------------------------------------- feed replay is bounded

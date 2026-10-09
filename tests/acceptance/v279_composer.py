@@ -78,6 +78,8 @@ del os.environ["SPARKFORGE_ATTACH_MAX"]
 # --- 2) server route ----------------------------------------------------------
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     srv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+    srv += f.read()
 check("server exposes the raw upload route", 'path == "/api/attach"' in srv)
 check("the route calls attach_save", "api_v02.attach_save(" in srv)
 

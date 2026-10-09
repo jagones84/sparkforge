@@ -172,7 +172,7 @@ def read(rel):
         return f.read()
 
 
-sv = read("server.py")
+sv = read("server.py") + read("httpapi.py")
 mv = read("meta.py")
 av = read("api_v02.py")
 acv = read("acp.py")

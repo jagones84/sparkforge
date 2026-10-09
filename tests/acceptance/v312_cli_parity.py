@@ -80,6 +80,7 @@ check("tools accepts the preset actions",
 
 # --- HTTP routes the CLI calls must exist server-side ------------------------
 srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+srv += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
 orch = open(os.path.join(REPO, "src", "sparkforge", "orchestration.py"), encoding="utf-8").read()
 check("server serves /api/sessions/<sid>/clear", 'path.endswith("/clear")' in srv)
 check("server serves /api/sessions/<sid>/model", 'path.endswith("/model")' in srv)

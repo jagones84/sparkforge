@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 from sparkforge import context_engine  # noqa: E402
 from sparkforge import server          # noqa: E402
+from sparkforge import httpapi         # noqa: E402
 
 context_engine.retrieve = lambda *a, **k: []   # skip the embedder
 results = []
@@ -89,6 +90,8 @@ def fake_llm(messages, model=None, meta=None):
 
 server._summarize_with_llm = fake_llm
 server.publish = lambda *a, **k: None
+httpapi._summarize_with_llm = fake_llm   # JAG-379: compact_session + its summarizer live in httpapi
+httpapi.publish = lambda *a, **k: None
 
 
 def mk(sid, pairs):

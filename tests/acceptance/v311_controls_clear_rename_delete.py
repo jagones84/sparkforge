@@ -54,6 +54,8 @@ check("clear keeps the title", server.load_session(sid).get("title") == "clear-m
 # the route must exist in the server source (wired, not just a helper)
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     srv = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+    srv += f.read()
 check("POST /api/sessions/<sid>/clear route exists", 'path.endswith("/clear")' in srv)
 check("clear publishes session.cleared", 'publish("session.cleared"' in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
 

@@ -111,7 +111,7 @@ except Exception as e:  # noqa: BLE001
 
 # ---- E: wiring across the codebase ----------------------------------------
 t = read("src", "sparkforge", "taskgraph.py")
-s = read("src", "sparkforge", "server.py")
+s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 j = read("src", "sparkforge", "jobs.py")
 o = read("src2", "orbit_beta", "web", "orbit.html")
 i = read("webui", "index.html")

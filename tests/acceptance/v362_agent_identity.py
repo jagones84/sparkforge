@@ -51,6 +51,8 @@ with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     HTML = f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     SRV = f.read()
+with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+    SRV += f.read()
 
 # --- A: the agent identity is really in the prompt ---------------------------
 t1 = prompt._provider_role({"id": "sess_a1"}, None, None)

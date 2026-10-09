@@ -88,7 +88,24 @@ All notable changes to SparkForge are documented here. The format follows
   (`EVAL_DIR`/`GOLD_PATH`/`EVAL_RESULTS_DIR`, `eval_list_tasks`, `_is_subsequence`,
   `eval_score`, `eval_run`) moved to `evals.py`. It calls the agent loop via a lazy
   `from .server import agent_run` inside `eval_run`, so there is no import cycle.
-  `server.py` re-exports the names. `server.py` 4,284 → 4,215 lines. Battery 120/120.
+  `server.py` re-exports the names. `server.py` 4,284 → 4,217 lines. Battery 120/120.
+- **`server.py` split, phase 4: `httpapi.py` (JAG-379).** The entire HTTP / JSON
+  API layer moved out: the `ThreadingHTTPServer` `Handler`, the bearer-token check
+  (`check_auth`/`AUTH_TOKEN`), every `/api/*` route (chat + agent SSE streams
+  `chat_stream_gen`/`agent_stream_gen`, sessions, plan/tasks, the context meter
+  `context_status`/`context_items`/`context_usage`/`resolve_ctx_model`, manual
+  compaction `compact_session`/`_summarize_with_llm`, tools, voice, feed, telemetry,
+  the attach/raw-upload routes, static assets, the optional beta Bridge pages) and
+  the process entrypoint `main()`. The module is imported at the **bottom** of
+  `server.py`, so its `from .server import (...)` resolves against a fully-populated
+  module with no import cycle; `server.py` re-exports the 29 names (so `server.Handler`,
+  `server.main`, `server._tool_context`, `server._system_prompt`, `server.context_display`
+  still resolve — the agent loop calls the latter three). `AUTH_TOKEN` stays the single
+  source in `httpapi`; `main()` mirrors it onto `server.AUTH_TOKEN` for the lazy read in
+  `selfcheck_payload`. `server.py` 4,217 → 2,582 lines. Battery 120/120 GREEN plus a live
+  boot smoke test (`/api/build`, `/api/selfcheck` reporting version + auth, `/api/status`).
+  Repointed the source-text guards (27 tests now read `server.py` + `httpapi.py`) and
+  `v214`'s summarizer monkeypatch (retargeted to `httpapi`, which owns `compact_session`).
 
 ### Fixed
 - **Determinism of the regression battery.** Four acceptance tests awaited async

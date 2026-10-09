@@ -123,6 +123,7 @@ check("the purge lists an agent release", any(r.startswith("agent:") or r.endswi
 
 # ---- D: source wiring (the handler really calls release + purge role) -------
 srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+srv += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
 check("session delete calls agents release", "agents_mod.REGISTRY.release(sid)" in srv)
 check("purge includes the role file", "roles_mod.path_for(sid)" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
 jbs = open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8").read()

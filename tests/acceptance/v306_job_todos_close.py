@@ -71,7 +71,7 @@ check("an existing plan with steps is not re-planned",
       server._should_autoplan(None, tg.load(SID), True, LONG) is False)
 
 # ------------------------------------------------------------------ source locks
-s = read("src", "sparkforge", "server.py")
+s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 check("the auto-plan gate exists", "def _should_autoplan(jid, graph, autonomous, message)" in s)
 check("the fallback planner is gated on the gate",
       "_should_autoplan(jid, _g, autonomous, message)" in s)

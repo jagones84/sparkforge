@@ -88,7 +88,7 @@ server.turn_end(SID2, t2)
 check("B2 the current token clears it", _row(SID2).get("running") is False)
 
 # ---- wiring: every entry point uses the bracket ---------------------------
-srv = read("src", "sparkforge", "server.py")
+srv = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 ev = read("src", "sparkforge", "events.py")
 check("C1 the shared bracket lives in events.py and is re-exported by server",
       "def turn_begin(" in ev and "def turn_end(" in ev and "turn_begin" in srv)

@@ -64,7 +64,7 @@ check("A3 clearing the turn clears the flag",
       _row("v323run").get("running") is False, str(_row("v323run")))
 
 # ---- wiring ---------------------------------------------------------------
-srv = read("src", "sparkforge", "server.py")
+srv = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 check("B1 the server publishes chat.run on the global feed",
       'publish("chat.run"' in srv)
 check("B2 the session list reads the live active-turn registry",

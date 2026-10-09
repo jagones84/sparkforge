@@ -87,7 +87,7 @@ def read(rel):
         return f.read()
 
 
-sv = read("server.py")
+sv = read("server.py") + read("httpapi.py")
 cev = read("context_engine.py")
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()

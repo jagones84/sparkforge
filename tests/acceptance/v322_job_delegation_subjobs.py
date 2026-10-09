@@ -134,6 +134,7 @@ check("F2 renaming a session can set the agent name",
 
 # ---- wiring ---------------------------------------------------------------
 serv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+serv += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
 jobsrc = open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8").read()
 agsrc = open(os.path.join(REPO, "src", "sparkforge", "agents.py"), encoding="utf-8").read()
 check("G1 chat_stream_gen carries sender/subjob",

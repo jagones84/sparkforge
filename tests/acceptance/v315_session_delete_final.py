@@ -85,6 +85,7 @@ check("B3 the tombstone survives a reload", SID in server._DELETED_SESSIONS)
 
 # ---- C: source wiring ------------------------------------------------------
 src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
 check("C1 the delete handler persists tombstones", "_persist_tombstones()" in src)
 check("C2 a deleted id is not silently recreated", "if _gone:" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
 check("C3 the old unconditional discard is gone", "_DELETED_SESSIONS.discard(sid)" not in src)
