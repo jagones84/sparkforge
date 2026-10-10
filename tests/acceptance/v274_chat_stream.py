@@ -102,6 +102,18 @@ check("server does NOT inject a chat turn on replan",
 check("replan branch only re-plans + publishes the feed event",
       "replan_from_model" in _branch and 'publish("graph.replanned"' in _branch)
 
+# --- JAG-385: the live CoT lives ONLY inline in the chat -----------------------
+# It used to be written twice: the inline "chain-of-thought (live)" block AND the
+# mobile-only `#cotDrawer` strip at the bottom. On a phone the same monologue
+# scrolled in both places. Keep the inline block, drop the drawer entirely.
+check("the mobile CoT drawer is gone from the markup", 'id="cotDrawer"' not in html)
+check("no cotDrawer/cotFeed plumbing remains",
+      "cotDrawer" not in html and "cotFeed" not in html and "cotText" not in html)
+check("the live CoT is written inline into the chat block",
+      "function ensureThink()" in html
+      and "const el = ensureThink();" in html
+      and "el.textContent = t;" in html)
+
 print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))

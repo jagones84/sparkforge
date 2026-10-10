@@ -218,6 +218,16 @@ All notable changes to SparkForge are documented here. The format follows
   "Adesso analizzo", "Then I'll …"), so the harness gets its "last word": it nudges the model
   to call the tool NOW or conclude. Verified deterministically with the exact live reply. New
   `v384` (10/10); battery 122 → 123.
+- **The live chain-of-thought was rendered TWICE on mobile (JAG-385).** `_writeThink()`
+  wrote every reasoning chunk to BOTH the inline chat block (`ensureThink()`, the
+  `🧠 chain-of-thought (live)…` `<details>`) AND the mobile-only `#cotDrawer` strip at the
+  bottom of the screen — so on a phone the same monologue scrolled in two places. The
+  bottom strip is removed entirely (markup, its CSS, the `@media` `display:block`, the
+  `cotFeed()` helper and its call, and the now-dead `cotText` state/closures); the live CoT
+  now lives ONLY inline in the chat. Verified live (Chrome DevTools, 412×915 touch): no
+  `#cotDrawer` element, `cotFeed`/`cotText` are `undefined`, and a `pushThink`/`flushThink`
+  probe lands in exactly ONE inline `.think` block (`msg ai`) with zero bottom strip.
+  `v274` extended (3 guards); battery stays 123/123.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire
