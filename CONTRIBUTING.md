@@ -71,7 +71,7 @@ pytest tests/properties/   # Hypothesis property tests
 
 | Path | What |
 |---|---|
-| `src/longrun/` | the harness package (server, agents, jobs, teams, taskgraph, tools, providers, …) |
+| `src/longrun/` | the harness package, organised in subpackages (`core/`, `agent/`, `orchestrate/`, `plan/`, `tools/`, `model/`, `memory/`, `interop/`, `util/`) |
 | `src/longrun/orbit/` | the Orbit command deck (`/orbit`) |
 | `webui/` | the main single-file WebUI |
 | `tests/acceptance/` | the deterministic gate (auto-discovered) |

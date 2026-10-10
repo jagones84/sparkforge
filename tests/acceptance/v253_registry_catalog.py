@@ -19,7 +19,7 @@ os.environ.setdefault("LONGRUN_CONFIG_DIR", os.path.join(TMP, "cfg"))
 os.environ.setdefault("LONGRUN_SESSIONS_DIR", os.path.join(TMP, "sessions"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import registry  # noqa: E402
+from longrun.tools import registry  # noqa: E402
 
 results = []
 
@@ -80,7 +80,7 @@ finally:
     registry._external_tools = orig
 
 # static guards
-with open(os.path.join(REPO, "src", "longrun", "registry.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "tools/registry.py"), encoding="utf-8") as f:
     src = f.read()
 check("catalog snapshots external tools once", "ext = _external_tools()" in src)
 check("catalog passes the snapshot to tool_spec", "tool_spec(name, ext)" in src)
@@ -91,3 +91,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

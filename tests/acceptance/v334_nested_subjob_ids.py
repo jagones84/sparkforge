@@ -16,7 +16,7 @@ TMP = tempfile.mkdtemp(prefix="sf-334-")
 os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun.jobs import plan_subjobs, subjob_id  # noqa: E402
+from longrun.orchestrate.jobs import plan_subjobs, subjob_id  # noqa: E402
 
 results = []
 
@@ -41,7 +41,7 @@ check("B3 each nested subjob still records the job as `parent`",
 check("B4 nested deps reference the nested ids (not the flat ones)",
       subs["J8.1.2"]["deps"] == ["J8.1.1"], str({k: v["deps"] for k, v in subs.items()}))
 
-with open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orchestrate/jobs.py"), encoding="utf-8") as f:
     src = f.read()
 check("C1 plan_subjobs accepts parent_sub", "def plan_subjobs(jid, agents, coord, plan, deps, parent_sub=None)" in src)
 check("C2 the id builder nests", "def subjob_id(jid, n, parent_sub=None)" in src)
@@ -50,3 +50,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

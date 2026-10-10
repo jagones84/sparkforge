@@ -40,7 +40,11 @@ def check(name, ok, detail=""):
     print("%s %s%s" % ("PASS" if ok else "FAIL", name, (" :: " + str(detail)) if detail else ""))
 
 
-from longrun import server, jobs, agents, roles, routines  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import roles  # noqa: E402
+from longrun.orchestrate import routines  # noqa: E402
 
 # NEVER let wake()/dispatch() spawn a real worker: the daemon thread would still
 # be running at interpreter exit and segfault the process (exit 139). Stub the
@@ -122,14 +126,14 @@ check("the purge lists an agent release", any(r.startswith("agent:") or r.endswi
                                               for r in removed) or True)
 
 # ---- D: source wiring (the handler really calls release + purge role) -------
-srv = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-srv += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
+srv = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+srv += open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8").read()
 check("session delete calls agents release", "agents_mod.REGISTRY.release(sid)" in srv)
-check("purge includes the role file", "roles_mod.path_for(sid)" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
-jbs = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
+check("purge includes the role file", "roles_mod.path_for(sid)" in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read())
+jbs = open(os.path.join(REPO, "src", "longrun", "orchestrate/jobs.py"), encoding="utf-8").read()
 check("job delete scrubs dependents", "_scrub_blocker" in jbs)
 check("missing blocker is tolerated", 'if bj is None:' in jbs)
-ags = open(os.path.join(REPO, "src", "longrun", "agents.py"), encoding="utf-8").read()
+ags = open(os.path.join(REPO, "src", "longrun", "agent/agents.py"), encoding="utf-8").read()
 check("agent release scrubs jobs + routines",
       "scrub_agent" in ags and "delete_for_agent" in ags)
 
@@ -137,3 +141,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

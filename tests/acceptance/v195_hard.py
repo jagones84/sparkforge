@@ -34,9 +34,11 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import registry, taskgraph, tools  # noqa: E402
-from longrun import server as _srv  # noqa: E402
-from longrun import rllm as _rllm  # noqa: E402  (owns _router_stream + router cfg)
+from longrun.tools import registry  # noqa: E402
+from longrun.plan import taskgraph  # noqa: E402
+from longrun.tools import tools  # noqa: E402
+from longrun.core import server as _srv  # noqa: E402
+from longrun.model import rllm as _rllm  # noqa: E402  (owns _router_stream + router cfg)
 
 results = []
 
@@ -299,3 +301,4 @@ finally:
 
 print("\n==== %d/%d checks passed ====" % (sum(results), len(results)))
 sys.exit(0 if all(results) else 1)
+

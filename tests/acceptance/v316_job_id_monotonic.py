@@ -28,7 +28,7 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(TMP, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -83,11 +83,12 @@ d = new_session("d")
 check("B4 a fresh session keeps climbing after a wipe", d > c, "c=%s d=%s" % (c, d))
 
 # ---- C: source wiring ------------------------------------------------------
-src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-check("C1 the counter persists a high-water mark", "_write_seq(n)" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
-check("C2 _max_job starts from the persisted seq", "best = _read_seq()" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
+src = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+check("C1 the counter persists a high-water mark", "_write_seq(n)" in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read())
+check("C2 _max_job starts from the persisted seq", "best = _read_seq()" in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read())
 
 print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

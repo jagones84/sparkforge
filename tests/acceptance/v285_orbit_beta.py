@@ -135,11 +135,11 @@ if orbit_beta:
 
 # --- 5) detachability: server reaches the deck only via guarded hooks ---------
 # JAG-370: the hooks live in `bridge.py`; JAG-393: the deck moved into the package.
-with open(os.path.join(REPO, "src", "longrun", "bridge.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent/bridge.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     server_src = f.read()
-with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8") as f:
     server_src += f.read()
 
 
@@ -176,3 +176,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

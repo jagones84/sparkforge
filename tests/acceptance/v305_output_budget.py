@@ -35,7 +35,7 @@ def read(*parts):
         return f.read()
 
 
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 # --- the default cap must clear the router's 4096 ---------------------------------
 check("the output cap is generous (> 4096)", server.MAX_TOKENS > 4096,
@@ -52,7 +52,7 @@ off = server._completion_body("m", [], True, None)
 check("a None cap is omitted (router decides)", "max_tokens" not in off)
 
 # ------------------------------------------------------------------ source locks
-s = read("src", "longrun", "rllm.py")
+s = read("src", "longrun", "model/rllm.py")
 check("the default is 16384 and env-overridable",
       'os.environ.get("LONGRUN_MAX_TOKENS", "16384")' in s)
 check("the chat call passes the cap", "MAX_TOKENS or None" in s)
@@ -61,3 +61,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

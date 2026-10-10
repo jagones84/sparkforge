@@ -24,7 +24,9 @@ os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import agents, teams, jobs  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import teams  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
 from longrun.orbit import api as orbit_api  # noqa: E402
 
 results = []
@@ -72,3 +74,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

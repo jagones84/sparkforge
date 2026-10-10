@@ -33,7 +33,7 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(TMP, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -84,13 +84,14 @@ server._load_tombstones()
 check("B3 the tombstone survives a reload", SID in server._DELETED_SESSIONS)
 
 # ---- C: source wiring ------------------------------------------------------
-src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-src += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8").read()
 check("C1 the delete handler persists tombstones", "_persist_tombstones()" in src)
-check("C2 a deleted id is not silently recreated", "if _gone:" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
+check("C2 a deleted id is not silently recreated", "if _gone:" in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read())
 check("C3 the old unconditional discard is gone", "_DELETED_SESSIONS.discard(sid)" not in src)
 
 print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

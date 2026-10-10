@@ -30,8 +30,8 @@ for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
     os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import taskgraph as TG   # noqa: E402
-from longrun import server as S       # noqa: E402
+from longrun.plan import taskgraph as TG   # noqa: E402
+from longrun.core import server as S       # noqa: E402
 
 results = []
 
@@ -89,9 +89,9 @@ check("_term_action rejects a real tool name", not S._term_action({"action": "sh
 check("_term_action rejects a harness action", not S._term_action({"action": "update_todos"}))
 
 # --- 4) the retry NAMES the emitted action + the UI shows the reason ----------
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8") as f:
     srv += f.read()
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()
@@ -118,3 +118,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

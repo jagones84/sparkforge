@@ -72,18 +72,20 @@ through the **approval gate** and the **sandbox**; observations are fed back; th
 (`goal_reached · no_progress · budget · blocked`). Every step is published to the event
 bus and persisted, so a reload rebuilds the transcript and the task graph.
 
-## Components (`src/longrun/`)
+## Components (`src/longrun/`, organised in subpackages)
 
-| Area | Modules |
+| Subpackage | Modules |
 |---|---|
-| Core server | `server.py`, `api_v02.py`, `forge.py` |
-| Agents & orchestration | `agents.py`, `jobs.py`, `orchestration.py`, `teams.py`, `subagent.py`, `swarm.py` |
-| Planning / execution | `taskgraph.py`, `keepgoing.py`, `difficulty.py`, `bestofn.py`, `prm.py`, `heldout.py`, `verify.py` |
-| Tools & safety | `tools.py`, `registry.py`, `approvals.py`, `sandbox.py`, `hooks.py`, `edits.py`, `term.py` |
-| Models | `providers.py`, `routing.py`, `context_engine.py`, `prompt.py`, `runmetrics.py`, `otel_tracing.py` |
-| Knowledge | `memory.py`, `skills.py`, `rules.py`, `roles.py`, `checkpoints.py` |
-| Interop | `mcp.py`, `mcp_client.py`, `mcp_server.py`, `acp.py` |
-| Cross-cutting | `osutil.py` (all platform specifics), `paths.py`, `routines.py`, `meta.py`, `selfevolve.py`, `improve.py` |
+| `core/` | `server.py`, `api_v02.py`, `httpapi.py`, `sse.py`, `events.py`, `forge.py` |
+| `agent/` | `agent.py`, `agents.py`, `subagent.py`, `bridge.py`, `agency.py`, `swarm.py` |
+| `orchestrate/` | `jobs.py`, `orchestration.py`, `teams.py`, `routines.py`, `roles.py` |
+| `plan/` | `taskgraph.py`, `keepgoing.py`, `difficulty.py`, `bestofn.py`, `prm.py`, `heldout.py`, `verify.py` |
+| `tools/` | `tools.py`, `registry.py`, `approvals.py`, `sandbox.py`, `hooks.py`, `edits.py`, `term.py` |
+| `model/` | `providers.py`, `routing.py`, `context_engine.py`, `prompt.py`, `runmetrics.py`, `otel_tracing.py`, `rllm.py`, `keys.py`, `costs.py` |
+| `memory/` | `memory.py`, `skills.py`, `rules.py`, `checkpoints.py`, `stores.py` |
+| `interop/` | `mcp.py`, `mcp_client.py`, `mcp_server.py`, `acp.py` |
+| `util/` | `osutil.py`, `paths.py`, `textkit.py`, `steering.py`, `tracing.py`, `voice.py`, `evals.py`, `meta.py`, `selfevolve.py`, `improve.py` |
+| `orbit/` | the mission-control deck (`/orbit`) |
 
 ## Data stores (`data/`, gitignored)
 
@@ -112,4 +114,5 @@ or `bwrap` / `nsjail`) so the agent never touches the host. Hard-denied patterns
 
 The repo-root `server.py`, `forge.py`, `mcp_server.py` are **launcher shims** (they put
 `src/` on `sys.path` and call the package `main()`). Real code lives in
-`src/longrun/`; the modules use relative imports and cannot run standalone.
+`src/longrun/<subpackage>/`; modules import each other with absolute
+`from longrun.<subpackage> import ...` paths.

@@ -21,7 +21,7 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -54,9 +54,9 @@ check("A7 the system-prompt line is ACCURATE (re-sent per request, KV-cached)",
 server._harness_start_note(server.load_session("v332s"))
 check("A6 the marker is idempotent (never duplicated)", len(_markers()) == 1)
 
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     src = f.read()
-with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8") as f:
     src += f.read()
 check("B1 chat_once calls it on the FIRST turn only",
       "_harness_start_note(sess)" in src
@@ -69,3 +69,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

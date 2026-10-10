@@ -35,7 +35,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from longrun import approvals  # noqa: E402
+from longrun.tools import approvals  # noqa: E402
 from longrun.orbit import api as oapi  # noqa: E402
 from longrun.orbit.decisions import DecisionQueue  # noqa: E402
 
@@ -136,3 +136,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

@@ -25,9 +25,9 @@ def check(name, ok, detail=""):
 
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8") as f:
     srv += f.read()
 
 # --- 1) gradual app zoom ------------------------------------------------------
@@ -68,3 +68,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

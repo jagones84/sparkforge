@@ -29,7 +29,9 @@ os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import agents, jobs, taskgraph as tg  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
+from longrun.plan import taskgraph as tg  # noqa: E402
 
 results = []
 
@@ -107,15 +109,16 @@ except Exception as e:  # noqa: BLE001
     check("C1 the constellation takes only the latest plan's todos", False, str(e))
 
 # ---- D: wiring ------------------------------------------------------------
-src = read("src", "longrun", "jobs.py")
+src = read("src", "longrun", "orchestrate/jobs.py")
 check("D1 the runner opens a fresh plan on a RE-RUN",
       'if _g.get("jid") == jid:' in src and "begin_plan(_g)" in src)
 check("D2 subjob_todos uses the latest-plan scope", "latest_plan_nodes([" in src)
 apy = read("src", "longrun", "orbit", "api.py")
 check("D3 the constellation view uses the shared scope",
-      "from longrun.jobs import latest_plan_nodes" in apy)
+      "from longrun.orchestrate.jobs import latest_plan_nodes" in apy)
 
 print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

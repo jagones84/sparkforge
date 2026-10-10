@@ -32,10 +32,10 @@ os.environ["LONGRUN_RUNS_DIR"] = os.path.join(tmp, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 
-from longrun import memory as mem   # noqa: E402
-from longrun import tools           # noqa: E402
-from longrun import taskgraph as tg  # noqa: E402
-from longrun import registry        # noqa: E402
+from longrun.memory import memory as mem   # noqa: E402
+from longrun.tools import tools           # noqa: E402
+from longrun.plan import taskgraph as tg  # noqa: E402
+from longrun.tools import registry        # noqa: E402
 
 mem.DATA_DIR = os.path.join(tmp, "memory")
 mem.CORE_PATH = os.path.join(mem.DATA_DIR, "core.md")
@@ -147,3 +147,4 @@ shutil.rmtree(tmp, ignore_errors=True)
 ok = sum(results)
 print("\nv212: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

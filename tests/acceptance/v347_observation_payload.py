@@ -15,7 +15,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import tools  # noqa: E402
+from longrun.tools import tools  # noqa: E402
 
 results = []
 
@@ -78,3 +78,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

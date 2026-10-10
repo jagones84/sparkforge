@@ -32,7 +32,8 @@ check_all = os.path.join(suite, "check_all.py")
 with open(check_all, "w", encoding="utf-8") as f:
     f.write("print('judge: invariants ok')\n")
 
-from longrun import heldout, selfevolve  # noqa: E402
+from longrun.plan import heldout  # noqa: E402
+from longrun.util import selfevolve  # noqa: E402
 
 results = []
 
@@ -113,3 +114,4 @@ shutil.rmtree(tmp, ignore_errors=True)
 ok = sum(results)
 print("\nv205: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

@@ -1,6 +1,6 @@
 import pytest
 from hypothesis import given, strategies as st
-from longrun import server as prompt
+from longrun.core import server as prompt
 
 @given(st.text(), st.text())
 def test_extract_json_property(before, after):
@@ -33,3 +33,4 @@ def test_extract_json_valid_dict(d):
     payload = f"Here is the result:\n```json\n{json.dumps(d)}\n```\nDone."
     result = prompt.extract_json(payload)
     assert result == d
+

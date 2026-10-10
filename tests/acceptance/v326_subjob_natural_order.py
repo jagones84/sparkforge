@@ -22,7 +22,7 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun.jobs import plan_subjobs, subjob_num  # noqa: E402
+from longrun.orchestrate.jobs import plan_subjobs, subjob_num  # noqa: E402
 
 results = []
 
@@ -52,7 +52,7 @@ check("B2 the bug is real: a string sort misorders them", sorted(subs.keys()) !=
 check("B3 numeric order is stable and total", sorted(got, key=subjob_num) == expect)
 
 # ---- wiring ---------------------------------------------------------------
-src = read("src", "longrun", "jobs.py")
+src = read("src", "longrun", "orchestrate/jobs.py")
 check("C1 the coordinator's delegation record sorts naturally",
       'key=lambda x: subjob_num(x.get("id"))' in src)
 orbit = read("src", "longrun", "orbit", "web", "orbit.html")
@@ -63,3 +63,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

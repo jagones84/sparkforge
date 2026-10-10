@@ -27,7 +27,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from longrun import jobs  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
 
 reg = jobs.JOBS
 reg._run = lambda jid: None  # never spawn a real worker
@@ -61,3 +61,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

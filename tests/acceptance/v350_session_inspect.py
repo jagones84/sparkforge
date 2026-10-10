@@ -29,7 +29,9 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import registry, server, tools  # noqa: E402
+from longrun.tools import registry  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.tools import tools  # noqa: E402
 
 results = []
 
@@ -105,10 +107,10 @@ r = tools._sessions({"action": "read", "session": "../etc/passwd"}, None)
 check("D3 traversal-shaped id is refused", r.get("ok") is False, "")
 
 # --- E: source wiring -------------------------------------------------------
-src = open(os.path.join(REPO, "src", "longrun", "tools.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "tools/tools.py"), encoding="utf-8").read()
 check("E1 _sessions is defined", "def _sessions(" in src, "")
 check("E2 it is dispatched", '"sessions": _sessions' in src, "")
-jobs = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
+jobs = open(os.path.join(REPO, "src", "longrun", "orchestrate/jobs.py"), encoding="utf-8").read()
 check("E3 the delegation carries the teammate session id", "[session %s]" in jobs, "")
 check("E4 the delegation tells the master to use `sessions`",
       "sessions{action:'read'" in jobs, "")
@@ -117,3 +119,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

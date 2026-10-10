@@ -123,7 +123,7 @@ run with an unverified policy. You need an LLM: a local **llama.cpp router**
 The core is **pure stdlib** (PyYAML is its only third-party import, and it is
 pure-Python), so there are no compiled wheels to build — any OS/architecture
 with **CPython 3.10+** runs it identically. The only OS-specific code lives in one place,
-[`src/longrun/osutil.py`](src/longrun/osutil.py): shell spawn
+[`src/longrun/util/osutil.py`](src/longrun/util/osutil.py): shell spawn
 (`/bin/sh -c` ↔ `cmd /c`), process-tree kill (`SIGTERM/SIGKILL` ↔ `taskkill /T /F`) and
 `PATH`/`PATHEXT` resolution (`npx` ↔ `npx.cmd`).
 
@@ -152,6 +152,30 @@ for the mission-control deck. Auth (optional but recommended) is a bearer token:
 cp deploy/longrun.service ~/.config/systemd/user/
 systemctl --user enable --now longrun.service
 ```
+
+### Mobile — open on your phone (installable as an app)
+
+The WebUI is an installable **PWA**: expose the server, open it once on the phone,
+then "Add to Home screen".
+
+1. Start bound to all interfaces, with a token:
+   ```bash
+   ./run.sh --host 0.0.0.0 --token <your-token>
+   ```
+2. Copy the ready URL the server prints at startup — it already carries the LAN IP
+   and the token:
+   ```
+   Open on your phone: http://192.168.1.37:8790/?token=<your-token>
+   ```
+   (Remote? use the Tailscale IP: `tailscale ip -4`.)
+3. Open it on the phone and use the browser menu → **Add to Home screen**
+   (Android Chrome) or **Share → Add to Home Screen** (iOS Safari). The icon opens
+   the harness already authenticated.
+4. Over plain HTTP this is a home-screen **shortcut**; over **HTTPS** (e.g.
+   `tailscale serve`) it is a full installable PWA.
+
+> The icon **name** and **token** are captured at install time (manifest + `start_url`).
+> After renaming the project or rotating `--token`, delete the old icon and reinstall.
 
 > Sandbox is optional: install `docker`, `bubblewrap` or `nsjail` for real isolation;
 > otherwise shell commands run on the host and the topbar shows `sandbox: none (!)`.

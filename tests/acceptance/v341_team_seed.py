@@ -62,7 +62,10 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 
 import seed_teams  # noqa: E402
-from longrun import agents, teams, roles, agency  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import teams  # noqa: E402
+from longrun.orchestrate import roles  # noqa: E402
+from longrun.agent import agency  # noqa: E402
 
 results = []
 
@@ -114,3 +117,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

@@ -23,7 +23,9 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import agents, jobs, taskgraph as tg  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
+from longrun.plan import taskgraph as tg  # noqa: E402
 
 results = []
 
@@ -64,7 +66,7 @@ check("A4 the node label names the subjob and the assignee",
       JID + ".1" in by_sub[JID + ".1"]["label"] and "A9" in by_sub[JID + ".1"]["label"],
       by_sub[JID + ".1"]["label"] if JID + ".1" in by_sub else "")
 
-src = read("src", "longrun", "jobs.py")
+src = read("src", "longrun", "orchestrate/jobs.py")
 check("B1 the runner seeds the master's plan after the delegation is announced",
       "self._seed_coordinator_plan(" in src)
 check("B2 the seeder writes one node per subjob",
@@ -74,3 +76,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

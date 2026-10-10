@@ -36,7 +36,8 @@ with open(os.environ["LONGRUN_AGENTS_FILE"], "w", encoding="utf-8") as f:
 
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import prompt, roles  # noqa: E402
+from longrun.model import prompt  # noqa: E402
+from longrun.orchestrate import roles  # noqa: E402
 
 results = []
 
@@ -49,9 +50,9 @@ def check(name, cond, extra=""):
 
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     HTML = f.read()
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     SRV = f.read()
-with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8") as f:
     SRV += f.read()
 
 # --- A: the agent identity is really in the prompt ---------------------------
@@ -94,3 +95,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

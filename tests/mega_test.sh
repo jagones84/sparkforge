@@ -43,15 +43,9 @@ pytest tests/properties/ || echo "Property tests failed."
 
 echo -e "\n[4] MUTATION TESTING"
 echo "------------------------------------------"
-# Scope to taskgraph.py as requested by user to keep it fast
+# Scope to taskgraph.py (already configured in the tracked setup.cfg [mutmut]
+# section) to keep it fast. Do NOT rewrite setup.cfg here — it is a tracked file.
 echo "Running mutmut against src/longrun/taskgraph.py..."
-# mutmut needs to know how to run tests. We configure it to run battery.sh
-cat << 'EOF' > setup.cfg
-[mutmut]
-paths_to_mutate=src/longrun/taskgraph.py
-runner=bash tests/battery.sh
-EOF
-
 mutmut run || echo "Mutmut found surviving mutations."
 echo "Mutmut Results:"
 mutmut results

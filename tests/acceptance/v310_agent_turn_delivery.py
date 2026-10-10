@@ -47,7 +47,7 @@ def read(*parts):
         return f.read()
 
 
-from longrun import jobs  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
 
 OLD = {"role": "assistant", "content": "OLD REPLY from a previous run"}
 
@@ -94,7 +94,7 @@ check("the substantial reply of THIS turn wins", out.startswith("DELIVERABLE"), 
 jobs._srv = _orig_srv
 
 # (d) _run must REFUSE to accept a job whose coordinator produced no reply --------
-from longrun import agents as agents_mod  # noqa: E402
+from longrun.agent import agents as agents_mod  # noqa: E402
 
 agents_mod.REGISTRY.designate("coordX", name="Coord", role="orchestrator")
 aid = agents_mod.REGISTRY.get("coordX")["id"]      # e.g. "A1" (create takes AGENT ids)
@@ -112,7 +112,7 @@ st2 = (jobs.JOBS.get(jid2) or {}).get("status")
 check("a job IS accepted when the coordinator answers", st2 == "done", "st=%r" % st2)
 
 # ------------------------------------------------------------------ source locks
-j = read("src", "longrun", "jobs.py")
+j = read("src", "longrun", "orchestrate/jobs.py")
 check("the reply fallback is scoped to THIS turn",
       'turn = s.get("messages", [])[before:]' in j and "for m in reversed(turn):" in j)
 check("the whole-session stale fallback is gone",
@@ -132,3 +132,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

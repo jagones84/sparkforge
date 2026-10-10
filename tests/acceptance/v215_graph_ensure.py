@@ -24,8 +24,8 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server      # noqa: E402
-from longrun import taskgraph   # noqa: E402
+from longrun.core import server      # noqa: E402
+from longrun.plan import taskgraph   # noqa: E402
 
 results = []
 
@@ -75,3 +75,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

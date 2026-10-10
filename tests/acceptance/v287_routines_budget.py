@@ -35,7 +35,9 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from longrun import agents, routines, orchestration  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import routines  # noqa: E402
+from longrun.orchestrate import orchestration  # noqa: E402
 
 calls = []
 routines._run_agent = lambda sid, goal, model=None: calls.append((sid, goal)) or "ok"
@@ -118,3 +120,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

@@ -33,7 +33,7 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -88,8 +88,8 @@ server.turn_end(SID2, t2)
 check("B2 the current token clears it", _row(SID2).get("running") is False)
 
 # ---- wiring: every entry point uses the bracket ---------------------------
-srv = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
-ev = read("src", "longrun", "events.py")
+srv = read("src", "longrun", "core/server.py") + read("src", "longrun", "core/httpapi.py")
+ev = read("src", "longrun", "core/events.py")
 check("C1 the shared bracket lives in events.py and is re-exported by server",
       "def turn_begin(" in ev and "def turn_end(" in ev and "turn_begin" in srv)
 check("C2 the sync /api/chat path brackets its turn",
@@ -100,7 +100,7 @@ check("C3 the sync path releases in a finally (any outcome)",
 check("C4 the streaming path still registers (JAG-323 regression)",
       '_ACTIVE_CHAT[sess["id"]] = {"ev0": feed_seq()' in srv)
 
-api2 = read("src", "longrun", "api_v02.py")
+api2 = read("src", "longrun", "core/api_v02.py")
 check("C5 the in-process MCP chat bridge brackets its turn",
       "srv.turn_begin(sess[\"id\"])" in api2 and "srv.turn_end(sess[\"id\"], tok)" in api2)
 
@@ -108,3 +108,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

@@ -23,7 +23,7 @@ os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
 os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server as s  # noqa: E402
+from longrun.core import server as s  # noqa: E402
 
 results = []
 
@@ -51,9 +51,9 @@ check("meter budget follows the resolved model",
       "resolved=%s" % s.context_budget(resolved))
 
 # static guard: the /api/context handler routes through the resolver
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     sv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8") as f:
     sv += f.read()
 check("JAG-258 /api/context uses resolve_ctx_model",
       "resolve_ctx_model(load_session(_sid)" in sv)
@@ -64,3 +64,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

@@ -23,7 +23,7 @@ os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
 os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import tools  # noqa: E402
+from longrun.tools import tools  # noqa: E402
 
 results = []
 
@@ -60,11 +60,11 @@ except Exception as e:  # noqa: BLE001
     check("JAG-256 a normal tool still executes", False, repr(e))
 
 # B) static guards
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     sv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8") as f:
     sv += f.read()
-with open(os.path.join(REPO, "src", "longrun", "tools.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "tools/tools.py"), encoding="utf-8") as f:
     tv = f.read()
 check("JAG-256 system-prompt inject de-duplicated per session",
       "_LAST_SYS_INJECT" in sv and '_LAST_SYS_INJECT.get(sess["id"]) != _h' in sv)
@@ -75,3 +75,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

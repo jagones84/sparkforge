@@ -30,7 +30,7 @@ def _read(*parts):
 
 
 HTML = _read("webui", "index.html")
-API = _read("src", "longrun", "api_v02.py")
+API = _read("src", "longrun", "core/api_v02.py")
 README = _read("README.md")
 CHANGELOG = _read("CHANGELOG.md")
 
@@ -98,9 +98,9 @@ for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR", "
 os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import context_engine as CE  # noqa: E402
-from longrun import server as S  # noqa: E402
-from longrun import taskgraph as TG  # noqa: E402
+from longrun.model import context_engine as CE  # noqa: E402
+from longrun.core import server as S  # noqa: E402
+from longrun.plan import taskgraph as TG  # noqa: E402
 
 g = TG.ensure("cc1", session_id="cc1")
 TG.add_node(g, "open task XY")
@@ -134,3 +134,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

@@ -31,7 +31,8 @@ os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import jobs, server  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -77,14 +78,14 @@ check("B3 chat_once passes plan_only to the loop (signature default)",
 check("B4 a plan-only turn caps the real-tool budget",
       hasattr(server, "PLAN_ONLY_MAX_STEPS") and int(server.PLAN_ONLY_MAX_STEPS) > 0)
 
-srv_src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-srv_src += open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8").read()
+srv_src = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+srv_src += open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8").read()
 check("B5 the loop stops with a typed 'plan_only' reason",
       'reason="plan_only"' in srv_src and '_kg_stop_reason = "plan_only"' in srv_src)
 check("B6 the plan_only stop precedes the keepgoing decide",
       srv_src.index('_kg_stop_reason = "plan_only"') < srv_src.index("_dec = _kg.decide("))
 
-jobs_src = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
+jobs_src = open(os.path.join(REPO, "src", "longrun", "orchestrate/jobs.py"), encoding="utf-8").read()
 check("B7 the coordinator PLANNING turn is plan_only",
       'jid=jid, plan_only=True' in jobs_src)
 check("B8 the coordinator is told to STOP after planning",
@@ -114,3 +115,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

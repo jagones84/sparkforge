@@ -29,8 +29,8 @@ for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
     os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import api_v02 as A   # noqa: E402
-from longrun import server as S      # noqa: E402
+from longrun.core import api_v02 as A   # noqa: E402
+from longrun.core import server as S      # noqa: E402
 
 results = []
 
@@ -76,9 +76,9 @@ check("an oversize upload is rejected", A.attach_save(b"12345", name="big.bin").
 del os.environ["LONGRUN_ATTACH_MAX"]
 
 # --- 2) server route ----------------------------------------------------------
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8") as f:
     srv += f.read()
 check("server exposes the raw upload route", 'path == "/api/attach"' in srv)
 check("the route calls attach_save", "api_v02.attach_save(" in srv)
@@ -121,3 +121,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

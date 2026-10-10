@@ -18,7 +18,7 @@ TMP = tempfile.mkdtemp(prefix="sf-336-")
 os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun.jobs import merge_deps, parse_plan_deps, plan_subjobs, waves  # noqa: E402
+from longrun.orchestrate.jobs import merge_deps, parse_plan_deps, plan_subjobs, waves  # noqa: E402
 
 results = []
 
@@ -96,3 +96,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

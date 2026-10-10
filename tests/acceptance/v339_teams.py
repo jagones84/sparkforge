@@ -19,7 +19,9 @@ os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import agents, teams, orchestration  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import teams  # noqa: E402
+from longrun.orchestrate import orchestration  # noqa: E402
 
 results = []
 
@@ -118,3 +120,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

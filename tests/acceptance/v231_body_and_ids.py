@@ -31,10 +31,10 @@ os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
 os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
 os.environ["LONGRUN_DB"] = os.path.join(_tmp, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
-from longrun import server  # noqa: E402
-from longrun import api_v02  # noqa: E402
-from longrun import providers  # noqa: E402
-from longrun import improve  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.core import api_v02  # noqa: E402
+from longrun.model import providers  # noqa: E402
+from longrun.util import improve  # noqa: E402
 
 results = []
 
@@ -72,15 +72,15 @@ check("decide(int id) -> clean error dict",
       (improve.decide(123, "approve") or {}).get("ok") is False)
 
 # ---- _body() must yield {} for a non-object JSON body (static guard) ----
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     py = f.read()
-with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8") as f:
     py += f.read()
 check("_body returns a dict only",
       "return parsed if isinstance(parsed, dict) else {}" in py)
 
 # ---- no unguarded int(qs.get/int(body.get may remain in api_v02 ----
-av = os.path.join(REPO, "src", "longrun", "api_v02.py")
+av = os.path.join(REPO, "src", "longrun", "core/api_v02.py")
 with open(av, encoding="utf-8") as f:
     src = f.read()
 offenders = []
@@ -98,3 +98,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

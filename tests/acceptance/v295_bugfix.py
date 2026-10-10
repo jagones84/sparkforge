@@ -95,7 +95,7 @@ oapi_src = read("src", "longrun", "orbit", "api.py")
 check("orbit POST routes use _ok", oapi_src.count("_ok(handler,") >= 3)
 
 # ------------------------------------------------------------- server.publish
-from longrun import server as srv  # noqa: E402
+from longrun.core import server as srv  # noqa: E402
 
 ev = srv.publish("approval.request", id="ap_regress", tool="fs.write")
 check("in-memory event id is int", isinstance(ev.get("id"), int))
@@ -110,7 +110,7 @@ check("replayed event id stays int", bool(replayed) and isinstance(replayed[-1].
       "got %r" % (replayed[-1].get("id") if replayed else None))
 
 # ------------------------------------------------------------- raw upload cap
-s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
+s = read("src", "longrun", "core/server.py") + read("src", "longrun", "core/httpapi.py")
 check("raw uploads cap the Content-Length read", s.count("self.rfile.read(min(n, MAX_BODY_BYTES))") >= 2)
 
 # --------------------------------------------------- feed replay is bounded
@@ -127,3 +127,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

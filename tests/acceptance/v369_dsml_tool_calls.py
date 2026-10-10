@@ -27,8 +27,8 @@ os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
 os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server as _s  # noqa: E402,F401  (server bootstraps agent)
-from longrun import agent as a  # noqa: E402
+from longrun.core import server as _s  # noqa: E402,F401  (server bootstraps agent)
+from longrun.agent import agent as a  # noqa: E402
 
 # The DSML marker: "DSML" wrapped in two full-width vertical bars (U+FF5C).
 D = "\uff5c\uff5cDSML\uff5c\uff5c"
@@ -134,3 +134,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

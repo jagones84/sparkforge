@@ -33,7 +33,10 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from longrun import agents, orchestration, prompt, roles  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import orchestration  # noqa: E402
+from longrun.model import prompt  # noqa: E402
+from longrun.orchestrate import roles  # noqa: E402
 
 # --- storage: one file per session id --------------------------------------
 w = roles.write("sess-a", "Role: analyst\n- be terse")
@@ -94,7 +97,7 @@ check("a different name is accepted", ok2["ok"] and AR.get("s2").get("name") == 
 check("name_taken is case-insensitive", AR.name_taken("beta") is True)
 
 # --- CLI + primary WebUI wiring --------------------------------------------
-with open(os.path.join(REPO, "src", "longrun", "forge.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/forge.py"), encoding="utf-8") as f:
     cli = f.read()
 check("the CLI exposes roles/agents/jobs",
       'add_parser("roles")' in cli and 'add_parser("agents")' in cli
@@ -124,3 +127,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

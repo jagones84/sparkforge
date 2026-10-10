@@ -29,7 +29,7 @@ os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
 os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_CONFIG_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -45,8 +45,8 @@ def read(*parts):
 
 
 ui = read("webui", "index.html")
-fv = read("src", "longrun", "forge.py")
-sv = read("src", "longrun", "server.py")
+fv = read("src", "longrun", "core/forge.py")
+sv = read("src", "longrun", "core/server.py")
 
 # ---- JAG-240: history render inserts the CoT BEFORE the answer -------------
 check("JAG-240 loadHistory inserts the CoT before the answer",
@@ -119,3 +119,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

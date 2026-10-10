@@ -25,7 +25,8 @@ for d in ("cfg", "sessions"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import rllm, server  # noqa: E402
+from longrun.model import rllm  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -123,7 +124,7 @@ try:
           think == "FB-REASON" and answer == "FB-ANSWER", "think=%r answer=%r" % (think, answer))
 
     # ---- D: source guards (both field names are consulted) -------------------
-    with open(os.path.join(REPO, "src", "longrun", "rllm.py"), encoding="utf-8") as f:
+    with open(os.path.join(REPO, "src", "longrun", "model/rllm.py"), encoding="utf-8") as f:
         RLLM = f.read()
     check("D1 the streaming parser accepts BOTH field names",
           'delta.get("reasoning_content") or delta.get("reasoning")' in RLLM, "")
@@ -137,3 +138,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

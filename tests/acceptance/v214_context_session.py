@@ -32,9 +32,9 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import context_engine  # noqa: E402
-from longrun import server          # noqa: E402
-from longrun import httpapi         # noqa: E402
+from longrun.model import context_engine  # noqa: E402
+from longrun.core import server          # noqa: E402
+from longrun.core import httpapi         # noqa: E402
 
 context_engine.retrieve = lambda *a, **k: []   # skip the embedder
 results = []
@@ -133,3 +133,4 @@ shutil.rmtree(tmp, ignore_errors=True)
 ok = sum(results)
 print("\nv214: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

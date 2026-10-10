@@ -19,8 +19,8 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import memory as mem  # noqa: E402
-from longrun import tools  # noqa: E402
+from longrun.memory import memory as mem  # noqa: E402
+from longrun.tools import tools  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="sf-317-")
 mem.DATA_DIR = TMP                 # isolate from the live data/memory
@@ -87,13 +87,14 @@ out2 = tools._memory({"action": "purge"}, "run-317")
 check("C2 tool action=purge removes invalidated records", not on_disk(r4["mid"]), str(out2))
 
 # ---- D: source wiring ------------------------------------------------------
-msrc = open(os.path.join(REPO, "src", "longrun", "memory.py"), encoding="utf-8").read()
+msrc = open(os.path.join(REPO, "src", "longrun", "memory/memory.py"), encoding="utf-8").read()
 check("D1 memory.forget exists", "def forget(" in msrc)
 check("D2 memory.purge_invalidated exists", "def purge_invalidated(" in msrc)
-asrc = open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8").read()
+asrc = open(os.path.join(REPO, "src", "longrun", "core/api_v02.py"), encoding="utf-8").read()
 check("D3 DELETE /api/memory is wired", 'if path == "/api/memory":' in asrc)
 
 print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

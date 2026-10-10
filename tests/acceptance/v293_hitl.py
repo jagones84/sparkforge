@@ -28,7 +28,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from longrun import keepgoing as kg  # noqa: E402
+from longrun.plan import keepgoing as kg  # noqa: E402
 
 # --- the gate helper -------------------------------------------------------
 check("the gate fires with open steps + a real stop + a human",
@@ -40,16 +40,16 @@ check("the gate does NOT fire with no open steps",
 check("the gate does NOT fire on a user pivot", kg.hitl_gate("user_pivot", [1]) is False)
 
 # --- server wiring ---------------------------------------------------------
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8") as f:
     srv += f.read()
 check("the server gates via keepgoing.hitl_gate",
       '_kg.hitl_gate(_dec["reason"], _open, autonomous)' in srv)
 check("the server persists the open list (hitl_open)",
       '"hitl_open": _hitl["open"]' in srv)
 check("append_message merges meta FLAT into the message",
-      "msg.update(meta)" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
+      "msg.update(meta)" in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read())
 
 # --- WebUI replay ----------------------------------------------------------
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
@@ -76,3 +76,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

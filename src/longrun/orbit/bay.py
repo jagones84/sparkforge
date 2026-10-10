@@ -13,14 +13,14 @@ _CACHE = {"at": 0.0, "data": None}
 
 
 def _providers():
-    from longrun import providers
+    from longrun.model import providers
     return providers
 
 
 def _loaded_aliases():
     """Model refs the local router reports as warm (best effort)."""
     try:
-        from longrun import server
+        from longrun.core import server
         return {m.get("alias") for m in server.router_models() if m.get("loaded")}
     except Exception:  # noqa: BLE001 - a cold router must never break the catalogue
         return set()
@@ -68,3 +68,4 @@ class ModelBay:
             "key_env": p.get("key_env"),
             "models": models,
         }
+

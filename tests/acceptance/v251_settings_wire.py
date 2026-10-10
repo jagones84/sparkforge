@@ -26,7 +26,8 @@ os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
 os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import api_v02, rules  # noqa: E402
+from longrun.core import api_v02  # noqa: E402
+from longrun.memory import rules  # noqa: E402
 
 results = []
 
@@ -90,10 +91,10 @@ def read(rel):
         return f.read()
 
 
-av = read("api_v02.py")
-rv = read("rules.py")
-tv = read("tools.py")
-sev = read("selfevolve.py")
+av = read("core/api_v02.py")
+rv = read("memory/rules.py")
+tv = read("tools/tools.py")
+sev = read("util/selfevolve.py")
 check("JAG-251 update_policy wraps conversions", "def _update_policy(body):" in av
       and "invalid settings value" in av)
 check("JAG-251 rules.save coerces content", "isinstance(content, str)" in rv)
@@ -110,3 +111,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

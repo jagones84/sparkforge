@@ -25,8 +25,8 @@ for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
 os.environ["LONGRUN_REQUIRE_HELDOUT"] = "0"
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import bestofn as B        # noqa: E402
-from longrun import selfevolve as E     # noqa: E402
+from longrun.plan import bestofn as B        # noqa: E402
+from longrun.util import selfevolve as E     # noqa: E402
 
 results = []
 
@@ -122,3 +122,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

@@ -26,7 +26,8 @@ os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
 os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import providers, rules  # noqa: E402
+from longrun.model import providers  # noqa: E402
+from longrun.memory import rules  # noqa: E402
 
 results = []
 
@@ -109,16 +110,16 @@ def read(rel):
         return f.read()
 
 
-pv = read("providers.py")
-rv = read("rules.py")
-av = read("api_v02.py")
-sv = read("server.py")
+pv = read("model/providers.py")
+rv = read("memory/rules.py")
+av = read("core/api_v02.py")
+sv = read("core/server.py")
 check("JAG-247 providers guards id type", "not isinstance(pid, str)" in pv)
 check("JAG-248 providers ints context_length", "context_length must be an integer" in pv)
 check("JAG-250 providers validates models list", "models must be a list" in pv)
 check("JAG-249 rules guards path type", "not isinstance(path, str)" in rv)
-for rel, txt in (("rules.py", rv), ("api_v02.py", av), ("server.py", sv),
-                 ("providers.py", pv)):
+for rel, txt in (("memory/rules.py", rv), ("core/api_v02.py", av), ("core/server.py", sv),
+                 ("model/providers.py", pv)):
     for bad in ("cartella inesistente", "sessione inesistente"):
         check("i18n %s free of '%s'" % (rel, bad), bad not in txt)
 
@@ -126,3 +127,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

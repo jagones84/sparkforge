@@ -24,9 +24,9 @@ for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
     os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import prompt as P  # noqa: E402
-from longrun import server as S  # noqa: E402
-from longrun import taskgraph as TG  # noqa: E402
+from longrun.model import prompt as P  # noqa: E402
+from longrun.core import server as S  # noqa: E402
+from longrun.plan import taskgraph as TG  # noqa: E402
 
 results = []
 
@@ -101,3 +101,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

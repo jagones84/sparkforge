@@ -30,8 +30,8 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import memory as mem  # noqa: E402
-from longrun import tools  # noqa: E402
+from longrun.memory import memory as mem  # noqa: E402
+from longrun.tools import tools  # noqa: E402
 
 # isolate the store: redirect DATA_DIR/CORE to the temp dir, force keyword path
 mem.DATA_DIR = os.path.join(tmp, "memory")
@@ -134,3 +134,4 @@ check("E3 numeric ts is still a float", bool(_e) and isinstance(_e[0].get("ts"),
 ok = sum(results)
 print("\nv204: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

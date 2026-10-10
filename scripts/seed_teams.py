@@ -90,7 +90,9 @@ def _roster_slugs(runbook):
 
 
 def seed(slugs=None, apply_models=False):
-    from longrun import server, agents, teams   # noqa: E402
+    from longrun.core import server  # noqa: E402
+    from longrun.agent import agents  # noqa: E402
+    from longrun.orchestrate import teams  # noqa: E402
     idx = _agent_index()
     by_name = {str(a.get("name") or "").strip().lower(): a
                for a in agents.REGISTRY.list()["agents"]}
@@ -154,7 +156,7 @@ def seed(slugs=None, apply_models=False):
     # PROMPT (ROLE.md — the very file the Bridge prompt and the main app edit) stayed
     # VOID. Materialise it now from the clone's `.md` body. Non-destructive: only an
     # EMPTY role is filled, so a role the user wrote is never clobbered.
-    from longrun import agency
+    from longrun.agent import agency
     role_report = agency.fill_roles()
 
     return {"ok": True, "teams": created["teams"], "agents_created": created["agents"],

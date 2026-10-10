@@ -30,7 +30,9 @@ os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import agents, jobs, taskgraph as tg  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
+from longrun.plan import taskgraph as tg  # noqa: E402
 
 results = []
 
@@ -110,9 +112,9 @@ except Exception as e:  # noqa: BLE001
     check("D1 the constellation maps subjob -> agent + its todos", False, "import/run error: %s" % e)
 
 # ---- E: wiring across the codebase ----------------------------------------
-t = read("src", "longrun", "taskgraph.py")
-s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
-j = read("src", "longrun", "jobs.py")
+t = read("src", "longrun", "plan/taskgraph.py")
+s = read("src", "longrun", "core/server.py") + read("src", "longrun", "core/httpapi.py")
+j = read("src", "longrun", "orchestrate/jobs.py")
 o = read("src", "longrun", "orbit", "web", "orbit.html")
 i = read("webui", "index.html")
 check("E1 add_node tags the node with the graph subjob", '"subjob": graph.get("subjob")' in t)
@@ -128,3 +130,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

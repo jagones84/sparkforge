@@ -29,13 +29,13 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile  # noqa: E402
-py_compile.compile(os.path.join(REPO, "src", "longrun", "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "longrun", "core/server.py"), doraise=True)
 print("[compile] server.py OK")
 
-from longrun import server  # noqa: E402
-from longrun import taskgraph  # noqa: E402
-from longrun import runmetrics  # noqa: E402
-from longrun import edits  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.plan import taskgraph  # noqa: E402
+from longrun.model import runmetrics  # noqa: E402
+from longrun.tools import edits  # noqa: E402
 
 
 def make_artifacts(sid):
@@ -78,8 +78,9 @@ survivors = [os.path.basename(p) for p in paths(other) if os.path.isfile(p)]
 assert len(survivors) == 6, "delete touched another session: %r" % survivors
 
 # wiring: the HTTP DELETE handler must call the cascade helper
-src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-src += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8").read()
 assert "_purge_session_artifacts(sid)" in src, "DELETE handler is not wired to the cascade"
 
 print("RESULT: ALL OK")
+

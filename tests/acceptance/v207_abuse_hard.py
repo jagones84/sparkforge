@@ -61,7 +61,12 @@ def bounded(secs, fn, *a, **k):
         signal.setitimer(signal.ITIMER_REAL, 0)
 
 
-from longrun import taskgraph, memory as mem, heldout, registry, tools, skills  # noqa: E402
+from longrun.plan import taskgraph  # noqa: E402
+from longrun.memory import memory as mem  # noqa: E402
+from longrun.plan import heldout  # noqa: E402
+from longrun.tools import registry  # noqa: E402
+from longrun.tools import tools  # noqa: E402
+from longrun.memory import skills  # noqa: E402
 
 # ---- G: taskgraph abuse ----
 g = taskgraph.ensure("run_abuse", session_id="run_abuse", goal="abuse")
@@ -181,3 +186,4 @@ shutil.rmtree(_tmp, ignore_errors=True)
 ok = sum(results)
 print("\nv207: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

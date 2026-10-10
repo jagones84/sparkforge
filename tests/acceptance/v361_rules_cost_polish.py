@@ -67,7 +67,7 @@ os.environ["LONGRUN_PRICES"] = json.dumps({
     "m/x": {"in": 2.0, "out": 8.0, "cache_read": 0.5, "request": 0.01}})
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import costs as C  # noqa: E402
+from longrun.model import costs as C  # noqa: E402
 
 S = "v361"
 # 1) the provider reports the charge itself -> EXACT, used verbatim
@@ -106,3 +106,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

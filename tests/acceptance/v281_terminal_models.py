@@ -24,10 +24,10 @@ for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
     os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import api_v02 as A     # noqa: E402
-from longrun import server as S       # noqa: E402
-from longrun import term as T         # noqa: E402
-import longrun.registry as REG        # noqa: E402
+from longrun.core import api_v02 as A     # noqa: E402
+from longrun.core import server as S       # noqa: E402
+from longrun.tools import term as T         # noqa: E402
+import longrun.tools.registry as REG        # noqa: E402
 
 results = []
 
@@ -102,11 +102,11 @@ check("the body keeps the OpenAI-compatible shape",
       S._completion_body("m", [{"role": "user", "content": "x"}], True).get("stream") is True)
 
 # --- 4) source wiring --------------------------------------------------------
-with open(os.path.join(REPO, "src", "longrun", "rllm.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "model/rllm.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/api_v02.py"), encoding="utf-8") as f:
     av = f.read()
-with open(os.path.join(REPO, "src", "longrun", "term.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "tools/term.py"), encoding="utf-8") as f:
     trm = f.read()
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()
@@ -145,3 +145,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

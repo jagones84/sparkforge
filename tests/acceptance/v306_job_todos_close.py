@@ -44,8 +44,8 @@ def read(*parts):
         return f.read()
 
 
-from longrun import server  # noqa: E402
-from longrun import taskgraph as tg  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.plan import taskgraph as tg  # noqa: E402
 
 LONG = "design a compact REST API for a personal library service with endpoints"
 
@@ -71,7 +71,7 @@ check("an existing plan with steps is not re-planned",
       server._should_autoplan(None, tg.load(SID), True, LONG) is False)
 
 # ------------------------------------------------------------------ source locks
-s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
+s = read("src", "longrun", "core/server.py") + read("src", "longrun", "core/httpapi.py")
 check("the auto-plan gate exists", "def _should_autoplan(jid, graph, autonomous, message)" in s)
 check("the fallback planner is gated on the gate",
       "_should_autoplan(jid, _g, autonomous, message)" in s)
@@ -80,7 +80,7 @@ check("the auto-planner no longer runs unguarded",
 check("plan.incomplete counts only TRULY-open steps (not superseded)",
       'not in ("done", "cancelled")' not in s)
 
-j = read("src", "longrun", "jobs.py")
+j = read("src", "longrun", "orchestrate/jobs.py")
 check("the rejected external sweep is gone",
       "def _close_job_todos" not in j and "todos_closed" not in j)
 
@@ -88,3 +88,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

@@ -113,3 +113,4 @@ if sid:
 n = sum(1 for ok in RESULTS if ok)
 print("\n==== %d/%d endpoint checks passed ====" % (n, len(RESULTS)))
 print("SWEEP_RESULT " + ("PASS" if n == len(RESULTS) else "FAIL"))
+

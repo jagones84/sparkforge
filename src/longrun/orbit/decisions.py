@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 
-from longrun.paths import REPO_ROOT as REPO
+from longrun.util.paths import REPO_ROOT as REPO
 
 from .attention import AttentionFeed
 
@@ -87,7 +87,7 @@ class DecisionQueue:
         if action in ("approve", "deny"):
             if kind != "approval" or not ref:
                 return {"ok": False, "error": "only approvals can be approved/denied"}
-            from longrun import approvals
+            from longrun.tools import approvals
             rec = approvals.decide(ref, "approve" if action == "approve" else "deny", by=by)
             if rec is None:
                 return {"ok": False, "error": "approval not found"}
@@ -113,3 +113,4 @@ class DecisionQueue:
                 d["dismissed"].append(item_id)
                 _save(d)
         return {"ok": True, "id": item_id, "action": "dismiss", "reason": reason}
+

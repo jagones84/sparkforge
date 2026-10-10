@@ -92,3 +92,4 @@ print("---")
 ok = sum(1 for r in RESULTS if r)
 print("%d/%d PASS" % (ok, len(RESULTS)))
 raise SystemExit(0 if ok == len(RESULTS) else 1)
+

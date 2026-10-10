@@ -67,3 +67,4 @@ check("E4 wired at startup", "wireConsole()" in html, "")
 ok = sum(results)
 print("\nv210: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

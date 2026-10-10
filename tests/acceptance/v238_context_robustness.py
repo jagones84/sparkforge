@@ -23,7 +23,8 @@ os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
 os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_CONFIG_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
-from longrun import context_engine, server  # noqa: E402
+from longrun.model import context_engine  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -87,8 +88,8 @@ def read(rel):
         return f.read()
 
 
-sv = read("server.py") + read("httpapi.py")
-cev = read("context_engine.py")
+sv = read("core/server.py") + read("core/httpapi.py")
+cev = read("model/context_engine.py")
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()
 with open(os.path.join(REPO, "tests", "live", "v208_chaos_http.py"),
@@ -111,3 +112,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

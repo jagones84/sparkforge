@@ -18,7 +18,7 @@ for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR", "
     os.environ["LONGRUN_" + _k] = os.path.join(TMP, _k)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server as S  # noqa: E402
+from longrun.core import server as S  # noqa: E402
 
 os.makedirs(S.SESSIONS_DIR, exist_ok=True)
 REAL = os.path.join(TMP, "notes.md")     # JAG-272: only REAL files are listed
@@ -88,3 +88,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

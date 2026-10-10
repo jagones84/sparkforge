@@ -27,7 +27,11 @@ import traceback
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
-from longrun import server, api_v02, meta, acp, mcp_client  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.core import api_v02  # noqa: E402
+from longrun.util import meta  # noqa: E402
+from longrun.interop import acp  # noqa: E402
+from longrun.interop import mcp_client  # noqa: E402
 
 results = []
 
@@ -172,11 +176,11 @@ def read(rel):
         return f.read()
 
 
-sv = read("server.py") + read("httpapi.py")
-mv = read("meta.py")
-av = read("api_v02.py")
-acv = read("acp.py")
-mcpv = read("mcp_client.py")
+sv = read("core/server.py") + read("core/httpapi.py")
+mv = read("util/meta.py")
+av = read("core/api_v02.py")
+acv = read("interop/acp.py")
+mcpv = read("interop/mcp_client.py")
 check("JAG-233 _send branches on str/bytes (json.dumps fallback)",
       "if isinstance(obj, bytes):" in sv and "elif isinstance(obj, str):" in sv)
 check("JAG-234 candidate_label coerces model",
@@ -192,3 +196,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

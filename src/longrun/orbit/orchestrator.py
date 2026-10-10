@@ -11,7 +11,7 @@ import time
 
 
 def _server():
-    from longrun import server
+    from longrun.core import server
     return server
 
 
@@ -77,3 +77,4 @@ class Orchestrator:
             rows = sorted(self._jobs.values(), key=lambda r: r.get("started", 0),
                           reverse=True)[:limit]
         return {"jobs": rows}
+

@@ -10,7 +10,7 @@ import time
 
 
 def _server():
-    from longrun import server
+    from longrun.core import server
     return server
 
 
@@ -59,3 +59,4 @@ class SessionRegistry:
             "model": sess.get("model"),
             "workspace": sess.get("workspace"),
         }
+

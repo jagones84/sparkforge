@@ -31,7 +31,9 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server, agents, jobs  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
 
 results = []
 
@@ -133,10 +135,10 @@ check("F2 renaming a session can set the agent name",
       (agents.REGISTRY.get("sessW") or {}).get("name") == "Slave From Session")
 
 # ---- wiring ---------------------------------------------------------------
-serv = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-serv += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
-jobsrc = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
-agsrc = open(os.path.join(REPO, "src", "longrun", "agents.py"), encoding="utf-8").read()
+serv = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+serv += open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8").read()
+jobsrc = open(os.path.join(REPO, "src", "longrun", "orchestrate/jobs.py"), encoding="utf-8").read()
+agsrc = open(os.path.join(REPO, "src", "longrun", "agent/agents.py"), encoding="utf-8").read()
 check("G1 chat_stream_gen carries sender/subjob",
       "sender=None, subjob=None" in serv and '"sender": sender, "subjob": subjob' in serv)
 check("G2 jobs records subjobs + attribution",
@@ -149,3 +151,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

@@ -28,7 +28,7 @@ os.environ["LONGRUN_EDITS_DIR"] = os.path.join(_tmp, "edits")
 os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
 os.environ["LONGRUN_DB"] = os.path.join(_tmp, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -87,3 +87,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

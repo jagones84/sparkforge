@@ -17,7 +17,7 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import context_engine   # noqa: E402
+from longrun.model import context_engine   # noqa: E402
 
 results = []
 LIMIT = 3.0   # seconds; a runaway loop would blow this by orders of magnitude
@@ -81,3 +81,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

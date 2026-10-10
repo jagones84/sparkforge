@@ -30,7 +30,8 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server, taskgraph  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.plan import taskgraph  # noqa: E402
 
 results = []
 
@@ -104,9 +105,9 @@ check("D1 a failure on one step does not block an unrelated step",
       status_of(OID) == "done", str(status_of(OID)))
 
 # ---- E: source wiring ------------------------------------------------------
-_tg = open(os.path.join(REPO, "src", "longrun", "taskgraph.py"), encoding="utf-8").read()
-src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-src += open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8").read()
+_tg = open(os.path.join(REPO, "src", "longrun", "plan/taskgraph.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8").read()
 check("E1 taskgraph exposes the durable recorder", "def record_delegation(" in _tg)
 check("E2 taskgraph exposes the marker consumer", "def clear_delegation(" in _tg)
 check("E3 the guard is in the todo-done path", "refusing 'done'" in src)
@@ -119,3 +120,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

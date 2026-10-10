@@ -24,7 +24,8 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server, taskgraph  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.plan import taskgraph  # noqa: E402
 
 results = []
 
@@ -70,14 +71,15 @@ check("B5 the task list was reset",
 
 check("C1 clearing a missing session returns None", server.clear_session("nope-not-here") is None)
 
-src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
-src += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8").read()
 check("D1 the endpoint uses the shared clearer", "clear_session(sid)" in src)
 check("D2 the clearer wipes the side stores",
-      'sess["tool_cards"] = []' in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read()
-      and 'sess["injects"] = []' in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
+      'sess["tool_cards"] = []' in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read()
+      and 'sess["injects"] = []' in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read())
 
 print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

@@ -16,7 +16,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DECK = os.path.join(REPO, "webui", "console.html")
-SERVER = os.path.join(REPO, "src", "longrun", "httpapi.py")
+SERVER = os.path.join(REPO, "src", "longrun", "core/httpapi.py")
 results = []
 
 
@@ -69,3 +69,4 @@ check("D2 shell served BEFORE the auth gate (public)",
 ok = sum(results)
 print("\nv209: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

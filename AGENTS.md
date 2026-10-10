@@ -38,6 +38,10 @@ bash tests/battery.sh     # 125/125 GREEN required before any commit
 
 ## Non-negotiables
 
+- **Skills are local-only.** The user's personal skill library under `skills/`
+  (symlinked categories) is **gitignored** — it is a development-checkout only artefact.
+  The single tracked exception is the first-party `skills/core/repo-orientation` skill
+  (self-orientation for an LLM landing here). See `.gitignore`.
 - **No secrets in the repo.** `.env.template` is the only tracked env file.
 - **Evidence over belief.** A claim needs a number (test count, HTTP status, file field).
 - **`ast.parse` after any scripted patch**; `git checkout -- <file>` if you break it.

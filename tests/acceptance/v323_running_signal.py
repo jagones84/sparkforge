@@ -29,7 +29,7 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server  # noqa: E402
+from longrun.core import server  # noqa: E402
 
 results = []
 
@@ -64,11 +64,11 @@ check("A3 clearing the turn clears the flag",
       _row("v323run").get("running") is False, str(_row("v323run")))
 
 # ---- wiring ---------------------------------------------------------------
-srv = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
+srv = read("src", "longrun", "core/server.py") + read("src", "longrun", "core/httpapi.py")
 check("B1 the server publishes chat.run on the global feed",
       'publish("chat.run"' in srv)
 check("B2 the session list reads the live active-turn registry",
-      "_active = set(_ACTIVE_CHAT.keys())" in read("src", "longrun", "stores.py"))
+      "_active = set(_ACTIVE_CHAT.keys())" in read("src", "longrun", "memory/stores.py"))
 
 ui = read("webui", "index.html")
 check("C1 the feed marks a session busy on chat.run",
@@ -82,3 +82,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

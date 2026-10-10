@@ -25,7 +25,7 @@ atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
 os.environ["LONGRUN_GRAPH_DIR"] = _tmp
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import taskgraph  # noqa: E402
+from longrun.plan import taskgraph  # noqa: E402
 
 results = []
 
@@ -128,3 +128,4 @@ check("E1 audit_node on unknown id fails safe", safe)
 ok = sum(results)
 print("\nv206: %d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

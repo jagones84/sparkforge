@@ -34,7 +34,9 @@ os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server, agents, jobs  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
 
 results = []
 
@@ -125,7 +127,7 @@ check("E2 its subjob is done", _sub2.get("status") == "done", str(_sub2))
 check("E3 its run is done", _run2.get("state") == "done", str(_run2))
 
 # ---- F: wiring in the source ---------------------------------------------
-jsrc = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
+jsrc = open(os.path.join(REPO, "src", "longrun", "orchestrate/jobs.py"), encoding="utf-8").read()
 check("F1 jobs.py parses STATUS", "def parse_status(" in jsrc and "_STATUS_RE" in jsrc)
 check("F2 jobs.py retries + escalates", "def _log_escalation(" in jsrc
       and "LONGRUN_JOB_RETRIES" in jsrc)
@@ -137,3 +139,4 @@ print("---")
 ok = sum(1 for r in results if r)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

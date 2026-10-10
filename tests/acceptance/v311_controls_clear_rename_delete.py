@@ -34,7 +34,9 @@ def check(name, ok, detail=""):
     print("%s %s%s" % ("PASS" if ok else "FAIL", name, (" :: " + str(detail)) if detail else ""))
 
 
-from longrun import server, jobs, agents  # noqa: E402
+from longrun.core import server  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
+from longrun.agent import agents  # noqa: E402
 
 # ---- A: session CLEAR (server-side contract) -------------------------------
 s = server.get_or_create_session(None, "clear-me")
@@ -52,12 +54,12 @@ check("clear keeps the session itself", server.load_session(sid) is not None)
 check("clear keeps the title", server.load_session(sid).get("title") == "clear-me")
 
 # the route must exist in the server source (wired, not just a helper)
-with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/server.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/httpapi.py"), encoding="utf-8") as f:
     srv += f.read()
 check("POST /api/sessions/<sid>/clear route exists", 'path.endswith("/clear")' in srv)
-check("clear publishes session.cleared", 'publish("session.cleared"' in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
+check("clear publishes session.cleared", 'publish("session.cleared"' in open(os.path.join(REPO, "src", "longrun", "memory/stores.py"), encoding="utf-8").read())
 
 # ---- B: session RENAME (server-side contract) ------------------------------
 check("POST /api/sessions/<sid>/rename route exists", 'path.endswith("/rename")' in srv)
@@ -88,7 +90,7 @@ check("a finished job IS deleted", res.get("ok") is True)
 check("the deleted job is gone", jobs.JOBS.get(jid) is None)
 check("deleting a missing job is a clean refusal", jobs.JOBS.delete("J9999").get("ok") is False)
 
-with open(os.path.join(REPO, "src", "longrun", "orchestration.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orchestrate/orchestration.py"), encoding="utf-8") as f:
     orch = f.read()
 check("DELETE /api/jobs/<id> is routed", 'method == "DELETE" and path.startswith("/api/jobs/")' in orch)
 
@@ -120,3 +122,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

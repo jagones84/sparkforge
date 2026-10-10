@@ -17,3 +17,4 @@ functions. That is what keeps it droppable.
 from .api import serve_page, handle  # noqa: F401
 
 __all__ = ["serve_page", "handle"]
+

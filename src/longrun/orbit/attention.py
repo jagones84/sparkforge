@@ -21,7 +21,9 @@ BUDGET_CRIT_PCT = 98
 
 
 def _mods():
-    from longrun import approvals, server, taskgraph
+    from longrun.tools import approvals
+    from longrun.core import server
+    from longrun.plan import taskgraph
     return approvals, server, taskgraph
 
 
@@ -149,3 +151,4 @@ class AttentionFeed:
             else:
                 cols["idle"].append(s)
         return cols
+

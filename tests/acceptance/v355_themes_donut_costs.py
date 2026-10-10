@@ -30,7 +30,7 @@ os.environ["LONGRUN_PRICES_FILE"] = os.path.join(TMP, "prices.json")
 os.environ["LONGRUN_PRICES"] = json.dumps({"deepseek/deepseek-chat": [2.0, 8.0]})
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import costs as C  # noqa: E402
+from longrun.model import costs as C  # noqa: E402
 
 results = []
 
@@ -92,11 +92,11 @@ check("C14 a failed refresh returns an error, never raises",
       bad.get("ok") is False and "error" in bad, str(bad))
 
 # --- B: static guards --------------------------------------------------------
-SRV = _read("src", "longrun", "server.py") + _read("src", "longrun", "agent.py")
-API = _read("src", "longrun", "api_v02.py")
+SRV = _read("src", "longrun", "core/server.py") + _read("src", "longrun", "agent/agent.py")
+API = _read("src", "longrun", "core/api_v02.py")
 HTML = _read("webui", "index.html")
 BATT = _read("tests", "battery.sh")
-COSTS = _read("src", "longrun", "costs.py")
+COSTS = _read("src", "longrun", "model/costs.py")
 
 check("S1 the server prices each call and pushes `cost.usage`",
       "costs.record(" in SRV and '"cost.usage"' in SRV, "")
@@ -116,3 +116,4 @@ print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
 sys.exit(0 if ok == len(results) else 1)
+

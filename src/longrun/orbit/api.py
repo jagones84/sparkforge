@@ -68,7 +68,7 @@ def _subjobs_of(agents_list, jobs_list, graphs):
     Object model the constellation draws: Job (JN) -> Subjob (JN.j, one per agent,
     with deps among subjobs) -> the subset of that agent's todos tagged `subjob`.
     """
-    from longrun.jobs import latest_plan_nodes
+    from longrun.orchestrate.jobs import latest_plan_nodes
     out = []
     by_id = {a.get("id"): a for a in agents_list}
     for j in jobs_list:
@@ -97,7 +97,10 @@ def _constellation(team=None):
     todos). JAG-339 adds the TEAM level: a `team` query scopes agents + jobs to that
     team, and the payload always lists every team. Returns engines-safe plain data.
     """
-    from longrun import agents as _agents, jobs as _jobs, taskgraph as _tg, teams as _teams
+    from longrun.agent import agents as _agents
+    from longrun.orchestrate import jobs as _jobs
+    from longrun.plan import taskgraph as _tg
+    from longrun.orchestrate import teams as _teams
     ags = _agents.REGISTRY.list().get("agents", [])
     jbs = _jobs.JOBS.list().get("jobs", [])
     tms = _teams.REGISTRY.list().get("teams", [])
@@ -184,3 +187,4 @@ def handle(handler, method, path, qs, body):
                 data.get("id"), data.get("action"), by=data.get("by") or "orbit"))
         return _json(handler, 404, {"error": "unknown orbit route"})
     return _json(handler, 405, {"error": "method not allowed"})
+

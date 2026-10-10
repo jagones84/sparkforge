@@ -36,7 +36,7 @@ def read(*parts):
         return f.read()
 
 
-from longrun import server as srv  # noqa: E402
+from longrun.core import server as srv  # noqa: E402
 
 SID = "v302leak"
 
@@ -78,15 +78,16 @@ check("the live turn's active-chat entry is still dropped",
 srv.clear_abort(SID2)
 
 # ------------------------------------------------------------- source locks
-s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
-st = read("src", "longrun", "steering.py")
+s = read("src", "longrun", "core/server.py") + read("src", "longrun", "core/httpapi.py")
+st = read("src", "longrun", "util/steering.py")
 check("drain_steer pops its key (no empty re-insert)",
       "return STEER_INBOX.pop(sess_id, [])" in st)
 check("delete path forgets the session runtime", "_forget_session_runtime(sid)" in s)
-check("runtime cleanup pops the ctx cache", "_REAL_PROMPT_TOKENS.pop(sid, None)" in read("src", "longrun", "stores.py"))
-check("runtime cleanup pops the turn lock", "_TURN_LOCKS.pop(sid, None)" in read("src", "longrun", "stores.py"))
+check("runtime cleanup pops the ctx cache", "_REAL_PROMPT_TOKENS.pop(sid, None)" in read("src", "longrun", "memory/stores.py"))
+check("runtime cleanup pops the turn lock", "_TURN_LOCKS.pop(sid, None)" in read("src", "longrun", "memory/stores.py"))
 
 print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

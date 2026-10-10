@@ -33,7 +33,7 @@ def read(*parts):
 
 
 # ---------------------------------------------------------------- server.py
-s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
+s = read("src", "longrun", "core/server.py") + read("src", "longrun", "core/httpapi.py")
 check("turn registration carries a unique token", '"tok": _turn_tok' in s)
 check("only the owning turn clears its registration",
       'if (_ACTIVE_CHAT.get(sess["id"]) or {}).get("tok") is _turn_tok:' in s)
@@ -57,3 +57,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

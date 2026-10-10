@@ -33,7 +33,9 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from longrun import agents, jobs, orchestration  # noqa: E402
+from longrun.agent import agents  # noqa: E402
+from longrun.orchestrate import jobs  # noqa: E402
+from longrun.orchestrate import orchestration  # noqa: E402
 
 reg = agents.REGISTRY
 
@@ -120,7 +122,7 @@ check("the GUI badges org agents and guards their delete",
       and "is an ORG AGENT" in html)
 check("the deck button opens the Orbit beta", "location.href='/orbit'" in html)
 
-with open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "core/api_v02.py"), encoding="utf-8") as f:
     av = f.read()
 check("api_v02 delegates to the orchestration routes (native, no new server hook)",
       "orchestration.handle(handler, method, path, qs, body)" in av)
@@ -129,3 +131,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

@@ -29,7 +29,7 @@ os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
 os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import server as s  # noqa: E402
+from longrun.core import server as s  # noqa: E402
 
 results = []
 
@@ -134,3 +134,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

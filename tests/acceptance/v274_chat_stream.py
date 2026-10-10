@@ -18,13 +18,13 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UI = os.path.join(REPO, "webui", "index.html")
-SRV = os.path.join(REPO, "src", "longrun", "server.py")
+SRV = os.path.join(REPO, "src", "longrun", "core/server.py")
 
 with open(UI, encoding="utf-8") as f:
     html = f.read()
 with open(SRV, encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent/agent.py"), encoding="utf-8") as f:
     srv += f.read()
 
 results = []
@@ -118,3 +118,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+

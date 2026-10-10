@@ -47,7 +47,8 @@ for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from longrun import registry, tools  # noqa: E402
+from longrun.tools import registry  # noqa: E402
+from longrun.tools import tools  # noqa: E402
 
 results = []
 
@@ -195,3 +196,4 @@ print("---")
 passed = sum(results)
 print("%d/%d PASS" % (passed, len(results)))
 sys.exit(0 if passed == len(results) else 1)
+
