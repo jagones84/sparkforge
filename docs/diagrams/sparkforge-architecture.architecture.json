@@ -7,7 +7,7 @@
     "quality_profile": "standard",
     "repository": {
       "url": "https://github.com/jagones84/sparkforge.git",
-      "revision": "b3664858f26ec419b78c096b84b08e097bfe9073"
+      "revision": "ae2b686aa9815faf97677baab4402ed117caddcd"
     },
     "views": [
       { "id": "request-path", "label": "Richiesta end-to-end", "focus": ["clients", "gateway", "agentloop", "prompt", "router", "control", "registry", "tools", "sandbox"], "note": "Dal client al modello: il prompt e' assemblato dal harness." },
@@ -23,7 +23,7 @@
     { "id": "agentloop", "type": "backend", "label": "Agent Loop", "sublabel": "think → act → observe", "pos": [316, 340], "size": [122, 60], "sources": [{ "path": "src/sparkforge/server.py" }, { "path": "src/sparkforge/subagent.py" }] },
     { "id": "control", "type": "backend", "label": "Harness Control", "sublabel": "budget · best-of-N", "pos": [464, 340], "size": [122, 60], "sources": [{ "path": "src/sparkforge/keepgoing.py" }, { "path": "src/sparkforge/bestofn.py" }, { "path": "src/sparkforge/verify.py" }] },
     { "id": "registry", "type": "security", "label": "Tool Registry", "sublabel": "allowlist · approval", "pos": [612, 340], "size": [122, 60], "sources": [{ "path": "src/sparkforge/registry.py" }, { "path": "src/sparkforge/approvals.py" }, { "path": "config/tools.yaml" }] },
-    { "id": "tools", "type": "backend", "label": "Tool Executor", "sublabel": "fs · git · web · skills", "pos": [760, 340], "size": [122, 60], "sources": [{ "path": "src/sparkforge/tools.py" }] },
+    { "id": "tools", "type": "backend", "label": "Tool Executor", "sublabel": "fs · git · web · sessions", "pos": [760, 340], "size": [122, 60], "sources": [{ "path": "src/sparkforge/tools.py" }] },
     { "id": "sandbox", "type": "security", "label": "Sandbox", "sublabel": "docker · bwrap · host", "pos": [908, 340], "size": [122, 60], "sources": [{ "path": "src/sparkforge/sandbox.py" }] },
     { "id": "observe", "type": "external", "label": "Osservabilita'", "sublabel": "metriche · OTel · trace", "pos": [150, 110], "size": [122, 58], "sources": [{ "path": "src/sparkforge/runmetrics.py" }, { "path": "src/sparkforge/otel_tracing.py" }] },
     { "id": "router", "type": "cloud", "label": "LLM Router", "sublabel": ":8080 · local+hosted", "pos": [300, 110], "size": [140, 58], "sources": [{ "path": "src/sparkforge/routing.py" }, { "path": "src/sparkforge/providers.py" }] },
@@ -118,7 +118,8 @@
         "Un JOB (JN) orchestrano piu' agenti: goal, mode coordinator|fanout, deps (DAG) e blocked_by; le ondate indipendenti girano in parallelo, la successiva attende. Storage data/jobs.json.",
         "Il dispatch riusa la stessa turn-machinery (server.chat_stream_gen): ogni turno d'agente e' un turno reale e persistito, con la sua task list.",
         "Superficie HTTP in orchestration.py (routed da api_v02.handle): /api/agents, /api/agents/tree, /api/jobs, /api/jobs/<id>/dispatch, /api/jobs/wake, /api/roles.",
-        "Orbit (beta, src2/orbit_beta): deck di controllo che dispaccia goal a una o piu' sessioni in background (Orchestrator.dispatch) e mostra la costellazione dei job."
+        "Orbit (beta, src2/orbit_beta): deck di controllo che dispaccia goal a una o piu' sessioni in background (Orchestrator.dispatch) e mostra la costellazione dei job.",
+        "JAG-350: tool `sessions` (read-only) dentro il Tool Executor — `list` mappa sessioni -> nomi agenti, `read` rende il transcript completo (messaggi + tool calls + injection). Il Master ora puo' ispezionare un teammate che sta fallendo e aiutarlo. Il delegation record porta il sid di ciascun teammate."
       ]
     }
   ]
