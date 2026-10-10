@@ -213,6 +213,41 @@ python3 forge.py meta run --n-candidates 6
 python3 forge.py swarm "progetta una CLI" --n-workers 4
 ```
 
+### Teams, agents, jobs, routines, roles
+
+The orchestration layer: designate sessions as **agents**, organise them into an
+**org chart**, create **jobs** and dispatch them in dependency waves, schedule
+**routines**, and give a session a **role**.
+
+| Command | Endpoint |
+|---|---|
+| `agents ls` | `GET /api/agents/tree` |
+| `agents new NAME [--role R] [--model M] [--reports-to AX]` | `POST /api/orbit/sessions` + `POST /api/agents` |
+| `agents set AX [--name N] [--role R] [--model M] [--reports-to AX]` | `POST /api/agents` |
+| `agents rm AX` | `DELETE /api/agents/<sid>` (blocked while it has reports) |
+| `jobs ls` | `GET /api/jobs` |
+| `jobs get JN` | `GET /api/jobs/<id>` |
+| `jobs new "goal" [--to AX] [--blocked-by JN,JN] [--agents AX,AX] [--coordinator AX] [--mode m]` | `POST /api/jobs` |
+| `jobs run JN` | `POST /api/jobs/<id>/dispatch` (coordinator + workers, dependency waves) |
+| `jobs wake` | `POST /api/jobs/wake` (release blocked jobs whose blockers are done) |
+| `routines ls` | `GET /api/routines` |
+| `routines new "goal" --agent AX [--every N]` | `POST /api/routines` |
+| `routines enable RID` / `routines disable RID` | `POST /api/routines/<id>/<action>` |
+| `routines rm RID` | `DELETE /api/routines/<id>` |
+| `roles show --session SID` | `GET /api/roles?session=` |
+| `roles set --session SID [--text T]` | `POST /api/roles` (no `--text` reads stdin) |
+| `roles clear --session SID` | `POST /api/roles {text:""}` |
+| `roles reset --session SID` | `DELETE /api/roles?session=` |
+
+```bash
+python3 forge.py agents ls
+python3 forge.py agents new "Docs Lead" --role "owns the docs site"
+python3 forge.py jobs new "ship the docs site" --to A25 --mode run
+python3 forge.py jobs run J12
+python3 forge.py routines new "check the feed" --agent A25 --every 3600
+python3 forge.py roles set --session A25 --text "You are the docs lead."
+```
+
 ### Checkpoints, routing, eval, voice, MCP
 
 | Command | Endpoint |
@@ -319,6 +354,18 @@ Every HTTP route the server exposes has a CLI entry point:
 | POST | `/mcp` | `mcp` |
 | PATCH | `/api/tasks` | `tasks done` / `tasks set` |
 | DELETE | `/api/sessions/<id>` | `sessions rm` |
+| GET | `/api/agents` `/api/agents/tree` | `agents ls` |
+| GET | `/api/agents/<sid>` `/api/agents/<sid>/chain` | delete-guards / chain of command |
+| POST | `/api/agents` | `agents new` / `agents set` |
+| DELETE | `/api/agents/<sid>` | `agents rm` |
+| GET | `/api/jobs` `/api/jobs/<id>` | `jobs ls` / `jobs get` |
+| POST | `/api/jobs` `/api/jobs/<id>/dispatch` `/api/jobs/wake` | `jobs new` / `jobs run` / `jobs wake` |
+| GET | `/api/routines` `/api/routines/<id>` | `routines ls` |
+| POST | `/api/routines` `/api/routines/<id>/<action>` | `routines new` / `routines enable\|disable` |
+| DELETE | `/api/routines/<id>` | `routines rm` |
+| GET | `/api/roles?session=` | `roles show` |
+| POST | `/api/roles` | `roles set` / `roles clear` |
+| DELETE | `/api/roles?session=` | `roles reset` |
 
 ---
 

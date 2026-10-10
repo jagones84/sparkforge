@@ -180,7 +180,6 @@ For the *live* seams (reload, session swap, swap-during-run, long tasks) see
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how the harness is wired (v1.0.0) |
 | [docs/CLI.md](docs/CLI.md) | every CLI command + endpoint |
 | [docs/TESTING-PLAYBOOK.md](docs/TESTING-PLAYBOOK.md) | how to hunt real bugs live |
-| [docs/README.md](docs/README.md) | index of all docs (current vs historical) |
 | [AGENTS.md](AGENTS.md) | orientation for an AI agent landing in the repo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how to contribute |
 | [CHANGELOG.md](CHANGELOG.md) | release notes |

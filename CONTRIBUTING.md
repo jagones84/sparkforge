@@ -40,6 +40,24 @@ bash tests/battery.sh          # → === battery: 125/125 GREEN ===
    `docs:`, `chore:`) explaining the *why*.
 6. **Open a PR** using the template.
 
+## Tests
+
+Everything is stdlib Python — no framework, no network, no model for the gate.
+
+```bash
+bash tests/battery.sh      # the gate: all acceptance tests, isolated, deterministic
+python3 tests/acceptance/v391_<topic>.py   # one test
+pytest tests/properties/   # Hypothesis property tests
+```
+
+- `tests/acceptance/` — the live battery (`v140..`), auto-discovered; **add new tests here**.
+- `tests/live/` — need a running server; run by hand.
+- `tests/properties/` — Hypothesis over pure logic.
+- `battery.sh` points every `LONGRUN_*` var at a throwaway `mktemp` dir, so a run never
+  touches `data/` or the live transcripts.
+- A test is `vNNN_topic.py`: it does `sys.path.insert(0, REPO/src)`, imports `longrun`,
+  defines `check(name, ok, detail="")`, prints `PASS`/`FAIL` and exits non-zero on any `FAIL`.
+
 ## House style
 
 - English only in code, comments, docstrings, log messages, UI strings and commits.

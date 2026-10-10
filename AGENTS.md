@@ -12,10 +12,9 @@ that built this.
 
 1. **`docs/ARCHITECTURE.md`** and **`docs/CLI.md`** — how the system is wired.
 2. **`docs/TESTING-PLAYBOOK.md`** — the mindset for testing the harness live.
-3. **`tests/README.md`** — how to run the gate and write a test.
-4. **`CONTRIBUTING.md`** — contribution rules and house style.
-5. **`docs/archive/research/2026-10-06-debugging-large-codebases.md`** — the science
-   of debugging large, interrelated codebases (delta debugging, SBFL, slicing, …).
+3. **`CONTRIBUTING.md`** — how to run the gate, write a test, and the house style.
+4. **`docs/RESEARCH-frontier-harnesses-2026.md`** — the research base and where Longrun
+   sits vs. the 2026 frontier.
 
 ## The 60-second mental model
 
