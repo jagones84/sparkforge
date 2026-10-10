@@ -18,24 +18,24 @@ import atexit  # noqa: E402
 import shutil  # noqa: E402
 tmp = tempfile.mkdtemp(prefix="sf-177-")
 atexit.register(lambda: shutil.rmtree(tmp, ignore_errors=True))
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(tmp, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
-os.environ["SPARKFORGE_GRAPH_DIR"] = tmp  # taskgraph appends "graphs" itself
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(tmp, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(tmp, "runs")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(tmp, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(tmp, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = tmp  # taskgraph appends "graphs" itself
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(tmp, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(tmp, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile  # noqa: E402
-py_compile.compile(os.path.join(REPO, "src", "sparkforge", "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "longrun", "server.py"), doraise=True)
 print("[compile] server.py OK")
 
-from sparkforge import server  # noqa: E402
-from sparkforge import taskgraph  # noqa: E402
-from sparkforge import runmetrics  # noqa: E402
-from sparkforge import edits  # noqa: E402
+from longrun import server  # noqa: E402
+from longrun import taskgraph  # noqa: E402
+from longrun import runmetrics  # noqa: E402
+from longrun import edits  # noqa: E402
 
 
 def make_artifacts(sid):
@@ -78,8 +78,8 @@ survivors = [os.path.basename(p) for p in paths(other) if os.path.isfile(p)]
 assert len(survivors) == 6, "delete touched another session: %r" % survivors
 
 # wiring: the HTTP DELETE handler must call the cascade helper
-src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-src += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
 assert "_purge_session_artifacts(sid)" in src, "DELETE handler is not wired to the cascade"
 
 print("RESULT: ALL OK")

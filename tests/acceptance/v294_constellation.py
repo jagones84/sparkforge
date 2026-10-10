@@ -2,7 +2,7 @@
 """v294 — Orbit constellation: aggregate endpoint + non-modal window + deep-link (JAG-296).
 
 Locked here:
-  * `sparkforge.orbit.api._constellation()` aggregates agents + jobs + every agent's graph;
+  * `longrun.orbit.api._constellation()` aggregates agents + jobs + every agent's graph;
   * `GET /api/orbit/constellation` is registered;
   * the Orbit deck has ONE floating, NON-modal window (no backdrop), an AGENT/ALL
     toggle, clusters per agent, and builds deep-links with session+node;
@@ -25,7 +25,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge.orbit import api as oapi  # noqa: E402
+from longrun.orbit import api as oapi  # noqa: E402
 
 check("api exposes _constellation", hasattr(oapi, "_constellation"))
 c = oapi._constellation()
@@ -34,11 +34,11 @@ check("agents is a list", isinstance(c["agents"], list))
 check("jobs is a list", isinstance(c["jobs"], list))
 check("graphs is a dict", isinstance(c["graphs"], dict))
 
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "api.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "api.py"), encoding="utf-8") as f:
     a = f.read()
 check("constellation route registered", '"/api/orbit/constellation"' in a)
 
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("constellation DOCKED panel exists",
       'id="constPanel"' in ui and 'id="constSvg"' in ui and 'id="constBody"' in ui)

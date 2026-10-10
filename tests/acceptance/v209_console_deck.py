@@ -16,7 +16,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DECK = os.path.join(REPO, "webui", "console.html")
-SERVER = os.path.join(REPO, "src", "sparkforge", "httpapi.py")
+SERVER = os.path.join(REPO, "src", "longrun", "httpapi.py")
 results = []
 
 

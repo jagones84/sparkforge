@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Bridge · Longrun beta</title>
+<script>try{var _t=localStorage.getItem("sf_theme")||"indigo";document.documentElement.dataset.theme=_t;}catch(e){}</script>
+<style>
+  :root{
+    --bg:#070810; --panel:#0e1320; --panel2:#121829; --line:#1f2940;
+    --txt:#e2e6ff; --dim:#8189b0; --acc:#7c8cff; --acc2:#39d3c3;
+    --ok:#57d38c; --warn:#e0a458; --err:#e06a6a; --ice:#bfe3ff;
+  }
+  *{box-sizing:border-box}
+  html,body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;margin:0;height:100%}
+  body{background:radial-gradient(1200px 600px at 70% -10%,#101a30 0%,var(--bg) 60%);
+    color:var(--txt);font:13px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+  button,input,select,textarea{font:inherit;color:var(--txt)}
+  header{display:flex;align-items:center;gap:12px;padding:11px 18px;
+    border-bottom:1px solid var(--line);background:rgba(10,14,24,.72);position:sticky;top:0;z-index:5;backdrop-filter:blur(6px)}
+  header h1{margin:0;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--ice)}
+  .tag{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;letter-spacing:.06em}
+  .tag.beta{color:var(--warn);border-color:rgba(224,164,88,.45)}
+  .spacer{flex:1}
+  .led{width:8px;height:8px;border-radius:50%;background:var(--err);box-shadow:0 0 8px currentColor}
+  .led.on{background:var(--ok)}
+  .btn{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:6px 11px;cursor:pointer}
+  .btn:hover{border-color:var(--acc);color:#fff}
+  .btn.primary{background:linear-gradient(180deg,#5a78ff,#4c63e0);border-color:#5a78ff;color:#fff;font-weight:600}
+  .btn.ghost{background:transparent}
+  .btn.no{border-color:rgba(224,106,106,.5);color:var(--err)}
+  .inp{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 10px;width:100%}
+  .inp.mini{padding:3px 6px;border-radius:6px;font-size:11px}
+  /* JAG-342: one panel per row, top-to-bottom (mobile-style) — the two-column grid
+     clipped wide panels (ORG CHART) and forced a page-level horizontal scrollbar. */
+  .wrap{display:flex;flex-direction:column;gap:10px;padding:10px;max-width:1680px;margin:0 auto}
+  .grid2{display:flex;flex-direction:column;gap:10px}
+  .grid2.ab,.grid2.oc,.grid2.rf{display:flex;flex-direction:column;gap:10px}
+  .col{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .row{display:flex;align-items:center;gap:8px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel > h2{margin:0;padding:6px 10px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+    border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px}
+  .panel > h2 .n{margin-left:auto;color:var(--ice);font-size:10px}
+  .pad{padding:8px}
+  .scroll{max-height:44vh;overflow:auto}
+  .muted{color:var(--dim)} .small{font-size:11px}
+  .empty{padding:14px;color:var(--dim);font-size:12px}
+  /* agents table */
+  table.at{width:100%;border-collapse:collapse;font-size:12px}
+  table.at th{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);text-align:left;
+    padding:5px 8px;border-bottom:1px solid var(--line);font-weight:500}
+  table.at td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  table.at tr:hover td{background:rgba(108,140,255,.04)}
+  table.at select.inp.mini{max-width:190px}
+  table.at tr.brief td{background:rgba(9,14,26,.6);padding:8px}
+  table.at tr.brief textarea{min-height:190px;font-size:12px;font-family:ui-monospace,monospace;resize:vertical}
+  .aid{font-family:ui-monospace,monospace;color:var(--acc2);font-size:11px}
+  .rl{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:1px 7px;white-space:nowrap}
+  .dotr{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--acc2);box-shadow:0 0 6px currentColor;margin-left:5px;vertical-align:middle}
+  /* org chart */
+  /* JAG-342: the org chart scrolls natively inside its panel (no transform pan, which
+     fought the scrollbar and clipped wide trees). Tall enough to show the whole chart. */
+  .orgwrap{padding:14px 10px;overflow:auto;max-height:72vh;min-height:240px}
+  .orgwrap ul{position:relative;padding-top:16px;display:flex;justify-content:center;list-style:none;margin:0}
+  .orgwrap li{position:relative;padding:16px 8px 0;text-align:center;list-style:none}
+  .orgwrap li::before,.orgwrap li::after{content:"";position:absolute;top:0;right:50%;border-top:1px solid var(--line);width:50%;height:16px}
+  .orgwrap li::after{right:auto;left:50%;border-left:1px solid var(--line)}
+  .orgwrap li:only-child::after,.orgwrap li:only-child::before{display:none}
+  .orgwrap li:only-child{padding-top:16px}
+  .orgwrap li:first-child::before,.orgwrap li:last-child::after{border:0 none}
+  .orgwrap li:last-child::before{border-right:1px solid var(--line);border-radius:0 5px 0 0}
+  .orgwrap li:first-child::after{border-radius:5px 0 0 0}
+  .orgwrap ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:1px solid var(--line);width:0;height:16px}
+  .orgwrap > ul{padding-top:0}
+  .node{display:inline-flex;flex-direction:column;gap:1px;border:1px solid var(--line);border-radius:9px;
+    padding:6px 11px;background:var(--panel2);cursor:pointer;min-width:98px}
+  .node:hover{border-color:var(--acc)}
+  .node.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+  .node .nid{font-family:ui-monospace,monospace;color:var(--acc2);font-size:10px}
+  .node .nnm{font-size:12px}
+  .node .nrl{font-size:9px;color:var(--dim)}
+  /* constellation — a DOCKED panel in the page grid (JAG-297) */
+  .panel.cpanel .cbody{position:relative;height:48vh;min-height:360px;background:#060912}
+  .csvg{display:block;width:100%;height:100%}
+  .ctools{display:flex;gap:5px;margin-left:auto}
+  .btn.mini{padding:2px 8px;font-size:11px}
+  .btn.on{border-color:var(--acc);color:#fff;background:rgba(108,140,255,.16)}
+  .cdetail{padding:7px 11px;border-top:1px solid var(--line);font-size:11px;color:var(--dim);min-height:18px}
+  .clegend{display:flex;gap:11px;flex-wrap:wrap;padding:6px 11px;border-top:1px solid var(--line);
+    font-size:10px;color:var(--dim)}
+  .clegend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;vertical-align:middle}
+  .clegend s{display:inline-block;width:16px;height:0;border-top:2px solid #7c8cff;margin-right:4px;vertical-align:middle;text-decoration:none}
+  .clegend s.dash{border-top-style:dashed;border-color:rgba(108,140,255,.7)}
+  /* compact AGENTS table so JOB fits on its right */
+  .panel.ag table.at td{padding:2px 7px}
+  .panel.ag table.at button{white-space:nowrap;padding:3px 9px}
+  .panel.ag table.at tr.brief textarea{min-height:150px}
+  .panel.ag .scroll{max-height:48vh}
+  .node{min-width:84px;padding:5px 9px}
+  .cnode{cursor:pointer}
+  .cnode text{font:11px ui-monospace,monospace;fill:#dbe3f4;pointer-events:none}
+  .clink{stroke:rgba(120,160,220,.45);stroke-width:1.1;fill:none}
+  .clink.dep{stroke-dasharray:4 3}
+  .clink.job{stroke:#7c8cff;stroke-width:2.2}
+  .clink.assign{stroke-dasharray:3 3}
+  .cjob{fill:#1a1408;stroke:#e0a458}
+  .csub{fill:#08202a;stroke:#5ac8fa}
+  .cagent{fill:#0b1a22;stroke:#39d3c3}
+  .cagent.self{stroke:#6c8cff}
+  .cpop{position:absolute;max-width:340px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:9px;padding:9px 11px;font-size:11px;color:var(--txt);z-index:70;
+    box-shadow:0 12px 30px rgba(0,0,0,.5)}
+  .cpop b{color:var(--ice)}
+  .cpop .m{border-top:1px solid var(--line);margin-top:6px;padding-top:5px;color:var(--dim);
+    white-space:pre-wrap;max-height:120px;overflow:auto}
+  .cpop .go{display:inline-block;margin-top:7px;color:var(--acc);cursor:pointer}
+  /* jobs + routines + feed */
+  .job{display:flex;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);font-size:12px;cursor:pointer}
+  .job .st{font-size:9px;text-transform:uppercase;border-radius:999px;padding:1px 7px;border:1px solid var(--line)}
+  .job .st.created{color:var(--dim)} .job .st.running{color:var(--warn);border-color:rgba(224,164,88,.5)}
+  .job .st.done{color:var(--ok);border-color:rgba(87,211,140,.5)} .job .st.error{color:var(--err);border-color:rgba(224,106,106,.5)}
+  .job .st.blocked{color:var(--ice);border-color:rgba(124,196,255,.5)}
+  .runrow{display:flex;gap:8px;padding:5px 12px;font-size:11px;color:var(--dim);border-bottom:1px solid var(--line)}
+  .runrow .st{color:var(--ice)}
+  .orgrow{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--line)}
+  .orgrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #feed{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim);padding:8px 12px;max-height:24vh;overflow:auto}
+  #feed b{color:var(--ice);font-weight:600}
+  /* JAG-353: Bridge honours the app theme (shared localStorage) so it matches the
+     WebUI. Per-theme token overrides + the few rules that were hardcoded dark. */
+  :root{ --ga:#101a30; --hdr:rgba(10,14,24,.72); --cbody:#060912;
+         --linktext:#dbe3f4; --link:rgba(120,160,220,.45); --brief:rgba(9,14,26,.6);
+         --cjob-f:#1a1408; --csub-f:#08202a; --cagent-f:#0b1a22; color-scheme:dark; }
+  html[data-theme="dark"]{ --bg:#0b0d12; --panel:#16191f; --panel2:#1b1f26; --line:#2a2f38;
+    --txt:#e9edf3; --dim:#8b93a3; --acc:#8fa6c8; --acc2:#9fb0cb; --ice:#dbe3ee;
+    --ga:#1b2029; --hdr:rgba(11,13,18,.8); --cbody:#0d1015; --brief:rgba(255,255,255,.04);
+    --cjob-f:#1c1913; --csub-f:#12181c; --cagent-f:#131a17; color-scheme:dark; }
+  html[data-theme="midnight"]{ --bg:#070d18; --panel:#0e1626; --panel2:#101c30; --line:#1a2740;
+    --txt:#d7e0f2; --dim:#7d89a6; --acc:#6b8cff; --acc2:#7fd4c8; --ice:#bfe3ff;
+    --ga:#101c38; --hdr:rgba(8,14,26,.84); --cbody:#060c16; --brief:rgba(107,140,255,.06);
+    --cjob-f:#1a1408; --csub-f:#08202a; --cagent-f:#0b1a22; color-scheme:dark; }
+  html[data-theme="sand"]{ --bg:#d9c49c; --panel:#e2d4b6; --panel2:#d8c9a9; --line:#c2ad84;
+    --txt:#382f21; --dim:#665639; --acc:#9c5f24; --acc2:#a9853f; --ice:#5a4a30;
+    --ga:#ddc9a3; --hdr:rgba(222,208,178,.95); --cbody:#ded0ae; --linktext:#453b2c;
+    --link:rgba(120,92,52,.55); --brief:rgba(156,95,36,.08);
+    --cjob-f:#e0cfa9; --csub-f:#d3dee6; --cagent-f:#d7e2d5;
+    --ok:#3c8556; --warn:#9c7018; --err:#a8482f; color-scheme:light; }
+  html[data-theme="sepia"]{ --bg:#17120c; --panel:#261f16; --panel2:#1d1710; --line:#3a2d1e;
+    --txt:#e6d8bf; --dim:#9c8767; --acc:#c99a5b; --acc2:#d7bb84; --ice:#e6d8bf;
+    --ga:#2a2015; --hdr:rgba(23,18,12,.84); --cbody:#120e09; --linktext:#e6d8bf;
+    --link:rgba(214,180,124,.45); --brief:rgba(201,154,91,.06);
+    --cjob-f:#231a10; --csub-f:#141d20; --cagent-f:#161c14;
+    --ok:#6fb98a; --warn:#d9b45c; --err:#de8a6f; color-scheme:dark; }
+  html[data-theme="forest"]{ --bg:#0c1410; --panel:#141f19; --panel2:#0f1813; --line:#20352a;
+    --txt:#d8e6dc; --dim:#7f9488; --acc:#6fae8b; --acc2:#9ccfae; --ice:#cfe6d8;
+    --ga:#14301f; --hdr:rgba(11,19,15,.84); --cbody:#08110c; --linktext:#d8e6dc;
+    --link:rgba(140,190,160,.45); --brief:rgba(111,174,139,.06);
+    --cjob-f:#12241a; --csub-f:#10222a; --cagent-f:#12241c;
+    --ok:#5bd08a; --warn:#d7b25c; --err:#e0836f; color-scheme:dark; }
+  body{background:radial-gradient(1200px 600px at 70% -10%,var(--ga) 0%,var(--bg) 60%)}
+  header{background:var(--hdr)}
+  .cbody{background:var(--cbody)}
+  .cnode text{fill:var(--linktext)}
+  .clink{stroke:var(--link)}
+  table.at tr.brief td{background:var(--brief)}
+  .cjob{fill:var(--cjob-f)} .csub{fill:var(--csub-f)} .cagent{fill:var(--cagent-f)}
+  .btn:hover{color:var(--txt)}
+  .btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  .btn.on{background:var(--brief);color:var(--txt)}
+</style>
+</head>
+<body>
+<header>
+  <span class="led" id="led"></span>
+  <h1>Bridge</h1>
+  <span class="tag beta">beta · detachable</span>
+  <span class="tag" id="agTag">agents —</span>
+  <select class="inp" id="teamSel" title="team — scope the whole board"
+          style="max-width:210px;width:auto"></select>
+  <span class="spacer"></span>
+  <a class="btn ghost" href="/">main app ↗</a>
+</header>
+
+<main class="wrap">
+  <div class="grid2 ab">
+    <!-- Agents: available agents, creatable with +, each with a model + reports-to -->
+    <section class="panel ag">
+      <h2>Agents <span class="n" id="agCount">—</span></h2>
+      <div class="pad row" style="gap:6px;border-bottom:1px solid var(--line)">
+        <input class="inp" id="agNewName" placeholder="new agent — name…">
+        <input class="inp" id="agNewRole" placeholder="role (optional)" style="max-width:170px">
+        <button class="btn primary" id="agNew">＋ new agent</button>
+        <button class="btn" id="agPolicy" title="Apply the team model policy: leads → strongest cheap cloud, others → cheap cloud, at most ONE local model per machine (dgx / win).">⚙ model policy</button>
+      </div>
+      <div class="scroll">
+        <table class="at">
+          <thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Model</th><th>Reports to</th><th>Role.md</th><th></th></tr></thead>
+          <tbody id="agBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Job: goal + who you give it to (its reports are the team) -->
+    <section class="panel">
+      <h2>Job <span class="n" id="jobsCount">—</span></h2>
+      <div class="pad" style="border-bottom:1px solid var(--line)">
+        <textarea class="inp" id="jobGoal" placeholder="job goal — the coordinator decomposes it and its team executes…" style="min-height:52px"></textarea>
+        <div class="row" style="gap:6px;margin-top:6px">
+          <select class="inp" id="jobTo"><option value="">assign to…</option></select>
+          <button class="btn primary" id="jobCreate">＋ create job</button>
+        </div>
+        <div class="small muted" style="margin-top:6px">The team = the assignee plus its direct reports. Double-click a job to open the coordinator in the main app.</div>
+      </div>
+      <div class="scroll" id="jobs"></div>
+    </section>
+  </div>
+
+  <div class="grid2 oc">
+    <!-- Org chart: boxes + connectors from reports_to -->
+    <section class="panel">
+      <h2>Org chart <span class="n">who reports to whom</span></h2>
+      <div class="orgwrap" id="orgtree"></div>
+    </section>
+
+    <!-- Constellation: DOCKED panel (AGENT = one agent, ALL = every agent + jobs) -->
+    <section class="panel cpanel" id="constPanel">
+      <h2>Constellation <span class="n" id="constWho">—</span>
+        <span class="ctools">
+          <button class="btn ghost mini" id="constAgent">AGENT</button>
+          <button class="btn ghost mini" id="constAll">ALL</button>
+        </span></h2>
+      <div class="cbody" id="constBody">
+        <svg class="csvg" id="constSvg" role="img" aria-label="Dependency constellation"></svg>
+      </div>
+      <div class="cdetail" id="constDetail">click a task for its chat extract · double-click to open it in the main app</div>
+      <div class="clegend">
+        <span><i style="background:#3ff0a6"></i>done</span>
+        <span><i style="background:#4fd6ff"></i>doing</span>
+        <span><i style="background:#7f9ac0"></i>todo</span>
+        <span><i style="background:#ff5d6c"></i>blocked</span>
+        <span><i style="background:#46597a"></i>superseded</span>
+        <span><s></s>blocked_by (job→job)</span>
+        <span><s class="dash"></s>deps / assigns</span>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid2 rf">
+    <section class="panel">
+      <h2>Routines <span class="n" id="routineCount">—</span></h2>
+      <div class="pad" style="border-bottom:1px solid var(--line)">
+        <textarea class="inp" id="rtGoal" placeholder="routine goal — the agent re-runs it on a cadence…" style="min-height:46px"></textarea>
+        <div class="row" style="gap:6px;margin-top:6px">
+          <select class="inp" id="rtAgent"><option value="">agent…</option></select>
+          <input class="inp" id="rtEvery" type="number" min="30" value="300" title="every N seconds" style="max-width:100px">
+          <button class="btn" id="rtCreate">＋ add</button>
+        </div>
+      </div>
+      <div class="scroll" id="routines" style="max-height:22vh"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Feed</h2>
+      <div id="feed"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+/* ---------------------------------------------------------------- Api ---- */
+class Api {
+  constructor(){
+    const qs = new URLSearchParams(location.search);
+    this.token = localStorage.getItem("sf_token") || qs.get("token") || "";
+    if (qs.get("token")) localStorage.setItem("sf_token", this.token);
+  }
+  headers(extra){ const h = Object.assign({}, extra||{}); if (this.token) h.Authorization = "Bearer " + this.token; return h; }
+  get(path){ return fetch(path, {headers:this.headers()}).then(r => r.json()); }
+  post(path, body){ return fetch(path, {method:"POST", headers:this.headers({"Content-Type":"application/json"}), body: JSON.stringify(body||{})}).then(r => r.json()); }
+  del(path){ return fetch(path, {method:"DELETE", headers:this.headers()}).then(r => r.json()); }
+  es(path){ const sep = path.includes("?") ? "&" : "?"; return new EventSource(path + (this.token ? sep + "token=" + encodeURIComponent(this.token) : "")); }
+}
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const short = (s, n) => { s = String(s==null?"":s); return s.length > n ? s.slice(0, n-1) + "…" : s; };
+const fillSelect = (sel, agents, ph) => {
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">' + esc(ph) + '</option>' +
+    agents.map(a => '<option value="' + esc(a.id) + '">' + esc(a.id) + ' ' + esc(a.name||"") + '</option>').join("");
+  sel.value = keep;
+};
+
+/* ----------------------------------------------------- Agents (table) ---- */
+class AgentsView {
+  constructor(api, onChanged){ this.api = api; this.onChanged = onChanged; this.agents = []; this.models = []; this.open = null; this.running = new Set(); }
+  render(tree, models, running){
+    if (tree) this.agents = tree.agents || [];
+    if (models && models.length) this.models = models;
+    if (running) this.running = running;
+    $("agCount").textContent = this.agents.length ? this.agents.length + " agents" : "—";
+    $("agTag").textContent = "agents — " + this.agents.length;
+    const body = $("agBody");
+    // JAG-295-fix: this table is rebuilt by the 5s auto-poll. Rebuilding while the
+    // user is mid-edit (a focused text field) or has unsaved text in the ROLE.md
+    // editor would wipe their input every 5 seconds. Defer the rebuild until the
+    // next poll (after blur/save); counts above still update.
+    const ae = document.activeElement;
+    // JAG-329: a native <SELECT> (the MODEL / REPORTS-TO dropdown) is a form control
+    // too. An OPEN dropdown has that select as activeElement, and rebuilding the table
+    // mid-selection CLOSED it ("the model tab disappears after a timer even while it is
+    // open for selection"). Guard every form control, not just text fields.
+    const editing = ae && body.contains(ae)
+      && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT");
+    const roleTA = body.querySelector("textarea[data-p='role']");
+    const roleDirty = !!(roleTA && this.openText != null && roleTA.value !== this.openText);
+    if (editing || roleDirty) return;
+    body.innerHTML = this.agents.length
+      ? this.agents.map(a => this.row(a)).join("")
+      : '<tr><td colspan="7" class="empty">no agents — create one with ＋ above.</td></tr>';
+    this.bind();
+    fillSelect($("jobTo"), this.agents, "assign to…");
+    fillSelect($("rtAgent"), this.agents, "agent…");
+  }
+  row(a){
+    const mopts = '<option value=""' + (a.model ? "" : " selected") + '>default</option>' +
+      this.models.map(m => '<option value="' + esc(m.ref) + '"' + (a.model === m.ref ? " selected" : "") + '>' + esc(m.label) + '</option>').join("");
+    const ropts = '<option value="">— none —</option>' +
+      this.agents.filter(x => x.id !== a.id).map(x => '<option value="' + esc(x.id) + '"' + (a.reports_to === x.id ? " selected" : "") + '>' + esc(x.id) + ' ' + esc(x.name||"") + '</option>').join("");
+    const open = this.open === a.session;
+    const run = this.running.has(a.session) ? '<span class="dotr" title="running"></span>' : "";
+    const roleText = open ? esc(this.openText == null ? "" : this.openText) : "";
+    const brief = open ? '<tr class="brief"><td></td><td colspan="6">' +
+      '<div class="small muted">Prompt — the role and a few behaviour notes for this session. It is the SAME <b>ROLE.md</b> you edit in the main app (Inspector &sect; Role): it is merged into the system prompt, never replaces it.</div>' +
+      '<textarea class="inp" data-p="role" placeholder="Role: API designer&#10;- answer only with the endpoint list and JSON schema">' + roleText + '</textarea>' +
+      '<div class="row" style="margin-top:6px;gap:6px"><button class="btn primary" data-save="' + esc(a.session) + '">save prompt</button>' +
+      '<button class="btn ghost" data-close="1">close</button></div></td></tr>' : "";
+    return '<tr data-sid="' + esc(a.session) + '">' +
+      '<td class="aid">' + esc(a.id) + run + '</td>' +
+      '<td><input class="inp mini" data-f="name" value="' + esc(a.name||"") + '"></td>' +
+      '<td><input class="inp mini" data-f="role" value="' + esc(a.role||"") + '"></td>' +
+      '<td><select class="inp mini" data-f="model">' + mopts + '</select></td>' +
+      '<td><select class="inp mini" data-f="reports_to">' + ropts + '</select></td>' +
+      '<td><button class="btn ghost" data-brief="1" title="role + behaviour notes (ROLE.md)">✎ prompt</button></td>' +
+      '<td><button class="btn ghost" data-clear="' + esc(a.session) + '" title="clear this session (chat + tasks)">\u21BA reset</button> ' +
+      '<button class="btn ghost no" data-del="1" title="release agent">×</button></td></tr>' + brief;
+  }
+  bind(){
+    const body = $("agBody");
+    body.querySelectorAll("select[data-f],input[data-f]").forEach(el => {
+      el.onchange = () => { const sid = el.closest("tr").dataset.sid; this.save(sid, {[el.dataset.f]: el.value}); };
+    });
+    body.querySelectorAll("[data-brief]").forEach(b => { b.onclick = async () => {
+      const sid = b.closest("tr").dataset.sid;
+      if (this.open === sid){ this.open = null; this.openText = null; this.render(null, null); return; }
+      this.open = sid; this.openText = ""; this.render(null, null);
+      const r = await this.api.get("/api/roles?session=" + encodeURIComponent(sid));
+      if (this.open !== sid) return;
+      // JAG-367: the ROLE.md loads ASYNC, but render()'s dirty-guard (meant to protect
+      // an in-progress edit from the 5s poll) blocked THIS render too: the textarea
+      // still held "" while openText became the fetched text, so roleDirty was true and
+      // the box stayed VOID even though the SAME ROLE.md the main app shows had content.
+      // Write the fetched role straight into the textarea instead of re-rendering.
+      this.openText = (r && r.text) || "";
+      const ta = $("agBody").querySelector('textarea[data-p="role"]');
+      if (ta) ta.value = this.openText;
+    }; });
+    body.querySelectorAll("[data-close]").forEach(b => { b.onclick = () => { this.open = null; this.openText = null; this.render(null, null); }; });
+    body.querySelectorAll("[data-save]").forEach(b => { b.onclick = async () => {
+      const tr = b.closest("tr"), sid = b.dataset.save;
+      const text = tr.querySelector('textarea[data-p="role"]').value;
+      const r = await this.api.post("/api/roles", {session: sid, text});
+      if (!r || !r.ok){ alert((r && r.error) || "save failed"); return; }
+      this.open = null; this.openText = null;
+      if (this.onChanged) this.onChanged();
+    }; });
+    body.querySelectorAll("[data-clear]").forEach(b => { b.onclick = async () => {
+      const sid = b.dataset.clear;
+      if (!sid) return;
+      if (!confirm("Clear this session? It wipes the chat history and task list (the agent + its role stay).")) return;
+      const r = await this.api.post("/api/sessions/" + encodeURIComponent(sid) + "/clear", {});
+      if (!r || r.ok === false){ alert((r && r.error) || "clear failed"); return; }
+      if (this.onChanged) this.onChanged();
+    }; });
+    body.querySelectorAll("[data-del]").forEach(b => { b.onclick = async () => {
+      const sid = b.closest("tr").dataset.sid;
+      if (!confirm("Release this agent? The session stays but loses the agent badge.")) return;
+      const r = await this.api.del("/api/agents/" + encodeURIComponent(sid));
+      if (!r || !r.ok){ alert((r && r.error) || "release refused"); return; }
+      if (this.onChanged) this.onChanged();
+    }; });
+  }
+  async save(sid, patch){
+    const r = await this.api.post("/api/agents", Object.assign({session: sid}, patch));
+    if (!r || !r.ok){ alert((r && r.error) || "save failed"); return; }
+    if (this.onChanged) this.onChanged();
+  }
+  async create(){
+    const name = $("agNewName").value.trim();
+    if (!name){ alert("give the agent a name"); return; }
+    if (this.agents.some(a => (a.name||"").toLowerCase() === name.toLowerCase())){
+      alert("name already in use: " + name); return; }
+    const s = await this.api.post("/api/orbit/sessions", {title: name});
+    if (!s || !s.ok){ alert((s && s.error) || "could not create session"); return; }
+    const r = await this.api.post("/api/agents", {session: s.session, name, role: $("agNewRole").value.trim() || undefined});
+    if (!r || !r.ok){ alert((r && r.error) || "could not designate"); return; }
+    $("agNewName").value = ""; $("agNewRole").value = "";
+    if (this.onChanged) this.onChanged();
+  }
+}
+
+/* ------------------------------------------------------ Org chart -------- */
+class OrgChartView {
+  constructor(onPick, onGoTo){ this.onPick = onPick; this.onGoTo = onGoTo; this.bySid = {}; }
+  render(tree){
+    const agents = (tree && tree.agents) || [];
+    const box = $("orgtree");
+    this.bySid = {};
+    if (!agents.length){ box.innerHTML = '<div class="empty">no agents yet.</div>'; return; }
+    const by = {};
+    agents.forEach(a => { const p = a.reports_to || ""; (by[p] = by[p] || []).push(a); });
+    const seen = {};
+    const node = (a) => {
+      if (seen[a.id]) return "";
+      seen[a.id] = 1;
+      this.bySid[a.session] = a;
+      const kids = (by[a.id] || []).map(node).join("");
+      return '<li><div class="node" data-sid="' + esc(a.session) + '" title="click = constellation · double-click = open in main app"><span class="nid">' + esc(a.id) + '</span>' +
+        '<span class="nnm">' + esc(a.name||"") + '</span>' + (a.role ? '<span class="nrl">' + esc(a.role) + '</span>' : '') +
+        '</div>' + (kids ? '<ul>' + kids + '</ul>' : "") + '</li>';
+    };
+    const roots = (by[""] || []).slice();
+    agents.forEach(a => { if (a.reports_to && !agents.some(x => x.id === a.reports_to)) roots.push(a); });
+    box.innerHTML = '<ul>' + roots.map(node).join("") + '</ul>';
+    box.querySelectorAll(".node").forEach(n => { n.onclick = () => {
+      box.querySelectorAll(".node").forEach(x => x.classList.toggle("sel", x === n));
+      const row = document.querySelector('#agBody tr[data-sid="' + n.dataset.sid + '"]');
+      if (row) row.scrollIntoView({block: "nearest"});
+      if (this.onPick) this.onPick(this.bySid[n.dataset.sid]);
+    };
+    n.ondblclick = () => { if (this.onGoTo) this.onGoTo(this.bySid[n.dataset.sid]); };
+    });
+    // JAG-342: no transform-pan — the panel scrolls natively, so the whole chart is
+    // reachable and the page itself never scrolls sideways.
+  }
+}
+
+/* ----------------------------------------------- Constellation (JAG-296) --- */
+/* ONE floating, NON-modal window. AGENT mode: the focused agent's task
+   constellation. ALL mode: one cluster PER AGENT (each agent shown once) with the
+   JOB pills above linked by blocked_by. A task: click = chat extract popover,
+   double-click = open that exact task in the main app (same tab). */
+const STC = {done:"#3ff0a6", doing:"#4fd6ff", blocked:"#ff5d6c", todo:"#7f9ac0",
+             cancelled:"#46597a", superseded:"#46597a"};
+class Constellation {
+  constructor(api){ this.api = api; this.data = null; this.mode = "agent"; this.focus = null;
+    this.hist = {}; this._t = null; }
+  static plain(v){ if (v === null || v === undefined) return "";
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return v.map(x => (x && typeof x === "object" && "text" in x) ? x.text
+      : (typeof x === "string" ? x : Constellation.plain(x))).join(" · ");
+    if (typeof v === "object" && "text" in v) return String(v.text);
+    try { return JSON.stringify(v); } catch (e) { return String(v); } }
+  mount(){
+    $("constAgent").onclick = () => this.setMode("agent");
+    $("constAll").onclick = () => this.setMode("all");
+    $("constBody").addEventListener("click", () => this._pop());
+  }
+  async load(force, team){ if (team !== undefined) this._team = team;
+    if (this.data && !force) return this.data;
+    const q = (this._team && this._team !== "ALL") ? ("?team=" + encodeURIComponent(this._team)) : "";
+    try { this.data = await this.api.get("/api/orbit/constellation" + q); }
+    catch (e) { this.data = this.data || {agents:[], jobs:[], graphs:{}}; }
+    return this.data; }
+  async open(agent, mode){ if (agent) this.focus = agent; if (mode) this.mode = mode;
+    await this.load(); this.setMode(this.mode); }
+  setMode(m){ this.mode = m; $("constAgent").classList.toggle("on", m === "agent");
+    $("constAll").classList.toggle("on", m === "all"); this.draw(); }
+  agentBySid(sid){ return ((this.data && this.data.agents) || []).find(a => a.session === sid) || null; }
+  nodesOf(sid){ return (((this.data || {}).graphs || {})[sid] || {}).nodes || []; }
+  byAgent(){ const out = {};
+    ((this.data && this.data.agents) || []).filter(a => a.session).forEach(a => { out[a.session] = this.nodesOf(a.session); });
+    return out; }
+  nodeOf(sid, nid){ return this.nodesOf(sid).find(n => n.id === nid) || {id: nid}; }
+  label(agent, node){ return (agent ? agent.id : "A?") + ".n" + String(node.id).replace(/\D+/g, ""); }
+  /* depth columns + the longest column: drives a cluster box that FITS its nodes. */
+  _shape(nodes){
+    const byId = {}; nodes.forEach(n => byId[n.id] = n); const depth = {};
+    const d = (id, seen) => { if (depth[id] != null) return depth[id]; seen = seen || {};
+      if (seen[id]) return 0; seen[id] = 1; const n = byId[id]; if (!n) return 0; let b = 0;
+      (n.deps || []).forEach(p => { if (byId[p]) b = Math.max(b, d(p, seen) + 1); }); depth[id] = b; return b; };
+    nodes.forEach(n => d(n.id));
+    const cols = {}; nodes.forEach(n => { const c = depth[n.id] || 0; (cols[c] = cols[c] || []).push(n); });
+    const keys = Object.keys(cols).map(Number).sort((a, b) => a - b);
+    let maxRows = 1; keys.forEach(k => { maxRows = Math.max(maxRows, cols[k].length); });
+    return {keys: keys, cols: cols, maxRows: maxRows};
+  }
+  /* shorten a segment so the arrowhead lands on the node edge, not its centre. */
+  _seg(p, q, rp, rq){ const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L;
+    return {x1: p.x + ux * (rp || 0), y1: p.y + uy * (rp || 0),
+            x2: q.x - ux * (rq || 0), y2: q.y - uy * (rq || 0)}; }
+  _defs(){ return '<defs>' +
+    '<marker id="mDep" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgba(150,180,235,.85)"/></marker>' +
+    '<marker id="mJob" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7c8cff"/></marker>' +
+    '<marker id="mAsg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="rgba(108,140,255,.8)"/></marker>' +
+    '</defs>'; }
+  _nodesSvg(a, nodes, pos, small){
+    const r0 = small ? 7 : 9;
+    return nodes.map(n => { const p = pos[n.id]; if (!p) return "";
+      const c = STC[n.status] || "#7f9ac0"; const y = String(n.id).replace(/\D+/g, "");
+      const r = n.status === "doing" ? r0 + 2 : r0;
+      const stroke = n.status === "doing" ? ' stroke="#bfe3ff" stroke-width="1.6"' : "";
+      return '<g class="cnode" data-sid="' + esc(a.session) + '" data-id="' + esc(n.id) + '">' +
+        '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + r + '" fill="' + c + '" fill-opacity=".92"' + stroke + '/>' +
+        '<text x="' + p.x + '" y="' + (p.y + r + 11) + '" text-anchor="middle">' + esc(a.id) + '.n' + esc(y) + '</text></g>';
+    }).join("");
+  }
+  _edges(nodes, pos){ let s = "";
+    nodes.forEach(n => (n.deps || []).forEach(p => { if (pos[p] && pos[n.id]) { const g = this._seg(pos[p], pos[n.id], 12, 13);
+      s += '<line class="clink dep" marker-end="url(#mDep)" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>'; } }));
+    nodes.forEach(n => { if (n.parent && pos[n.parent]) { const g = this._seg(pos[n.parent], pos[n.id], 12, 12);
+      s += '<line class="clink" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>'; } });
+    return s; }
+  draw(){
+    const svg = $("constSvg"); if (!svg) return;
+    this._pop();
+    if (!this.data){ svg.innerHTML = ""; $("constDetail").textContent = "no data yet"; return; }
+    const vb = (this.mode === "all") ? this._drawAll() : this._drawAgent();
+    if (!vb){ svg.innerHTML = ""; return; }
+    svg.setAttribute("viewBox", "0 0 " + vb.w + " " + vb.h);
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svg.innerHTML = vb.body;
+    this._wire(svg);
+    this._zoomPan(svg);
+  }
+  _zoomPan(svg){
+    // wheel = zoom around the cursor, drag = pan. Base viewBox is the fitted one.
+    if (!svg.__baseVB) svg.__baseVB = svg.getAttribute("viewBox");
+    if (svg.__zp) return;
+    svg.__zp = true;
+    const apply = (vb) => svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h);
+    const parse = () => { const v = (svg.getAttribute("viewBox") || svg.__baseVB || "0 0 1000 600").split(/\s+/).map(Number); return {x: v[0], y: v[1], w: v[2], h: v[3]}; };
+    svg.addEventListener("wheel", ev => { ev.preventDefault(); const c = parse();
+      const r = svg.getBoundingClientRect(); const mx = (ev.clientX - r.left) / r.width, my = (ev.clientY - r.top) / r.height;
+      const f = ev.deltaY < 0 ? 0.88 : 1.14; const nw = c.w * f, nh = c.h * f;
+      apply({x: c.x + (c.w - nw) * mx, y: c.y + (c.h - nh) * my, w: nw, h: nh}); }, {passive: false});
+    let drag = null;
+    svg.addEventListener("mousedown", ev => { if (ev.button !== 0) return; drag = {x: ev.clientX, y: ev.clientY, vb: parse()}; svg.style.cursor = "grabbing"; });
+    window.addEventListener("mousemove", ev => { if (!drag) return; const r = svg.getBoundingClientRect();
+      const dx = (ev.clientX - drag.x) * drag.vb.w / r.width, dy = (ev.clientY - drag.y) * drag.vb.h / r.height;
+      apply({x: drag.vb.x - dx, y: drag.vb.y - dy, w: drag.vb.w, h: drag.vb.h}); });
+    window.addEventListener("mouseup", () => { if (drag){ drag = null; svg.style.cursor = "grab"; } });
+    svg.style.cursor = "grab";
+  }
+  _drawAgent(){
+    const a = this.focus || (this.data.agents || [])[0];
+    if (!a){ $("constWho").textContent = "—"; $("constDetail").textContent = "no agents yet"; return null; }
+    this.focus = a; const nodes = this.nodesOf(a.session).slice(0, 60);
+    $("constWho").textContent = a.id + (a.name ? (" " + a.name) : "") + " · " + nodes.length + " task(s)";
+    if (!nodes.length){ $("constDetail").textContent = "no task list yet for " + a.id; return null; }
+    const sh = this._shape(nodes), PAD = 46, CW = 100, RH = 56;
+    const w = PAD * 2 + Math.max(1, sh.keys.length) * CW;
+    const h = PAD + sh.maxRows * RH + 16;
+    const pos = {}; sh.keys.forEach((k, i) => { sh.cols[k].forEach((n, j) => {
+      pos[n.id] = {x: PAD + (i + 0.5) * CW, y: 46 + (j + 0.5) * RH}; }); });
+    const body = this._defs() + this._edges(nodes, pos) + this._nodesSvg(a, nodes, pos, false);
+    $("constDetail").textContent = nodes.length + " step(s) · ids are " + a.id + ".nY · dashed arrow = dependency";
+    return {w: w, h: h, body: body};
+  }
+  _drawAll(){
+    const agents = (this.data.agents || []).filter(a => a.session);
+    const jobs = this.data.jobs || [];
+    const subs = this.data.subjobs || [];   // JAG-324: job -> subjob -> agent/todos
+    const grouped = this.byAgent();
+    const PAD = 20, GAPX = 18, GAPY = 18, TOP = subs.length ? 108 : (jobs.length ? 78 : 20), TARGETW = 1000, CW = 94, RH = 52;
+    const box = {}; let x = PAD, y = TOP, rowH = 0;
+    agents.forEach(a => {
+      const nodes = (grouped[a.session] || []).slice(0, 40);
+      const sh = this._shape(nodes);
+      const w = Math.max(176, 40 + Math.max(1, sh.keys.length) * CW);
+      const h = 34 + sh.maxRows * RH + 16;
+      if (x + w > PAD + TARGETW && x > PAD){ x = PAD; y += rowH + GAPY; rowH = 0; }
+      box[a.session] = {x: x, y: y, w: w, h: h, nodes: nodes, sh: sh};
+      x += w + GAPX; rowH = Math.max(rowH, h);
+    });
+    const contentW = PAD + TARGETW + PAD, contentH = Math.max(y + rowH + PAD, TOP + 120);
+    const jpos = {}; jobs.forEach((j, i) => { jpos[j.id] = {x: (contentW / (jobs.length + 1)) * (i + 1), y: 36}; });
+    // JAG-324: subjobs (JN.j) on their own lane — one pill per subjob, grouped under
+    // their job, linked to their agent and to each other by subjob deps.
+    const spos = {}; const byJob = {};
+    subs.forEach(s => { (byJob[s.parent] = byJob[s.parent] || []).push(s); });
+    Object.keys(byJob).forEach(jid => { const list = byJob[jid];
+      const base = jpos[jid] ? jpos[jid].x : contentW / 2;
+      list.forEach((s, i) => { spos[s.id] = {x: base + (i - (list.length - 1) / 2) * 86, y: 68}; }); });
+    let body = this._defs();
+    jobs.forEach(j => (j.blocked_by || []).forEach(b => { if (!jpos[b] || !jpos[j.id]) return;
+      const p = jpos[b], q = jpos[j.id], g = this._seg(p, q, 50, 50);
+      body += '<line class="clink job" marker-end="url(#mJob)" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+      body += '<text x="' + ((p.x + q.x) / 2) + '" y="' + ((p.y + q.y) / 2 - 7) + '" text-anchor="middle" font-size="10" font-family="ui-monospace,monospace" fill="#9fb0e8">' + esc(b) + '\u2192' + esc(j.id) + '</text>';
+    }));
+    // JAG-324: subjob edges — subjob->subjob deps, job->subjob (parent), subjob->agent.
+    subs.forEach(s => (s.deps || []).forEach(d => { if (!spos[d] || !spos[s.id]) return;
+      const g = this._seg(spos[d], spos[s.id], 38, 38);
+      body += '<line class="clink dep" marker-end="url(#mDep)" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+    }));
+    subs.forEach(s => { if (!jpos[s.parent] || !spos[s.id]) return;
+      const g = this._seg(jpos[s.parent], spos[s.id], 48, 30);
+      body += '<line class="clink job" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+    });
+    subs.forEach(s => { const a = agents.find(z => z.id === s.agent); if (!a || !box[a.session] || !spos[s.id]) return;
+      const b = box[a.session], g = this._seg(spos[s.id], {x: b.x + b.w / 2, y: b.y}, 30, 0);
+      body += '<line class="clink assign" marker-end="url(#mAsg)" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+    });
+    // JAG-328: a job is assigned to its COORDINATOR (the master that owns it), NOT to
+    // every member — a member's piece of work is a SUBJOB (JN.j -> AX, drawn above).
+    // Drawing a job->member edge produced a FALSE arrow (e.g. J7 -> A9) that
+    // duplicated the subjob edge. A fan-out job (no coordinator) reaches its agents
+    // only through their subjobs.
+    jobs.forEach(j => { const aid = j.coordinator; if (!aid) return;
+      const a = agents.find(z => z.id === aid); if (!a || !box[a.session]) return;
+      const b = box[a.session], g = this._seg(jpos[j.id], {x: b.x + b.w / 2, y: b.y}, 48, 0);
+      body += '<line class="clink assign" marker-end="url(#mAsg)" x1="' + g.x1 + '" y1="' + g.y1 + '" x2="' + g.x2 + '" y2="' + g.y2 + '"/>';
+    });
+    agents.forEach(a => { const b = box[a.session];
+      body += '<rect class="cagent" x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" rx="10"/>';
+      const nodes = b.nodes;
+      const jids = [...new Set(nodes.map(n => n.jid).filter(Boolean))];
+      const jtag = jids.length ? ' \u00b7 ' + esc(jids.join(",")) : "";
+      body += '<text x="' + (b.x + 10) + '" y="' + (b.y + 18) + '" font-size="11" font-family="ui-monospace,monospace" fill="#9fe6ff">' + esc(a.id) + ' ' + esc(a.name || "") + jtag + '</text>';
+      if (!nodes.length){ body += '<text x="' + (b.x + 10) + '" y="' + (b.y + 40) + '" font-size="10" fill="#8291ad">no tasks</text>'; return; }
+      const sh = b.sh, innerX = b.x + 14, innerY = b.y + 32;
+      const cw = (b.w - 28) / Math.max(1, sh.keys.length), ch = (b.h - 48) / sh.maxRows;
+      const pos = {}; sh.keys.forEach((k, i) => { sh.cols[k].forEach((n, j) => {
+        pos[n.id] = {x: innerX + (i + 0.5) * cw, y: innerY + (j + 0.5) * ch}; }); });
+      body += this._edges(nodes, pos) + this._nodesSvg(a, nodes, pos, true);
+    });
+    jobs.forEach(j => { const p = jpos[j.id];
+      body += '<g class="cjobg" data-job="' + esc(j.id) + '"><rect class="cjob" x="' + (p.x - 48) + '" y="' + (p.y - 15) + '" width="96" height="30" rx="15"/>' +
+        '<text x="' + p.x + '" y="' + (p.y + 4) + '" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="#ffe6b0">' + esc(j.id) + '</text></g>'; });
+    // JAG-324: subjob pills (JN.j -> agent) on their lane, above the agent clusters.
+    subs.forEach(s => { const p = spos[s.id]; if (!p) return;
+      body += '<g class="csubg" data-sub="' + esc(s.id) + '"><rect class="csub" x="' + (p.x - 40) + '" y="' + (p.y - 12) + '" width="80" height="24" rx="12"/>' +
+        '<text x="' + p.x + '" y="' + (p.y + 4) + '" text-anchor="middle" font-size="10" font-family="ui-monospace,monospace" fill="#bfe9ff">' + esc(s.id) + '\u2192' + esc(s.agent) + '</text></g>'; });
+    $("constWho").textContent = agents.length + " agents \u00b7 " + jobs.length + " jobs \u00b7 " + subs.length + " subjobs";
+    $("constDetail").textContent = "one cluster per AGENT \u00b7 amber = JOB \u00b7 blue = SUBJOB JN.j \u2192 agent (dashed = deps/assigns)";
+    return {w: contentW, h: contentH, body: body};
+  }
+  _wire(svg){
+    svg.querySelectorAll(".cnode").forEach(gEl => {
+      const sid = gEl.dataset.sid, nid = gEl.dataset.id;
+      const agent = this.agentBySid(sid), node = this.nodeOf(sid, nid);
+      gEl.addEventListener("mouseenter", () => { $("constDetail").textContent =
+        this.label(agent, node) + " · " + (node.label || "") + " (" + node.status + ")"; });
+      gEl.addEventListener("click", ev => { ev.stopPropagation(); if (this._t) clearTimeout(this._t);
+        const b = gEl.getBoundingClientRect(), bb = $("constBody").getBoundingClientRect();
+        this._t = setTimeout(() => this.extract(agent, node, b.left - bb.left + 14, b.top - bb.top + 14), 210); });
+      gEl.addEventListener("dblclick", ev => { ev.stopPropagation(); if (this._t) clearTimeout(this._t);
+        this.gotoTask(agent, node); });
+    });
+  }
+  _pop(){ const p = document.querySelector("#constBody .cpop"); if (p) p.remove(); }
+  async extract(agent, node, sx, sy){
+    this._pop(); if (!agent) return;
+    const p = document.createElement("div"); p.className = "cpop";
+    p.innerHTML = "<b>" + esc(this.label(agent, node)) + "</b> · " + esc(node.status || "") +
+      "<br>" + esc(node.label || "(no label)") +
+      "<br><span class='muted'>agent</span> " + esc(agent.id) + " " + esc(agent.name || "") +
+      (node.evidence ? "<div class='m'>evidence: " + esc(Constellation.plain(node.evidence)) + "</div>" : "") +
+      (node.reason ? "<div class='m'>reason: " + esc(Constellation.plain(node.reason)) + "</div>" : "") +
+      "<div class='m' id='cpopm'>loading chat…</div>" +
+      "<span class='go' id='cpopgo'>open in main ↗ (double-click)</span>";
+    const body = $("constBody"); p.style.left = Math.max(4, Math.min(sx, body.clientWidth - 300)) + "px";
+    p.style.top = Math.max(4, Math.min(sy, body.clientHeight - 120)) + "px";
+    body.appendChild(p);
+    p.onclick = ev => ev.stopPropagation();
+    p.querySelector("#cpopgo").onclick = () => this.gotoTask(agent, node);
+    let h = this.hist[agent.session];
+    if (h === undefined){ try { h = await this.api.get("/api/history?session=" + encodeURIComponent(agent.session)); }
+      catch (e) { h = null; } this.hist[agent.session] = h; }
+    const msgs = (((h || {}).messages) || []).filter(m => m.node === node.id).slice(-6);
+    const box = p.querySelector("#cpopm");
+    if (box) box.textContent = msgs.length
+      ? msgs.map(m => (m.role === "user" ? "you: " : "ag: ") + short(m.content || "", 150)).join("\n")
+      : "no chat lines stored for this task yet";
+  }
+  gotoTask(agent, node){ if (!agent) return;
+    location.href = "/?token=" + encodeURIComponent(this.api.token) +
+      "&session=" + encodeURIComponent(agent.session) + "&node=" + encodeURIComponent(node.id); }
+  gotoAgent(agent){ if (!agent) return;
+    location.href = "/?token=" + encodeURIComponent(this.api.token) +
+      "&session=" + encodeURIComponent(agent.session); }
+}
+
+/* ---------------------------------------------------------------- Jobs --- */
+class JobsView {
+  constructor(api, onChanged, onOpenAgent){ this.api = api; this.onChanged = onChanged;
+    this.onOpenAgent = onOpenAgent; this.jobs = []; this.open = null; }
+  _coord(jid){ const j = this.jobs.find(x => x.id === jid); return (j && j.coordinator) || ""; }
+  render(list){
+    this.jobs = list || [];
+    $("jobsCount").textContent = this.jobs.length ? (this.jobs.filter(j => j.status === "running").length + " running / " + this.jobs.length) : "—";
+    $("jobs").innerHTML = this.jobs.map(j => {
+      const subs = j.subjobs || {};
+      // JAG-322/335: the job's SUBJOBS (J8.1, J8.1.1 …) — who was assigned what,
+      // tracked and timed. Each row is INDENTED by its org depth and CLICKABLE to open
+      // the receiving agent's chat. The old flat per-agent `runs` list is GONE: only
+      // the JN.j indexes make sense (they ARE the structure), not one row per agent.
+      // JAG-326: natural order — a string sort would put J8.10 before J8.2.
+      const _jn = s => { const m = String(s).match(/(\d+)$/); return m ? Number(m[1]) : 0; };
+      const subHtml = Object.keys(subs).sort((a, b) => _jn(a) - _jn(b)).map(sid => {
+        const s = subs[sid];
+        const depth = Math.max(0, String(sid).split(".").length - 2);   // J8.1 -> 0, J8.1.2 -> 1
+        const dur = (s.started && s.ended) ? (' · ' + Math.round(s.ended - s.started) + 's') : '';
+        return '<div class="runrow subjob" data-sub="' + esc(sid) + '" data-agent="' + esc(s.agent) +
+          '" title="open ' + esc(s.agent) + '\u2019s chat" style="padding-left:' + (12 + depth * 16) + 'px;cursor:pointer">' +
+          '<span class="st">' + esc(s.id) + ' \u2192 ' + esc(s.agent) + '</span>' +
+          '<span>' + esc(s.status || "pending") + dur + '</span>' +
+          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(short(s.result || s.error || s.assignment || "", 70)) + '</span></div>';
+      }).join("");
+      const runHtml = (this.open === j.id) ? subHtml : "";
+      const canRun = (j.status !== "running" && j.status !== "blocked");
+      const team = (j.agents || []).join(",");
+      return '<div class="job" data-id="' + esc(j.id) + '"><span class="st ' + esc(j.status) + '">' + esc(j.status) + '</span>' +
+        '<span class="aid">' + esc(j.id) + '</span>' +
+        '<span class="muted" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(j.goal) + '">' + esc(j.goal) + '</span>' +
+        '<span class="rl" title="coordinator ' + esc(j.coordinator||"") + ' · team ' + esc(team) + '">' + esc(j.coordinator||"") + ' ⇢ ' + esc(team) + '</span>' +
+        (canRun ? '<button class="btn" data-run="' + esc(j.id) + '" style="padding:3px 9px;font-size:11px">▶ run</button>' : '') +
+        '<button class="btn ghost no" data-jdel="' + esc(j.id) + '" style="padding:3px 8px;font-size:11px" title="delete this job">✕</button>' + '</div>' + runHtml; }).join("") ||
+      '<div class="empty">no jobs yet — write a goal and pick who to give it to.</div>';
+    $("jobs").querySelectorAll("[data-run]").forEach(b => { b.onclick = (e) => { e.stopPropagation(); this.dispatch(b.dataset.run); }; });
+    $("jobs").querySelectorAll("[data-jdel]").forEach(b => { b.onclick = async (e) => { e.stopPropagation();
+      const jid = b.dataset.jdel;
+      if (!confirm("Delete job " + jid + "?")) return;
+      const r = await this.api.del("/api/jobs/" + encodeURIComponent(jid));
+      if (!r || r.ok === false){ alert((r && r.error) || "delete failed"); return; }
+      if (this.onChanged) this.onChanged();
+    }; });
+    // JAG-335: a subjob row opens the receiving agent's chat (hyper-link to the session).
+    $("jobs").querySelectorAll("[data-sub]").forEach(el => { el.onclick = (e) => { e.stopPropagation();
+      if (this.onOpenAgent) this.onOpenAgent(el.dataset.agent); }; });
+    $("jobs").querySelectorAll(".job").forEach(el => {
+      el.onclick = () => { this.open = (this.open === el.dataset.id) ? null : el.dataset.id; this.render(this.jobs); };
+      el.ondblclick = () => { if (this.onOpenAgent) this.onOpenAgent(this._coord(el.dataset.id)); };
+    });
+  }
+  async dispatch(jid){
+    const r = await this.api.post("/api/jobs/" + encodeURIComponent(jid) + "/dispatch", {});
+    // JAG-322: a refused run (no agents left, blocked, already running) must be
+    // visible — before, the click silently did nothing.
+    if (!r || r.ok === false) alert((r && r.error) || "could not run job");
+    if (this.onChanged) this.onChanged();
+  }
+}
+
+/* ------------------------------------------------------------ Routines --- */
+class RoutinesView {
+  constructor(api, onChanged){ this.api = api; this.onChanged = onChanged; this.rows = []; }
+  render(list){
+    this.rows = list || [];
+    $("routineCount").textContent = this.rows.length ? String(this.rows.length) : "—";
+    const now = Date.now() / 1000;
+    $("routines").innerHTML = this.rows.map(r => {
+      const nxt = r.next_run ? Math.max(0, Math.round(r.next_run - now)) : 0;
+      return '<div class="orgrow"><span class="aid">' + esc(r.id) + '</span>' +
+        '<span class="nm" title="' + esc(r.goal) + '">' + esc(short(r.goal, 34)) + '</span>' +
+        '<span class="rl">' + esc(r.agent) + '</span>' +
+        '<span class="rl" title="every ' + esc(r.every_seconds) + 's · next in ' + nxt + 's">' + esc(r.every_seconds) + 's</span>' +
+        '<button class="btn ghost" data-tog="' + esc(r.id) + '" data-on="' + (r.enabled ? "1" : "0") + '" style="padding:2px 8px">' + (r.enabled ? "pause" : "start") + '</button>' +
+        '<button class="btn ghost" data-del="' + esc(r.id) + '" style="padding:2px 8px">✕</button></div>';
+    }).join("") || '<div class="empty">no routines — an agent can wake on a cadence.</div>';
+    $("routines").querySelectorAll("[data-tog]").forEach(b => { b.onclick = () => this.toggle(b.dataset.tog, b.dataset.on === "1"); });
+    $("routines").querySelectorAll("[data-del]").forEach(b => { b.onclick = () => this.del(b.dataset.del); });
+  }
+  async toggle(rid, on){ await this.api.post("/api/routines/" + encodeURIComponent(rid) + (on ? "/enable" : "/disable"), {}); if (this.onChanged) this.onChanged(); }
+  async del(rid){ await this.api.del("/api/routines/" + encodeURIComponent(rid)); if (this.onChanged) this.onChanged(); }
+  async create(){
+    const r = await this.api.post("/api/routines", {agent: $("rtAgent").value, goal: $("rtGoal").value.trim(), every_seconds: parseInt($("rtEvery").value, 10)});
+    if (!r || !r.ok){ alert((r && r.error) || "create failed"); return; }
+    $("rtGoal").value = ""; if (this.onChanged) this.onChanged();
+  }
+}
+
+/* ---------------------------------------------------------------- Feed --- */
+class FeedView {
+  constructor(api){ this.api = api; this.es = null; }
+  connect(){
+    try { this.es = this.api.es("/api/feed"); } catch(e){ return; }
+    ["chat.run","chat.user","tool.call","tool.result","graph.node.added","graph.node.updated","plan.update","chat.done","error"].forEach(k => this.es.addEventListener(k, (e) => {
+      let d = {}; try { d = JSON.parse(e.data); } catch(_){}
+      const f = $("feed"); f.insertAdjacentHTML("afterbegin", '<div><b>' + esc(k) + '</b> ' + esc(d.session ? String(d.session).slice(0,8) : "") + ' ' + esc(d.text || d.label || d.title || d.tool || "") + '</div>');
+      while (f.childElementCount > 100) f.removeChild(f.lastChild); }));
+    this.es.onopen = () => $("led").classList.add("on");
+    this.es.onerror = () => $("led").classList.remove("on");
+  }
+}
+
+/* ---------------------------------------------------------------- App --- */
+class OrbitApp {
+  constructor(){
+    this.api = new Api();
+    this.agents = new AgentsView(this.api, () => this.refresh());
+    this.lastAgents = [];
+    this.team = "ALL";        // JAG-339: the selected team scopes the whole board
+    this.teams = [];
+    this.tac = new Constellation(this.api);
+    this.org = new OrgChartView((a) => this.tac.open(a, "agent"), (a) => this.tac.gotoAgent(a));
+    this.jobs = new JobsView(this.api, () => this.refresh(), (aid) => this.openAgent(aid));
+    this.routines = new RoutinesView(this.api, () => this.refresh());
+    this.feed = new FeedView(this.api);
+    this.tac.mount();
+    $("agNew").onclick = () => this.agents.create();
+    $("agPolicy").onclick = () => this.applyModelPolicy();
+    $("jobCreate").onclick = () => this.createJob();
+    $("rtCreate").onclick = () => this.routines.create();
+    $("teamSel").onchange = () => { this.team = $("teamSel").value; this.tac.data = null; this.tac.focus = null; this.refresh(); };
+  }
+  renderTeams(){
+    const sel = $("teamSel");
+    sel.innerHTML = '<option value="ALL">ALL teams</option>' +
+      this.teams.map(t => '<option value="' + esc(t.id) + '">' + esc(t.symbol || "") + ' ' +
+        esc(t.name) + ' (' + ((t.members || []).length) + ')</option>').join("");
+    sel.value = this.teams.some(t => t.id === this.team) ? this.team : "ALL";
+    this.team = sel.value;
+  }
+  async applyModelPolicy(){
+    const ids = this.team === "ALL" ? this.teams.map(t => t.id) : [this.team];
+    if (!ids.length){ alert("no team selected"); return; }
+    const msg = [];
+    for (const tid of ids){
+      const r = await this.api.post("/api/teams/" + encodeURIComponent(tid) + "/models", {});
+      if (r && r.ok){
+        msg.push(tid + ": " + r.assigned + " set, " + ((r.local_kept || []).length) + " local kept");
+      } else { msg.push(tid + ": " + ((r && r.error) || "failed")); }
+    }
+    alert("model policy\n" + msg.join("\n"));
+    this.refresh();
+  }
+  openAgent(aid){
+    const a = (this.lastAgents || []).find(x => x.id === aid);
+    if (a) this.tac.gotoAgent(a);
+  }
+  async refresh(){
+    const [tree, jobs, routines, models, sess, tms] = await Promise.all([
+      this.api.get("/api/agents/tree").catch(() => null),
+      this.api.get("/api/jobs").catch(() => null),
+      this.api.get("/api/routines").catch(() => null),
+      this.api.get("/api/orbit/models").catch(() => null),
+      this.api.get("/api/orbit/sessions").catch(() => null),
+      this.api.get("/api/teams").catch(() => null)
+    ]);
+    if (tms) this.teams = tms.teams || [];
+    this.renderTeams();
+    // JAG-339: the selected team scopes agents, org chart, jobs and constellation.
+    const team = this.team;
+    const inTeam = (a) => (!team || team === "ALL" || ((a.teams || []).includes(team)));
+    const fTree = tree ? Object.assign({}, tree, {agents: (tree.agents || []).filter(inTeam)}) : null;
+    const ids = new Set(((fTree && fTree.agents) || []).map(a => a.id));
+    const fJobs = jobs ? {jobs: (jobs.jobs || []).filter(j => (j.agents || []).some(x => ids.has(x)))} : null;
+    const list = models ? ((models.providers) || []).reduce((acc, p) =>
+      acc.concat((p.models || []).map(m => ({ref: m.ref || (p.id + ":" + m.id), label: m.id}))), []) : [];
+    const running = new Set(((sess && sess.sessions) || []).filter(s => s.running).map(s => s.id));
+    if (fTree) this.lastAgents = fTree.agents || [];
+    if (fTree) this.agents.render(fTree, list, running);
+    if (fTree) this.org.render(fTree);
+    if (fJobs) this.jobs.render(fJobs.jobs);
+    if (routines) this.routines.render(routines.routines);
+    // JAG-297: the constellation is a docked panel — keep it fresh, but never
+    // yank an open chat-extract popover out from under the user.
+    if (!$("constBody").querySelector(".cpop")) this.tac.load(true, team).then(() => this.tac.draw());
+  }
+  async createJob(){
+    const goal = $("jobGoal").value.trim(), assignee = $("jobTo").value;
+    if (!goal || !assignee){ alert("a job needs a goal and someone to give it to"); return; }
+    const r = await this.api.post("/api/jobs", {goal, assignee});
+    if (!r || !r.ok){ alert((r && r.error) || "create failed"); return; }
+    $("jobGoal").value = ""; this.refresh();
+  }
+  start(){
+    $("led").classList.toggle("on", !!this.api.token);
+    if (!this.api.token){ const t = prompt("Longrun API token (stored in localStorage):"); if (t){ this.api.token = t.trim(); localStorage.setItem("sf_token", t.trim()); $("led").classList.add("on"); } }
+    // JAG-295: the "main app" link must carry the token, or it lands on a 401.
+    const link = document.querySelector('header a[href^="/"]');
+    if (link && this.api.token) link.setAttribute("href", "/?token=" + encodeURIComponent(this.api.token));
+    this.refresh(); this.feed.connect();
+    setInterval(() => this.refresh(), 5000);
+  }
+}
+window.addEventListener("DOMContentLoaded", () => new OrbitApp().start());
+</script>
+<script>async function clearOrbitSession(sid){if(!sid)return;await fetch('/api/sessions/'+encodeURIComponent(sid)+'/clear',{method:'POST'});location.reload();}</script></body>
+</html>

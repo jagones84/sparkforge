@@ -1,4 +1,4 @@
-# SparkForge launcher (Windows) — mirrors run.sh: WebUI + API on http://127.0.0.1:8790
+# Longrun launcher (Windows) — mirrors run.sh: WebUI + API on http://127.0.0.1:8790
 # Usage:   .\run.ps1 [--host 0.0.0.0] [any server.py argument]
 # Blocked by policy?  powershell -ExecutionPolicy Bypass -File .\run.ps1
 $ErrorActionPreference = "Stop"

@@ -1,4 +1,4 @@
-# SparkForge documentation
+# Longrun documentation
 
 Two kinds of documents live here: **canonical** (kept current — read these) and the
 **historical record** (dated design notes and session evidence — kept for provenance,
@@ -11,7 +11,7 @@ under `archive/`, and not maintained).
 | [ARCHITECTURE.md](ARCHITECTURE.md) | how the harness is wired (components, data stores, the object model, the turn/job lifecycle). |
 | [CLI.md](CLI.md) | every CLI command and HTTP endpoint. |
 | [TESTING-PLAYBOOK.md](TESTING-PLAYBOOK.md) | how to hunt real bugs in the running system (the live seams to probe). |
-| [RESEARCH-frontier-harnesses-2026.md](RESEARCH-frontier-harnesses-2026.md) | the research base and where SparkForge sits vs. the 2026 frontier. |
+| [RESEARCH-frontier-harnesses-2026.md](RESEARCH-frontier-harnesses-2026.md) | the research base and where Longrun sits vs. the 2026 frontier. |
 | [diagrams/](diagrams/) | the generated architecture diagram (HTML + JSON source). |
 
 Also at the repo root: [README.md](../README.md) (the pitch), [AGENTS.md](../AGENTS.md)

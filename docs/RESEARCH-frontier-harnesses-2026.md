@@ -1,6 +1,6 @@
 # Frontier Agent Harnesses — 2026 Research Survey
 
-*Research performed 2026-09-28 as the design base for SparkForge (JAG-32). Live web search across MarkTechPost, TrueFoundry, Winder.AI, Lil'Log, FutureAGI, Atlan, awesome-harness-engineering (Sep 2026).*
+*Research performed 2026-09-28 as the design base for Longrun (JAG-32). Live web search across MarkTechPost, TrueFoundry, Winder.AI, Lil'Log, FutureAGI, Atlan, awesome-harness-engineering (Sep 2026).*
 
 ## 1. What a "harness" is in 2026
 
@@ -32,9 +32,9 @@ Consensus thesis: **the harness matters more than the model you drop into it** (
 5. **Local-model guidance converged** — OpenHands: ≥22k ctx (32k recommended), quantized needs ≥24GB VRAM/64GB unified. Our GB10 unified memory + llama.cpp router with 262k-ctx presets comfortably clears the local bar.
 6. **Structured thinking is exposed, not hidden** — `reasoning_content` (DeepSeek/GLM/Qwen chat templates) and inline `<think></think>` blocks surfaced as a first-class UI timeline (visible CoT), with Plan/Act separation.
 
-## 4. Design decisions for SparkForge (what we adopt, v0.1)
+## 4. Design decisions for Longrun (what we adopt, v0.1)
 
-| SoA pattern | SparkForge adoption |
+| SoA pattern | Longrun adoption |
 |---|---|
 | Reason→act→observe event loop | `/api/agent/run`: model proposes one JSON action per iteration (`thought/action/observation`), harness executes it against plan/task stores, observation feeds the next iteration |
 | Plan/Act separation | Dedicated **PLAN** store (model-generated strategy) + **TASKS** board (execution units) kept as separate, inspectable state |

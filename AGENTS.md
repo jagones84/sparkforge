@@ -1,4 +1,4 @@
-# AGENTS.md — start here (SparkForge)
+# AGENTS.md — start here (Longrun)
 
 Orientation for an AI agent (or human) landing in this repo. Read in this order;
 you should be productive within minutes and operate at the level of the agents
@@ -19,8 +19,8 @@ that built this.
 
 ## The 60-second mental model
 
-- A stdlib-only Python **agent harness** (`src/sparkforge/`), HTTP on `:8790`,
-  SPA at `webui/index.html`, optional Orbit deck at `src/sparkforge/orbit/`.
+- A stdlib-only Python **agent harness** (`src/longrun/`), HTTP on `:8790`,
+  SPA at `webui/index.html`, optional Orbit deck at `src/longrun/orbit/`.
 - **Five object levels**: `Team (TN) → Job (JN) → Subjob (JN.j) → Agent (AX) → Todo
   (AX.nY)`. A **team** owns its roster; an **agent IS a session**
   (`agent["session"] == sid`). A **job** runs a coordinator + its team in dependency

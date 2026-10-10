@@ -2,7 +2,7 @@
 # Nightly mega debug loop - runs until STOP file or 8h.
 # Logs to outputs/<date>_nightly/. Safe autofix only with battery gate.
 set -u
-ROOT=/home/jagones/Repositories/sparkforge
+ROOT=/home/jagones/Repositories/longrun
 cd $ROOT
 STAMP=$(date +%Y%m%d_%H%M_nightly)
 OUT=$ROOT/outputs/$STAMP
@@ -35,13 +35,13 @@ while true; do
   ITER=$((ITER+1))
   log "=== iter $ITER ==="
 
-  .venv/bin/ruff check src/sparkforge > $OUT/ruff_i$ITER.txt 2>&1
+  .venv/bin/ruff check src/longrun > $OUT/ruff_i$ITER.txt 2>&1
   echo "ruff_exit=$? iter=$ITER" >> $LOG
 
-  .venv/bin/mypy src/sparkforge --ignore-missing-imports > $OUT/mypy_i$ITER.txt 2>&1
+  .venv/bin/mypy src/longrun --ignore-missing-imports > $OUT/mypy_i$ITER.txt 2>&1
   echo "mypy_exit=$? iter=$ITER" >> $LOG
 
-  .venv/bin/bandit -r src/sparkforge -ll -q > $OUT/bandit_i$ITER.txt 2>&1
+  .venv/bin/bandit -r src/longrun -ll -q > $OUT/bandit_i$ITER.txt 2>&1
   echo "bandit_exit=$? iter=$ITER" >> $LOG
 
   bash tests/battery.sh > $OUT/battery_i$ITER.txt 2>&1
@@ -58,15 +58,15 @@ while true; do
     continue
   fi
 
-  cp -a src/sparkforge $OUT/src_backup_i$ITER
-  .venv/bin/ruff check src/sparkforge --fix > $OUT/ruff_fix_i$ITER.txt 2>&1
+  cp -a src/longrun $OUT/src_backup_i$ITER
+  .venv/bin/ruff check src/longrun --fix > $OUT/ruff_fix_i$ITER.txt 2>&1
   bash tests/battery.sh > $OUT/battery_postfix_i$ITER.txt 2>&1
   B2=$?
   echo "battery_postfix_exit=$B2 iter=$ITER" >> $LOG
   if [ $B2 -ne 0 ]; then
     log "autofix broke battery, revert iter $ITER"
-    rm -rf src/sparkforge
-    cp -a $OUT/src_backup_i$ITER src/sparkforge
+    rm -rf src/longrun
+    cp -a $OUT/src_backup_i$ITER src/longrun
   else
     log "autofix kept green iter $ITER"
   fi

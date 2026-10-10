@@ -32,8 +32,8 @@ def read(*parts):
         return f.read()
 
 
-from sparkforge import taskgraph as tg  # noqa: E402
-from sparkforge import jobs as jobs_mod  # noqa: E402
+from longrun import taskgraph as tg  # noqa: E402
+from longrun import jobs as jobs_mod  # noqa: E402
 
 SID = "v296scope"
 g = tg.ensure(SID, session_id=SID, goal="unscoped")
@@ -78,25 +78,25 @@ check("a manual step does NOT inherit the job tag", n_manual.get("jid") is None,
       "got %r" % n_manual.get("jid"))
 
 # ------------------------------------------------------------------ source locks
-j = read("src", "sparkforge", "jobs.py")
+j = read("src", "longrun", "jobs.py")
 check("_run_agent takes a jid", "def _run_agent(self, sid, message, model=None, jid=None," in j)
 check("dispatch scopes the graph to the job", "self._scope_graph(sid, jid, message)" in j)
 check("job messages no longer forbid a task list", "do NOT create or update a task list" not in j)
 check("every job turn passes jid", j.count("jid=jid") >= 3)
 
-t = read("src", "sparkforge", "taskgraph.py")
+t = read("src", "longrun", "taskgraph.py")
 check("add_node tags the node with the graph jid", '"jid": graph.get("jid")' in t)
 
 # JAG-301: the job tag is per-TURN — a manual turn must clear it, else a finished
 # job's tag lingered and mislabelled later todos (the same J2/J3 confusion).
-s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
+s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
 check("chat_stream_gen takes a per-turn jid",
       "def chat_stream_gen(sess, message, model, mark=None, autonomous=False, jid=None," in s)
 check("the turn writes its jid onto the graph", '_existing["jid"] = jid' in s)
 check("the non-stream chat path clears the job tag", '_ex["jid"] = None' in s)
 check("a job passes its jid into the turn", "autonomous=True, jid=jid" in j)
 
-o = read("src", "sparkforge", "orbit", "web", "orbit.html")
+o = read("src", "longrun", "orbit", "web", "orbit.html")
 check("constellation header shows the job tag", "jtag" in o and "n.jid" in o)
 
 gi = read("webui", "index.html")

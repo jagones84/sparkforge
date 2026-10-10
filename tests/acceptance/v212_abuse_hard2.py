@@ -23,19 +23,19 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 T0 = time.time()
 tmp = tempfile.mkdtemp(prefix="sf-212-")
 sys.path.insert(0, os.path.join(REPO, "src"))
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(tmp, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(tmp, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(tmp, "runs")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(tmp, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(tmp, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(tmp, "graphs")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(tmp, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(tmp, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 
-from sparkforge import memory as mem   # noqa: E402
-from sparkforge import tools           # noqa: E402
-from sparkforge import taskgraph as tg  # noqa: E402
-from sparkforge import registry        # noqa: E402
+from longrun import memory as mem   # noqa: E402
+from longrun import tools           # noqa: E402
+from longrun import taskgraph as tg  # noqa: E402
+from longrun import registry        # noqa: E402
 
 mem.DATA_DIR = os.path.join(tmp, "memory")
 mem.CORE_PATH = os.path.join(mem.DATA_DIR, "core.md")

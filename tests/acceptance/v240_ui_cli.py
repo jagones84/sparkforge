@@ -24,12 +24,12 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _tmp = tempfile.mkdtemp(prefix="sf-240-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_CONFIG_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_CONFIG_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 
@@ -45,8 +45,8 @@ def read(*parts):
 
 
 ui = read("webui", "index.html")
-fv = read("src", "sparkforge", "forge.py")
-sv = read("src", "sparkforge", "server.py")
+fv = read("src", "longrun", "forge.py")
+sv = read("src", "longrun", "server.py")
 
 # ---- JAG-240: history render inserts the CoT BEFORE the answer -------------
 check("JAG-240 loadHistory inserts the CoT before the answer",

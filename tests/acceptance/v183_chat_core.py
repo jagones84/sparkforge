@@ -27,21 +27,21 @@ import atexit  # noqa: E402
 import shutil  # noqa: E402
 tmp = tempfile.mkdtemp(prefix="sf-183-")
 atexit.register(lambda: shutil.rmtree(tmp, ignore_errors=True))
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(tmp, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
-os.environ["SPARKFORGE_GRAPH_DIR"] = tmp
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(tmp, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(tmp, "runs")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(tmp, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(tmp, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = tmp
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(tmp, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(tmp, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 import py_compile  # noqa: E402
-py_compile.compile(os.path.join(REPO, "src", "sparkforge", "server.py"), doraise=True)
+py_compile.compile(os.path.join(REPO, "src", "longrun", "server.py"), doraise=True)
 print("[compile] server.py OK")
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 def check(name, ok, detail=""):
@@ -126,7 +126,7 @@ check("B2 verbatim re-runs BLOCKED (JAG-183)", len(blocked(ev_b)) >= 1,
 
 
 # ---- scenario C: delegation to ONE subagent (JAG-189) ----------------------
-from sparkforge import subagent as subagent_mod  # noqa: E402
+from longrun import subagent as subagent_mod  # noqa: E402
 
 def script_sub(n):
     return ('{"action":"subagent","goal":"summarize server.py","max_steps":2}'
@@ -207,7 +207,7 @@ check("E2 update_todos card persisted (JAG-190)", "update_todos" in _tools,
 # Before the fix, fs.write {"path":"HELLO.txt"} on a session whose workspace was
 # /…/TESTS/harness-e2e wrote to the HARNESS REPO instead. Relative paths must
 # resolve against the workspace (like the shell tool's cwd), not REPO.
-from sparkforge import registry as _reg, tools as _tools  # noqa: E402
+from longrun import registry as _reg, tools as _tools  # noqa: E402
 _ws = os.path.join(REPO, "data", "v183ws-%d" % os.getpid())
 os.makedirs(_ws, exist_ok=True)
 atexit.register(lambda: shutil.rmtree(_ws, ignore_errors=True))
@@ -256,7 +256,7 @@ check("G3 card 'node' is an id string or None, never a dict (JAG-192)",
 # n1), so the transcript's old cards resolved to the NEW nodes (wrong labels).
 # A new plan must bump `plan`, KEEP the old nodes, and number new ones
 # monotonically; render_todos must show only the current plan.
-from sparkforge import taskgraph as _tg  # noqa: E402
+from longrun import taskgraph as _tg  # noqa: E402
 _gk = "v183h"
 _g = _tg.ensure(_gk)
 _a = _tg.add_node(_g, "old step one", status="done", evidence="did it")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A tiny llama.cpp-router stand-in for v0.5.1 warm-up evidence.
 
-Implements just enough of the router surface for the SparkForge warm-up and
+Implements just enough of the router surface for the Longrun warm-up and
 retry paths to be exercised deterministically (no giant GGUF, no GPU):
 
   GET  /health               -> {"status":"ok"}

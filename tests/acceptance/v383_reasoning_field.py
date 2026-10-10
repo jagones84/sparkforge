@@ -18,14 +18,14 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 tmp = tempfile.mkdtemp(prefix="sf-383-")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(tmp, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(tmp, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(tmp, "events.db")
 for d in ("cfg", "sessions"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import rllm, server  # noqa: E402
+from longrun import rllm, server  # noqa: E402
 
 results = []
 
@@ -123,7 +123,7 @@ try:
           think == "FB-REASON" and answer == "FB-ANSWER", "think=%r answer=%r" % (think, answer))
 
     # ---- D: source guards (both field names are consulted) -------------------
-    with open(os.path.join(REPO, "src", "sparkforge", "rllm.py"), encoding="utf-8") as f:
+    with open(os.path.join(REPO, "src", "longrun", "rllm.py"), encoding="utf-8") as f:
         RLLM = f.read()
     check("D1 the streaming parser accepts BOTH field names",
           'delta.get("reasoning_content") or delta.get("reasoning")' in RLLM, "")

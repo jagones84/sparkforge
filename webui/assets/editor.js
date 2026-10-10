@@ -1,4 +1,4 @@
-/* SparkForge WebUI — Editor dock (JAG-150).
+/* Longrun WebUI — Editor dock (JAG-150).
    Right-side resizable dock, one tab per file. CodeMirror 6 for code, plus
    per-type previews (markdown / image / pdf / html). Vendored libs only. */
 import {

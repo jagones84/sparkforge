@@ -21,14 +21,14 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 _tmp = tempfile.mkdtemp(prefix="sf-230-")
 atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
 # Isolate BEFORE importing the server (paths are read at import time).
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(_tmp, "graphs")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(_tmp, "runs")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(_tmp, "edits")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
-os.environ["SPARKFORGE_DB"] = os.path.join(_tmp, "events.db")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(_tmp, "graphs")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(_tmp, "runs")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(_tmp, "edits")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
+os.environ["LONGRUN_DB"] = os.path.join(_tmp, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 

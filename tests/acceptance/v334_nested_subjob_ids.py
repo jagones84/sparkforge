@@ -13,10 +13,10 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-334-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge.jobs import plan_subjobs, subjob_id  # noqa: E402
+from longrun.jobs import plan_subjobs, subjob_id  # noqa: E402
 
 results = []
 
@@ -41,7 +41,7 @@ check("B3 each nested subjob still records the job as `parent`",
 check("B4 nested deps reference the nested ids (not the flat ones)",
       subs["J8.1.2"]["deps"] == ["J8.1.1"], str({k: v["deps"] for k, v in subs.items()}))
 
-with open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8") as f:
     src = f.read()
 check("C1 plan_subjobs accepts parent_sub", "def plan_subjobs(jid, agents, coord, plan, deps, parent_sub=None)" in src)
 check("C2 the id builder nests", "def subjob_id(jid, n, parent_sub=None)" in src)

@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 import atexit  # noqa: E402
 import shutil  # noqa: E402
 _sf_tmp = tempfile.mkdtemp()
-os.environ["SPARKFORGE_GRAPH_DIR"] = _sf_tmp
+os.environ["LONGRUN_GRAPH_DIR"] = _sf_tmp
 atexit.register(lambda: shutil.rmtree(_sf_tmp, ignore_errors=True))
 results = []
 
@@ -19,7 +19,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import taskgraph  # noqa: E402
+from longrun import taskgraph  # noqa: E402
 
 g = taskgraph.ensure("run_child1", session_id="run_child1", goal="child")
 n = taskgraph.add_node(g, "subtask A", child_run_id="sub_123")
@@ -30,12 +30,12 @@ taskgraph.apply_write_todos(child, [{"label": "passo figlio 1"}, {"label": "pass
 check("C2 child has its own list", len(taskgraph.load("sub_123")["nodes"]) == 2, "")
 check("C3 parent list is separate", len(taskgraph.load("run_child1")["nodes"]) == 1, "")
 
-from sparkforge import keepgoing  # noqa: E402
-from sparkforge import subagent  # noqa: E402
+from longrun import keepgoing  # noqa: E402
+from longrun import subagent  # noqa: E402
 check("C4 depth limit enforced", subagent.depth_allowed(2, 2) is False, "")
 check("C5 depth allowed below cap", subagent.depth_allowed(1, 2) is True, "")
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 from unittest import mock
 
 with mock.patch.object(subagent, "spawn", return_value={

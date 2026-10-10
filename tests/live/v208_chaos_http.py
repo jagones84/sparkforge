@@ -17,17 +17,17 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ENV = os.path.expanduser("~/.config/sparkforge/env")
+ENV = os.path.expanduser("~/.config/longrun/env")
 TOK = ""
 try:
     for line in open(ENV):
         line = line.strip()
-        if line.startswith("SPARKFORGE_TOKEN="):
+        if line.startswith("LONGRUN_TOKEN="):
             TOK = line.split("=", 1)[1].strip().strip('"').strip("'")
 except OSError:
     pass
-BASE = os.environ.get("SPARKFORGE_BASE", "http://127.0.0.1:8790")
-HOST, PORT = "127.0.0.1", int(os.environ.get("SPARKFORGE_PORT", "8790"))
+BASE = os.environ.get("LONGRUN_BASE", "http://127.0.0.1:8790")
+HOST, PORT = "127.0.0.1", int(os.environ.get("LONGRUN_PORT", "8790"))
 RESULTS = []
 
 

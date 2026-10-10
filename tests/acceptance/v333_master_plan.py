@@ -14,16 +14,16 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-333-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import agents, jobs, taskgraph as tg  # noqa: E402
+from longrun import agents, jobs, taskgraph as tg  # noqa: E402
 
 results = []
 
@@ -64,7 +64,7 @@ check("A4 the node label names the subjob and the assignee",
       JID + ".1" in by_sub[JID + ".1"]["label"] and "A9" in by_sub[JID + ".1"]["label"],
       by_sub[JID + ".1"]["label"] if JID + ".1" in by_sub else "")
 
-src = read("src", "sparkforge", "jobs.py")
+src = read("src", "longrun", "jobs.py")
 check("B1 the runner seeds the master's plan after the delegation is announced",
       "self._seed_coordinator_plan(" in src)
 check("B2 the seeder writes one node per subjob",

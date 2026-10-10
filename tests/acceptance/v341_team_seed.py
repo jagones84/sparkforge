@@ -48,21 +48,21 @@ with open(os.path.join(AGENCY, "strategy", "runbooks.json"), "w", encoding="utf-
     json.dump(RUNBOOKS, f)
 
 # --- isolate the harness stores, then import the seeder ---------------------
-os.environ["SPARKFORGE_AGENCY_DIR"] = AGENCY
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.environ["SPARKFORGE_ROLES_DIR"] = os.path.join(TMP, "roles")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_AGENCY_DIR"] = AGENCY
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_ROLES_DIR"] = os.path.join(TMP, "roles")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 
 import seed_teams  # noqa: E402
-from sparkforge import agents, teams, roles, agency  # noqa: E402
+from longrun import agents, teams, roles, agency  # noqa: E402
 
 results = []
 

@@ -22,10 +22,10 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _tmp = tempfile.mkdtemp(prefix="sf-206-")
 atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
-os.environ["SPARKFORGE_GRAPH_DIR"] = _tmp
+os.environ["LONGRUN_GRAPH_DIR"] = _tmp
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import taskgraph  # noqa: E402
+from longrun import taskgraph  # noqa: E402
 
 results = []
 

@@ -33,8 +33,8 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v309-")
 SESS = os.path.join(TMP, "sessions")
 os.makedirs(SESS, exist_ok=True)
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = SESS
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_SESSIONS_DIR"] = SESS
 
 results = []
 
@@ -49,8 +49,8 @@ def read(*parts):
         return f.read()
 
 
-from sparkforge import server  # noqa: E402
-from sparkforge import agents as agents_mod  # noqa: E402
+from longrun import server  # noqa: E402
+from longrun import agents as agents_mod  # noqa: E402
 
 REG = agents_mod.REGISTRY
 
@@ -120,19 +120,19 @@ check("reconcile is idempotent (a second run fixes nothing)",
       server.reconcile_agent_models() == 0)
 
 # ------------------------------------------------------------------ source locks
-s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
-check("the single writer exists", "def _set_session_model(sid, model):" in read("src", "sparkforge", "stores.py"))
-check("the startup reconcile exists", "def reconcile_agent_models():" in read("src", "sparkforge", "stores.py"))
+s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
+check("the single writer exists", "def _set_session_model(sid, model):" in read("src", "longrun", "stores.py"))
+check("the startup reconcile exists", "def reconcile_agent_models():" in read("src", "longrun", "stores.py"))
 check("the session-model endpoint uses the single writer",
       'ref = _set_session_model(sid, body.get("model"))' in s)
 check("startup runs the reconcile",
       "# JAG-309: agent model == its session's model" in s)
 
-o = read("src", "sparkforge", "orchestration.py")
+o = read("src", "longrun", "orchestration.py")
 check("the Orbit designate path syncs the session model",
       'srv._set_session_model(sid, data.get("model") or "")' in o)
 
-a = read("src", "sparkforge", "agents.py")
+a = read("src", "longrun", "agents.py")
 check("designate can store AND clear a model",
       "if model is not None:" in a and 'a["model"] = (str(model)[:120] or None)' in a)
 

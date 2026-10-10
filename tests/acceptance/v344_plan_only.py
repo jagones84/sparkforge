@@ -20,18 +20,18 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-344-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import jobs, server  # noqa: E402
+from longrun import jobs, server  # noqa: E402
 
 results = []
 
@@ -77,14 +77,14 @@ check("B3 chat_once passes plan_only to the loop (signature default)",
 check("B4 a plan-only turn caps the real-tool budget",
       hasattr(server, "PLAN_ONLY_MAX_STEPS") and int(server.PLAN_ONLY_MAX_STEPS) > 0)
 
-srv_src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-srv_src += open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8").read()
+srv_src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
+srv_src += open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8").read()
 check("B5 the loop stops with a typed 'plan_only' reason",
       'reason="plan_only"' in srv_src and '_kg_stop_reason = "plan_only"' in srv_src)
 check("B6 the plan_only stop precedes the keepgoing decide",
       srv_src.index('_kg_stop_reason = "plan_only"') < srv_src.index("_dec = _kg.decide("))
 
-jobs_src = open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8").read()
+jobs_src = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
 check("B7 the coordinator PLANNING turn is plan_only",
       'jid=jid, plan_only=True' in jobs_src)
 check("B8 the coordinator is told to STOP after planning",

@@ -23,14 +23,14 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v273-")
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
-    os.environ["SPARKFORGE_" + _k] = os.path.join(TMP, _k)
+    os.environ["LONGRUN_" + _k] = os.path.join(TMP, _k)
     os.makedirs(os.path.join(TMP, _k), exist_ok=True)
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import prompt as P  # noqa: E402
-from sparkforge import server as S  # noqa: E402
-from sparkforge import taskgraph as TG  # noqa: E402
+from longrun import prompt as P  # noqa: E402
+from longrun import server as S  # noqa: E402
+from longrun import taskgraph as TG  # noqa: E402
 
 results = []
 
@@ -67,9 +67,9 @@ check("`state` uses the compact list (no ownership paragraph)", "This list is YO
 check("`state` still names the open step", "beta open" in cs, cs)
 
 # --- 2) injections no longer duplicate the full list -------------------------
-srv_src = open(os.path.join(REPO, "src", "sparkforge", "server.py"),
+srv_src = open(os.path.join(REPO, "src", "longrun", "server.py"),
                encoding="utf-8").read()
-srv_src += open(os.path.join(REPO, "src", "sparkforge", "agent.py"),
+srv_src += open(os.path.join(REPO, "src", "longrun", "agent.py"),
                 encoding="utf-8").read()
 check("keepgoing injections stopped re-rendering the full list",
       "render_todos(taskgraph.load" not in srv_src)
@@ -110,13 +110,13 @@ check("server.extract_actions removed", "def extract_actions" not in srv_src)
 check("server.breakdown_tasks removed", "def breakdown_tasks" not in srv_src)
 check("server.BREAKDOWN_PROMPT removed", "BREAKDOWN_PROMPT" not in srv_src)
 
-from sparkforge import approvals as AP  # noqa: E402
-from sparkforge import meta as MT  # noqa: E402,F401
-from sparkforge import otel_tracing as OT  # noqa: E402
-from sparkforge import providers as PR  # noqa: E402
-from sparkforge import runmetrics as RM  # noqa: E402
-from sparkforge import subagent as SA  # noqa: E402
-from sparkforge import verify as VF  # noqa: E402
+from longrun import approvals as AP  # noqa: E402
+from longrun import meta as MT  # noqa: E402,F401
+from longrun import otel_tracing as OT  # noqa: E402
+from longrun import providers as PR  # noqa: E402
+from longrun import runmetrics as RM  # noqa: E402
+from longrun import subagent as SA  # noqa: E402
+from longrun import verify as VF  # noqa: E402
 
 check("runmetrics.human removed", not hasattr(RM, "human"))
 check("otel_tracing.provider_ready removed", not hasattr(OT, "provider_ready"))

@@ -4,7 +4,7 @@
 Observed live on J2: the coordinator's synthesis turn reported completion_tokens
 pinned at exactly 4096 with `finish_reason` unset and think_chars 12k — the
 llama.cpp router's DEFAULT completion cap when the request omits `max_tokens`
-(the harness sent none, `SPARKFORGE_MAX_TOKENS` default 0). A reasoning model
+(the harness sent none, `LONGRUN_MAX_TOKENS` default 0). A reasoning model
 spends most of that budget on hidden thinking, so the answer was cut mid-table
 and the job's deliverable came out incomplete. Probe proved the router honours an
 explicit larger cap (max_tokens=6000 -> 5044 tokens, finish_reason=stop).
@@ -35,7 +35,7 @@ def read(*parts):
         return f.read()
 
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 # --- the default cap must clear the router's 4096 ---------------------------------
 check("the output cap is generous (> 4096)", server.MAX_TOKENS > 4096,
@@ -52,9 +52,9 @@ off = server._completion_body("m", [], True, None)
 check("a None cap is omitted (router decides)", "max_tokens" not in off)
 
 # ------------------------------------------------------------------ source locks
-s = read("src", "sparkforge", "rllm.py")
+s = read("src", "longrun", "rllm.py")
 check("the default is 16384 and env-overridable",
-      'os.environ.get("SPARKFORGE_MAX_TOKENS", "16384")' in s)
+      'os.environ.get("LONGRUN_MAX_TOKENS", "16384")' in s)
 check("the chat call passes the cap", "MAX_TOKENS or None" in s)
 
 print("---")

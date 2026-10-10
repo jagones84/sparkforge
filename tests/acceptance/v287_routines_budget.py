@@ -3,7 +3,7 @@
 
 A Routine binds an AGENT (AX) to a goal and a cadence; the scheduler wakes the agent
 by running the goal as a normal turn. Each fired routine respects the agent's daily
-budget. This is SparkForge's "agents keep working while nobody watches".
+budget. This is Longrun's "agents keep working while nobody watches".
 
 Locked here:
   * Routine.create validates (agent exists, goal, every_seconds >= 30);
@@ -23,9 +23,9 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v287-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_ROUTINES_FILE"] = os.path.join(TMP, "routines.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_ROUTINES_FILE"] = os.path.join(TMP, "routines.json")
 
 results = []
 
@@ -35,7 +35,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import agents, routines, orchestration  # noqa: E402
+from longrun import agents, routines, orchestration  # noqa: E402
 
 calls = []
 routines._run_agent = lambda sid, goal, model=None: calls.append((sid, goal)) or "ok"
@@ -109,7 +109,7 @@ check("a non routines path is not shadowed",
       orchestration.handle(fh, "GET", "/api/status", {}, None) is False and fh.sent is None)
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the Orbit UI has a routines view wired to /api/routines",
       "class RoutinesView" in ui and "/api/routines" in ui and 'id="rtCreate"' in ui)

@@ -18,8 +18,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HTML = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8").read()
-ORBIT = open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8").read()
-API = open(os.path.join(REPO, "src", "sparkforge", "orbit", "api.py"), encoding="utf-8").read()
+ORBIT = open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8").read()
+API = open(os.path.join(REPO, "src", "longrun", "orbit", "api.py"), encoding="utf-8").read()
 
 results = []
 
@@ -109,7 +109,7 @@ check("G2 Sand gives the composer a light background; dark themes stay dark",
 check("H1 the WebUI entry is labelled Bridge",
       "🛰 Bridge" in HTML and "Bridge — agent orchestration deck" in HTML, "")
 check("H2 the Bridge page title + h1 are renamed",
-      "<title>Bridge · SparkForge beta</title>" in ORBIT and "<h1>Bridge</h1>" in ORBIT, "")
+      "<title>Bridge · Longrun beta</title>" in ORBIT and "<h1>Bridge</h1>" in ORBIT, "")
 check("H3 the API fallback page says Bridge",
       "Bridge beta" in API, "")
 

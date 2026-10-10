@@ -16,14 +16,14 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v258-")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(TMP, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(TMP, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(TMP, "runs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(TMP, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server as s  # noqa: E402
+from longrun import server as s  # noqa: E402
 
 results = []
 
@@ -51,9 +51,9 @@ check("meter budget follows the resolved model",
       "resolved=%s" % s.context_budget(resolved))
 
 # static guard: the /api/context handler routes through the resolver
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     sv = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
     sv += f.read()
 check("JAG-258 /api/context uses resolve_ctx_model",
       "resolve_ctx_model(load_session(_sid)" in sv)

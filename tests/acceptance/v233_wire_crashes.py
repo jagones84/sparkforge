@@ -27,7 +27,7 @@ import traceback
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
-from sparkforge import server, api_v02, meta, acp, mcp_client  # noqa: E402
+from longrun import server, api_v02, meta, acp, mcp_client  # noqa: E402
 
 results = []
 
@@ -168,7 +168,7 @@ check("JAG-237 disconnect_all vs concurrent insert: no RuntimeError",
 
 # ---- static guards ---------------------------------------------------------
 def read(rel):
-    with open(os.path.join(REPO, "src", "sparkforge", rel), encoding="utf-8") as f:
+    with open(os.path.join(REPO, "src", "longrun", rel), encoding="utf-8") as f:
         return f.read()
 
 

@@ -1,4 +1,4 @@
-# SparkForge external MCP clients — v0.7
+# Longrun external MCP clients — v0.7
 # Each entry: command+args (stdio) OR url (HTTP streamable). Optional headers
 # support ${VAR} expansion; env_files are loaded before expansion (KEY=VALUE).
 #

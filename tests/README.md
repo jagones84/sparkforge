@@ -1,4 +1,4 @@
-# tests/ — how to test SparkForge
+# tests/ — how to test Longrun
 
 Everything is standard-library Python. No framework, no network, no model needed
 for the battery. One command, one exit code.
@@ -26,7 +26,7 @@ pytest tests/properties/       # Hypothesis property tests
 
 ## Isolation
 
-`battery.sh` points every `SPARKFORGE_*` var at a throwaway `mktemp` dir and sets a
+`battery.sh` points every `LONGRUN_*` var at a throwaway `mktemp` dir and sets a
 fresh `PYTHONPYCACHEPREFIX`, so a run never touches `data/`, the live transcripts,
 or the events DB. A test may also set its own `tempfile.mkdtemp()`.
 
@@ -34,7 +34,7 @@ or the events DB. A test may also set its own `tempfile.mkdtemp()`.
 
 - `REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))`
   (three levels up from `tests/acceptance/`).
-- `sys.path.insert(0, os.path.join(REPO, "src"))` then import `sparkforge`.
+- `sys.path.insert(0, os.path.join(REPO, "src"))` then import `longrun`.
 - Define `check(name, ok, detail="")`, print `PASS`/`FAIL`, `sys.exit(1)` on any failure.
 - Name it `vNNN_topic.py` (NNN = the JAG issue number). Drop it in `acceptance/`.
 - Keep it deterministic: no sleep-loops, no live model, no wall-clock races.

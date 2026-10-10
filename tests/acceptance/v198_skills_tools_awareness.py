@@ -20,18 +20,18 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 tmp = tempfile.mkdtemp(prefix="sf-198-")
 atexit.register(lambda: shutil.rmtree(tmp, ignore_errors=True))
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(tmp, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(tmp, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(tmp, "runs")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(tmp, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(tmp, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(tmp, "graphs")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(tmp, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(tmp, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server as _srv  # noqa: E402
-from sparkforge import registry, skills, tools  # noqa: E402
+from longrun import server as _srv  # noqa: E402
+from longrun import registry, skills, tools  # noqa: E402
 
 results = []
 

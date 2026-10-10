@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#06070c">
-<title>⚡ SparkForge — DGX Harness</title>
+<title>⚡ Longrun — DGX Harness</title>
 <!-- JAG-390: PWA. The manifest is injected at boot (setupPWA) so its start_url
      can carry the API token; icons are served from /assets. -->
 <link rel="icon" href="/assets/icon-192.png">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="SparkForge">
+<meta name="apple-mobile-web-app-title" content="Longrun">
 <meta name="mobile-web-app-capable" content="yes">
 <style>
   :root {
@@ -1007,7 +1007,7 @@
 </head>
 <body>
 <header id="topbar">
-  <span class="logo">⚡ SPARKFORGE</span>
+  <span class="logo">⚡ LONGRUN</span>
   <span class="sub">agent harness · self-hosted · any OS</span>
   <span class="sessbadge" id="sessBadge" hidden></span>
   <span style="flex:1"></span>
@@ -1248,7 +1248,7 @@
         <h2>API token</h2>
         <div class="card">
           <div style="display:flex;gap:6px;align-items:center">
-            <input id="token-input" class="inp" type="password" placeholder="SPARKFORGE_TOKEN" style="flex:1;padding:6px 10px;font-size:12px">
+            <input id="token-input" class="inp" type="password" placeholder="LONGRUN_TOKEN" style="flex:1;padding:6px 10px;font-size:12px">
             <button class="ghost" id="tokenEye" onclick="revealToken()" title="show/hide">👁</button>
             <button class="ghost" onclick="copyToken()" title="copy">⧉ copy</button>
             <button class="ghost" onclick="saveToken()">save</button>
@@ -1356,7 +1356,7 @@
         <h2>Workspace · folder</h2>
         <div class="card">
           <div class="remaining" id="wsCurrent">loading…</div>
-          <input id="wsPath" class="inp" placeholder="folder path (e.g. /home/jagones/Repositories/sparkforge)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
+          <input id="wsPath" class="inp" placeholder="folder path (e.g. /home/jagones/Repositories/longrun)" style="width:100%;padding:6px 10px;font-size:12px;margin-top:6px">
           <label class="remaining" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="wsDefault"> set as default for new sessions</label>
           <button class="ghost" onclick="setWorkspace()" style="margin-top:8px">use this folder</button>
           <div id="wsResult" class="remaining" style="margin-top:6px"></div>
@@ -1683,7 +1683,7 @@ async function ensureToken() {
   if (TOKEN) return TOKEN;
   const ok = await fetch("/api/status", { headers: authHeaders() }).then(r => r.ok).catch(() => false);
   if (ok) return null;
-  TOKEN = prompt("SparkForge API token:") || "";
+  TOKEN = prompt("Longrun API token:") || "";
   localStorage.setItem("sf_token", TOKEN);
   return TOKEN;
 }
@@ -1784,7 +1784,7 @@ function who(role, text, ts, sender, subjob) {
   // ("A8 (Master) · J6.1") instead of "YOU" — a worker must never look like the
   // operator asked it directly.
   const _label = sender ? (sender + (subjob ? " · " + subjob : ""))
-                        : (role === "user" ? "YOU" : "SPARKFORGE");
+                        : (role === "user" ? "YOU" : "LONGRUN");
   d.innerHTML = `<div class="who">${esc(_label)}` +
     _tsSpan(ts) + `<button class="copy" title="copy message">⧉</button></div><div class="bubble"></div>`;
   const b = d.querySelector(".bubble");
@@ -1870,7 +1870,7 @@ function ensureThink() {
   if (!curThink) {
     _tidyThink();
     const d = document.createElement("div"); d.className = "msg ai";
-    d.innerHTML = `<div class="who">SPARKFORGE</div><details class="think" open><summary>🧠 chain-of-thought (live)…</summary><div class="t"></div></details>`;
+    d.innerHTML = `<div class="who">LONGRUN</div><details class="think" open><summary>🧠 chain-of-thought (live)…</summary><div class="t"></div></details>`;
     // JAG-219b: keep the chain-of-thought ABOVE its answer regardless of which
     // channel streams first. A reasoning-first model put it above the answer, but
     // when the answer arrived first the CoT was appended BELOW — the position
@@ -2003,7 +2003,7 @@ function harnessInject(d) {
 function renderThink(text) {
   if (!text) return;
   const d = document.createElement("div"); d.className = "msg ai";
-  d.innerHTML = `<div class="who">SPARKFORGE</div><details class="think"><summary>🧠 chain-of-thought</summary><div class="t"></div></details>`;
+  d.innerHTML = `<div class="who">LONGRUN</div><details class="think"><summary>🧠 chain-of-thought</summary><div class="t"></div></details>`;
   d.querySelector(".t").textContent = text;
   _logAppend(d); scroll();
 }
@@ -2824,7 +2824,7 @@ async function loadHistory() {
       if (cot) {
         // JAG-240: the CoT belongs ABOVE its answer, exactly like the live stream.
         const t = document.createElement("div"); t.className = "msg ai";
-        t.innerHTML = `<div class="who">SPARKFORGE` + _tsSpan(m.ts) + `</div><details class="think"><summary>🧠 chain-of-thought</summary><div class="t"></div></details>`;
+        t.innerHTML = `<div class="who">LONGRUN` + _tsSpan(m.ts) + `</div><details class="think"><summary>🧠 chain-of-thought</summary><div class="t"></div></details>`;
         t.querySelector(".t").textContent = cot;
         if (d.parentNode) d.parentNode.insertBefore(t, d);
       }
@@ -3638,7 +3638,7 @@ function approvalCard(d) {
   const aid = d.id_id || d.id;
   const card = document.createElement("div");
   card.className = "msg ai";
-  const whoEl = document.createElement("div"); whoEl.className = "who"; whoEl.textContent = "SPARKFORGE · approval";
+  const whoEl = document.createElement("div"); whoEl.className = "who"; whoEl.textContent = "LONGRUN · approval";
   const bub = document.createElement("div"); bub.className = "bubble";
   const title = document.createElement("div"); title.textContent = "🔐 approval needed — " + (d.tool || "tool");
   const sum = document.createElement("div"); sum.style.cssText = "white-space:pre-wrap;word-break:break-all;font-size:12px;color:var(--dim);margin:4px 0";
@@ -3776,7 +3776,7 @@ function clearDone(sid) {
 }
 function updateDoneTitle() {
   const n = Object.keys(doneSessions).length;
-  const base = "⚡ SparkForge — DGX Harness";
+  const base = "⚡ Longrun — DGX Harness";
   document.title = n ? "(" + n + ") 🔔 " + base : base;
 }
 function showDoneToast(sid) {

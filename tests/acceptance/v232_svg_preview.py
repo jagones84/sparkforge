@@ -20,9 +20,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 _tmp = tempfile.mkdtemp(prefix="sf-232-")
 atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
 # /api/fs/raw resolves paths against the browse roots — point them at our temp dir
-os.environ["SPARKFORGE_BROWSE_ROOTS"] = _tmp
+os.environ["LONGRUN_BROWSE_ROOTS"] = _tmp
 sys.path.insert(0, os.path.join(REPO, "src"))
-from sparkforge import api_v02  # noqa: E402
+from longrun import api_v02  # noqa: E402
 
 results = []
 
@@ -73,11 +73,11 @@ api_v02._fs_raw(h, {"path": "/etc/passwd"})
 check("outside-roots path still 404", h.codes == [404], "codes=%s" % h.codes)
 
 # static guards
-with open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8") as f:
     av = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     sv = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
     sv += f.read()
 check("_fs_raw uses an allow-list (_SAFE_PREVIEW)", "_SAFE_PREVIEW" in av)
 check("_fs_raw no longer blanket-allows image/*",

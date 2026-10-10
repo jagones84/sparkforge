@@ -1,14 +1,14 @@
-# SparkForge Architecture
+# Longrun Architecture
 
 *v1.0.0 — 2026-10-07. The code is the source of truth; this is the map.*
 
-SparkForge is a **stdlib-only Python agent harness**. It drives one LLM with disciplined
+Longrun is a **stdlib-only Python agent harness**. It drives one LLM with disciplined
 context and a real tool loop, then composes that harness into **meta-agents organised in
 teams**. It serves a single-file WebUI, a mission-control deck (Orbit), a CLI and a
 mobile-ready HTTP API — all from one process on `:8790`.
 
 ```
-        WebUI (webui/index.html)   Orbit (src/sparkforge/orbit)   CLI (forge.py)   Mobile
+        WebUI (webui/index.html)   Orbit (src/longrun/orbit)   CLI (forge.py)   Mobile
               │  SSE  ▲  │ HTTP          │  SSE ▲                │ SSE ▲         │
               ▼       │  ▼               ▼      │                ▼     │         ▼
         ┌───────────────────────────────────────────────────────────────────────────┐
@@ -72,7 +72,7 @@ through the **approval gate** and the **sandbox**; observations are fed back; th
 (`goal_reached · no_progress · budget · blocked`). Every step is published to the event
 bus and persisted, so a reload rebuilds the transcript and the task graph.
 
-## Components (`src/sparkforge/`)
+## Components (`src/longrun/`)
 
 | Area | Modules |
 |---|---|
@@ -103,7 +103,7 @@ or `bwrap` / `nsjail`) so the agent never touches the host. Hard-denied patterns
 ## Interfaces
 
 - **WebUI** `webui/index.html` — one file, no build step; chat + CoT, task graph, feed.
-- **Orbit** `src/sparkforge/orbit/` — optional command deck at `/orbit`: org chart,
+- **Orbit** `src/longrun/orbit/` — optional command deck at `/orbit`: org chart,
   constellation, job create/dispatch, team selector, model policy.
 - **CLI** `forge.py` — chat, agent runs, tasks, models, MCP.
 - **HTTP API** — see [CLI.md](CLI.md); optional bearer auth (`--token`).
@@ -112,4 +112,4 @@ or `bwrap` / `nsjail`) so the agent never touches the host. Hard-denied patterns
 
 The repo-root `server.py`, `forge.py`, `mcp_server.py` are **launcher shims** (they put
 `src/` on `sys.path` and call the package `main()`). Real code lives in
-`src/sparkforge/`; the modules use relative imports and cannot run standalone.
+`src/longrun/`; the modules use relative imports and cannot run standalone.

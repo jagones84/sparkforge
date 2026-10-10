@@ -18,8 +18,8 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import checkpoints as cp  # noqa: E402
-from sparkforge import approvals as ap  # noqa: E402
+from longrun import checkpoints as cp  # noqa: E402
+from longrun import approvals as ap  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="sf-318-")
 cp.CKPT_DIR = os.path.join(TMP, "ckpt")
@@ -108,9 +108,9 @@ check("C8 clear(all) empties the queue",
       str(ap.stats()))
 
 # ---- D: source wiring ------------------------------------------------------
-cpsrc = open(os.path.join(REPO, "src", "sparkforge", "checkpoints.py"), encoding="utf-8").read()
-apsrc = open(os.path.join(REPO, "src", "sparkforge", "approvals.py"), encoding="utf-8").read()
-apisrc = open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8").read()
+cpsrc = open(os.path.join(REPO, "src", "longrun", "checkpoints.py"), encoding="utf-8").read()
+apsrc = open(os.path.join(REPO, "src", "longrun", "approvals.py"), encoding="utf-8").read()
+apisrc = open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8").read()
 check("D1 checkpoints.delete + prune exist", "def delete(" in cpsrc and "def prune(" in cpsrc)
 check("D2 approvals.delete + clear exist", "def delete(" in apsrc and "def clear(" in apsrc)
 check("D3 DELETE /api/checkpoints is wired", 'path == "/api/checkpoints":' in apisrc)

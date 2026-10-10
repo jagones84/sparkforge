@@ -22,16 +22,16 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-322-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server, agents, jobs  # noqa: E402
+from longrun import server, agents, jobs  # noqa: E402
 
 results = []
 
@@ -133,10 +133,10 @@ check("F2 renaming a session can set the agent name",
       (agents.REGISTRY.get("sessW") or {}).get("name") == "Slave From Session")
 
 # ---- wiring ---------------------------------------------------------------
-serv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-serv += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
-jobsrc = open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8").read()
-agsrc = open(os.path.join(REPO, "src", "sparkforge", "agents.py"), encoding="utf-8").read()
+serv = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
+serv += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
+jobsrc = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
+agsrc = open(os.path.join(REPO, "src", "longrun", "agents.py"), encoding="utf-8").read()
 check("G1 chat_stream_gen carries sender/subjob",
       "sender=None, subjob=None" in serv and '"sender": sender, "subjob": subjob' in serv)
 check("G2 jobs records subjobs + attribution",

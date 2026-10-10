@@ -80,16 +80,16 @@ check("B7 the ghost/copy hover borders follow the accent",
       and ".msg .copy:hover { color: var(--txt); border-color: var(--acc); }" in HTML, "")
 
 # --- C: a relative chat link opens (server-side ancestor walk) ---------------
-with open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8") as f:
     SRC = f.read()
 check("C1 the resolver walks the workspace ancestors (bounded)",
       "for _ in range(12):" in SRC and "the workspace, then its ancestors" in SRC, "")
 
 api = None
 try:
-    from sparkforge import api_v02 as api  # noqa: E402
+    from longrun import api_v02 as api  # noqa: E402
 except Exception as e:  # noqa: BLE001
-    print("SKIP import sparkforge.api_v02: %s" % e)
+    print("SKIP import longrun.api_v02: %s" % e)
 
 if api is not None:
     tmp = tempfile.mkdtemp(prefix="sf-v364-")

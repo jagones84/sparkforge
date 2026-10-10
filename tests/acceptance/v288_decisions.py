@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v288 — Decision queue (JAG-287 D, Paperclip parity).
 
-Paperclip funnels everything that needs a human into ONE inbox. SparkForge already
+Paperclip funnels everything that needs a human into ONE inbox. Longrun already
 has the ranked feed; this adds the drain: every item can be resolved inline, and a
 resolution either delegates to a real primitive (approvals.decide / run retry) or is
 acknowledged (dismiss) so the queue stays clean.
@@ -25,7 +25,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v288-")
-os.environ["SPARKFORGE_DECISIONS_FILE"] = os.path.join(TMP, "decisions.json")
+os.environ["LONGRUN_DECISIONS_FILE"] = os.path.join(TMP, "decisions.json")
 
 results = []
 
@@ -35,9 +35,9 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import approvals  # noqa: E402
-from sparkforge.orbit import api as oapi  # noqa: E402
-from sparkforge.orbit.decisions import DecisionQueue  # noqa: E402
+from longrun import approvals  # noqa: E402
+from longrun.orbit import api as oapi  # noqa: E402
+from longrun.orbit.decisions import DecisionQueue  # noqa: E402
 
 decided, retried = [], []
 approvals.decide = lambda aid, decision, by="human": decided.append((aid, decision, by)) or {
@@ -79,7 +79,7 @@ check("queue ships the board", "board" in snap and snap["board"]["working"][0]["
 r = dq.resolve("opentodos:s2", "dismiss")
 check("dismiss acknowledges an item", r["ok"] and r["action"] == "dismiss")
 check("a dismissed item leaves the queue", dq.queue()["count"] == 2 and dq.queue()["dismissed"] == 1)
-check("the ack set is persisted", os.path.exists(os.environ["SPARKFORGE_DECISIONS_FILE"]))
+check("the ack set is persisted", os.path.exists(os.environ["LONGRUN_DECISIONS_FILE"]))
 dq2 = make_queue()
 check("a fresh queue still hides the dismissed id", dq2.queue()["count"] == 2)
 
@@ -127,7 +127,7 @@ check("a non-orbit path is not shadowed",
       oapi.handle(fh, "GET", "/api/status", {}, None) is False and fh.sent is None)
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the decision queue is retired from the simplified Orbit page",
       "Decision queue" not in ui and "AttentionView" not in ui)

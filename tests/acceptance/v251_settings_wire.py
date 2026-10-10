@@ -8,7 +8,7 @@ HTTP layer DROPPED the connection (no response). `rules.save` also wrote `conten
 straight to disk and called `len(content)`.
 
 Deterministic, no live server, no network, and NEVER touches the live config:
-SPARKFORGE_CONFIG_DIR / sessions / provider overlay are redirected to a temp dir.
+LONGRUN_CONFIG_DIR / sessions / provider overlay are redirected to a temp dir.
 Run:  python3 tests/v251_settings_wire.py
 """
 import json
@@ -18,15 +18,15 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v251-")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(TMP, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_PROVIDERS_LOCAL"] = os.path.join(TMP, "providers.local.yaml")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(TMP, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(TMP, "runs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_PROVIDERS_LOCAL"] = os.path.join(TMP, "providers.local.yaml")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(TMP, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import api_v02, rules  # noqa: E402
+from longrun import api_v02, rules  # noqa: E402
 
 results = []
 
@@ -86,7 +86,7 @@ check("JAG-251 rules.save(content=None) -> ok True",
 
 # ---- static guards ---------------------------------------------------------
 def read(rel):
-    with open(os.path.join(REPO, "src", "sparkforge", rel), encoding="utf-8") as f:
+    with open(os.path.join(REPO, "src", "longrun", rel), encoding="utf-8") as f:
         return f.read()
 
 

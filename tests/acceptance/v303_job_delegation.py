@@ -30,8 +30,8 @@ def read(*parts):
         return f.read()
 
 
-from sparkforge.jobs import JobRegistry  # noqa: E402
-from sparkforge import taskgraph as tg  # noqa: E402
+from longrun.jobs import JobRegistry  # noqa: E402
+from longrun import taskgraph as tg  # noqa: E402
 
 PLAN = ("- A3 (orchestrator): Define scope, assign the four deliverables, coordinate.\n"
         "- A4 (analyst): Identify core use cases, Book fields, validation rules.\n"
@@ -92,7 +92,7 @@ check("closing again is a no-op", JobRegistry._close_open_todos(SID) == 0)
 check("an unknown session is safe", JobRegistry._close_open_todos("no-such-session") == 0)
 
 # ------------------------------------------------------------- source locks
-j = read("src", "sparkforge", "jobs.py")
+j = read("src", "longrun", "jobs.py")
 check("the assignment extractor exists", "def _assignment_for(plan, aid)" in j)
 check("the worker message uses the per-agent line", "self._assignment_for(plan, aid)" in j)
 check("the worker is told its part is ONLY its own", "Your assignment (yours only):" in j)

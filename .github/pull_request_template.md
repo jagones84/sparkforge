@@ -13,7 +13,7 @@ Closes #
 - [ ] One logical change; commit messages are typed (`feat:` / `fix:` / `docs:` / …)
 - [ ] Deterministic test added/updated under `tests/acceptance/v<NNN>_<topic>.py`
 - [ ] `bash tests/battery.sh` is **GREEN**
-- [ ] Core stays **stdlib-only** (no new `pip` dependency in `src/sparkforge/`)
+- [ ] Core stays **stdlib-only** (no new `pip` dependency in `src/longrun/`)
 - [ ] Cross-platform preserved (no POSIX assumption leaked out of `osutil.py`)
 - [ ] No secrets; `.env` stays gitignored
 - [ ] `CHANGELOG.md` `## [Unreleased]` updated for any user-visible change

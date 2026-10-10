@@ -21,12 +21,12 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v247-")
-os.environ["SPARKFORGE_PROVIDERS_LOCAL"] = os.path.join(TMP, "providers.local.yaml")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(TMP, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_PROVIDERS_LOCAL"] = os.path.join(TMP, "providers.local.yaml")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import providers, rules  # noqa: E402
+from longrun import providers, rules  # noqa: E402
 
 results = []
 
@@ -105,7 +105,7 @@ for bad in (123, None, {"a": 1}):
 
 # ---- static guards --------------------------------------------------------
 def read(rel):
-    with open(os.path.join(REPO, "src", "sparkforge", rel), encoding="utf-8") as f:
+    with open(os.path.join(REPO, "src", "longrun", rel), encoding="utf-8") as f:
         return f.read()
 
 

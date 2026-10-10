@@ -30,7 +30,7 @@ def read(*parts):
         return f.read()
 
 
-from sparkforge import server as srv  # noqa: E402
+from longrun import server as srv  # noqa: E402
 
 jm = srv.db().execute("PRAGMA journal_mode").fetchone()[0]
 sy = srv.db().execute("PRAGMA synchronous").fetchone()[0]
@@ -60,24 +60,24 @@ check("prune dropped the OLDEST rows", mn_after > 0 and (mx_after - mn_after) < 
 # idempotent when already under the cap
 check("prune is a no-op under the cap", srv.prune_events(keep=100) == 0)
 
-src = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
-ev = read("src", "sparkforge", "events.py")
+src = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
+ev = read("src", "longrun", "events.py")
 check("WAL pragma is set", "PRAGMA journal_mode=WAL" in ev)
 check("NORMAL pragma is set", "PRAGMA synchronous=NORMAL" in ev)
 check("pruner is started in main()", "_start_event_pruning()" in src)
 
 # JAG-300: the attention route must not read the roster twice per poll.
-from sparkforge.orbit.attention import AttentionFeed  # noqa: E402
+from longrun.orbit.attention import AttentionFeed  # noqa: E402
 import inspect  # noqa: E402
 
 sig = inspect.signature(AttentionFeed.snapshot)
 check("snapshot() accepts an optional session roster", "sessions" in sig.parameters,
       "params=%s" % list(sig.parameters))
-orbit_api = read("src", "sparkforge", "orbit", "api.py")
+orbit_api = read("src", "longrun", "orbit", "api.py")
 check("attention route passes the roster to snapshot()",
       "snap = _ATTN.snapshot(sessions)" in orbit_api)
 check("decision queue reuses one roster read",
-      "self.feed.snapshot(sessions)" in read("src", "sparkforge", "orbit", "decisions.py"))
+      "self.feed.snapshot(sessions)" in read("src", "longrun", "orbit", "decisions.py"))
 
 # JAG-300: the budget alert must be measured against the SESSION's own model.
 _saved_ctx = srv.context_usage

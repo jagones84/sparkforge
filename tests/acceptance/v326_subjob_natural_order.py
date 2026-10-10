@@ -14,15 +14,15 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-326-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge.jobs import plan_subjobs, subjob_num  # noqa: E402
+from longrun.jobs import plan_subjobs, subjob_num  # noqa: E402
 
 results = []
 
@@ -52,10 +52,10 @@ check("B2 the bug is real: a string sort misorders them", sorted(subs.keys()) !=
 check("B3 numeric order is stable and total", sorted(got, key=subjob_num) == expect)
 
 # ---- wiring ---------------------------------------------------------------
-src = read("src", "sparkforge", "jobs.py")
+src = read("src", "longrun", "jobs.py")
 check("C1 the coordinator's delegation record sorts naturally",
       'key=lambda x: subjob_num(x.get("id"))' in src)
-orbit = read("src", "sparkforge", "orbit", "web", "orbit.html")
+orbit = read("src", "longrun", "orbit", "web", "orbit.html")
 check("C2 the Orbit JobsView sorts subjobs numerically",
       "_jn(a) - _jn(b)" in orbit and "String(s).match(/(\\d+)$/)" in orbit)
 

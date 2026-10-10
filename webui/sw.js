@@ -1,4 +1,4 @@
-/* SparkForge service worker (JAG-390).
+/* Longrun service worker (JAG-390).
  *
  * Minimal on purpose: it makes the WebUI INSTALLABLE (Chrome needs a service
  * worker with a fetch handler for the rich "Install app" flow) and keeps a
@@ -6,7 +6,7 @@
  * streams) is never intercepted or cached, so the app can never show stale
  * data or a frozen stream.
  */
-const CACHE = "sparkforge-shell-v1";
+const CACHE = "longrun-shell-v1";
 const SHELL = ["/", "/assets/icon-192.png", "/assets/icon-512.png",
                "/assets/icon-maskable-512.png"];
 

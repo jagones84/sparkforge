@@ -14,14 +14,14 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-332-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 
@@ -54,9 +54,9 @@ check("A7 the system-prompt line is ACCURATE (re-sent per request, KV-cached)",
 server._harness_start_note(server.load_session("v332s"))
 check("A6 the marker is idempotent (never duplicated)", len(_markers()) == 1)
 
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     src = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
     src += f.read()
 check("B1 chat_once calls it on the FIRST turn only",
       "_harness_start_note(sess)" in src

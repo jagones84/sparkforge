@@ -15,11 +15,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ENV = os.path.expanduser("~/.config/sparkforge/env")
+ENV = os.path.expanduser("~/.config/longrun/env")
 TOK = ""
 for line in open(ENV):
     line = line.strip()
-    if line.startswith("SPARKFORGE_TOKEN="):
+    if line.startswith("LONGRUN_TOKEN="):
         TOK = line.split("=", 1)[1].strip().strip('"').strip("'")
 BASE = "http://127.0.0.1:8790"
 WS = "/home/jagones/Repositories/TESTS/harness-e2e"

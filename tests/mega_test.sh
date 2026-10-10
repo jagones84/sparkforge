@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SparkForge Mega Debug Suite
+# Longrun Mega Debug Suite
 # This script executes the layers of the debugging stack:
 # 1. Static Analysis (Ruff, Mypy, Bandit)
 # 2. Battery (Unit/Acceptance Tests)
@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "=========================================="
-echo "      SPARKFORGE MEGA DEBUG SUITE         "
+echo "      LONGRUN MEGA DEBUG SUITE         "
 echo "=========================================="
 
 echo -e "\n[0] Environment Setup"
@@ -24,13 +24,13 @@ pip install -q ruff mypy bandit mutmut hypothesis pytest
 echo -e "\n[1] STATIC ANALYSIS"
 echo "------------------------------------------"
 echo "-> Running Ruff (Linter)..."
-ruff check src/sparkforge || echo "Ruff found issues."
+ruff check src/longrun || echo "Ruff found issues."
 
 echo "-> Running Mypy (Type Checker)..."
-mypy src/sparkforge --ignore-missing-imports || echo "Mypy found issues."
+mypy src/longrun --ignore-missing-imports || echo "Mypy found issues."
 
 echo "-> Running Bandit (Security)..."
-bandit -r src/sparkforge -ll -q || echo "Bandit found issues."
+bandit -r src/longrun -ll -q || echo "Bandit found issues."
 
 echo -e "\n[2] ACCEPTANCE TESTS (Battery)"
 echo "------------------------------------------"
@@ -44,11 +44,11 @@ pytest tests/properties/ || echo "Property tests failed."
 echo -e "\n[4] MUTATION TESTING"
 echo "------------------------------------------"
 # Scope to taskgraph.py as requested by user to keep it fast
-echo "Running mutmut against src/sparkforge/taskgraph.py..."
+echo "Running mutmut against src/longrun/taskgraph.py..."
 # mutmut needs to know how to run tests. We configure it to run battery.sh
 cat << 'EOF' > setup.cfg
 [mutmut]
-paths_to_mutate=src/sparkforge/taskgraph.py
+paths_to_mutate=src/longrun/taskgraph.py
 runner=bash tests/battery.sh
 EOF
 

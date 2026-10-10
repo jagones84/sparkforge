@@ -18,15 +18,15 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v280-")
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR", "DB"):
-    os.environ["SPARKFORGE_" + _k] = os.path.join(TMP, _k)
+    os.environ["LONGRUN_" + _k] = os.path.join(TMP, _k)
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
-    os.makedirs(os.environ["SPARKFORGE_" + _k], exist_ok=True)
+    os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 # no sealed held-out suite in the test env: exercise the LOCAL write-gate directly.
-os.environ["SPARKFORGE_REQUIRE_HELDOUT"] = "0"
+os.environ["LONGRUN_REQUIRE_HELDOUT"] = "0"
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import bestofn as B        # noqa: E402
-from sparkforge import selfevolve as E     # noqa: E402
+from longrun import bestofn as B        # noqa: E402
+from longrun import selfevolve as E     # noqa: E402
 
 results = []
 

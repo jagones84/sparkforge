@@ -13,13 +13,13 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-339-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import agents, teams, orchestration  # noqa: E402
+from longrun import agents, teams, orchestration  # noqa: E402
 
 results = []
 

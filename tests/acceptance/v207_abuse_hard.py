@@ -26,11 +26,11 @@ import threading
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _tmp = tempfile.mkdtemp(prefix="sf-207-")
 atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(_tmp, "graphs")
-os.environ["SPARKFORGE_HELDOUT_DIR"] = os.path.join(_tmp, "heldout")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(_tmp, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(_tmp, "graphs")
+os.environ["LONGRUN_HELDOUT_DIR"] = os.path.join(_tmp, "heldout")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(_tmp, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 results = []
@@ -61,7 +61,7 @@ def bounded(secs, fn, *a, **k):
         signal.setitimer(signal.ITIMER_REAL, 0)
 
 
-from sparkforge import taskgraph, memory as mem, heldout, registry, tools, skills  # noqa: E402
+from longrun import taskgraph, memory as mem, heldout, registry, tools, skills  # noqa: E402
 
 # ---- G: taskgraph abuse ----
 g = taskgraph.ensure("run_abuse", session_id="run_abuse", goal="abuse")
@@ -148,10 +148,10 @@ check("H2 wrong-type manifest -> None", heldout.load_manifest() is None)
 filepath = os.path.join(_tmp, "heldout_is_a_file")
 with open(filepath, "w") as f:
     f.write("x")
-os.environ["SPARKFORGE_HELDOUT_DIR"] = filepath
+os.environ["LONGRUN_HELDOUT_DIR"] = filepath
 k, v = bounded(2, heldout.integrity)
 check("H3 dir-is-a-file -> graceful, no crash", k == "ok" and v["ok"] is False, str(v)[:50])
-os.environ["SPARKFORGE_HELDOUT_DIR"] = os.path.join(_tmp, "heldout2")
+os.environ["LONGRUN_HELDOUT_DIR"] = os.path.join(_tmp, "heldout2")
 k, v = bounded(2, heldout.pin)
 check("H4 pin() on a fresh dir succeeds", k == "ok" and os.path.isfile(heldout.manifest_path()))
 

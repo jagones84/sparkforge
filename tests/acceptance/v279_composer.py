@@ -24,13 +24,13 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v279-")
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR", "DB"):
-    os.environ["SPARKFORGE_" + _k] = os.path.join(TMP, _k)
+    os.environ["LONGRUN_" + _k] = os.path.join(TMP, _k)
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
-    os.makedirs(os.environ["SPARKFORGE_" + _k], exist_ok=True)
+    os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import api_v02 as A   # noqa: E402
-from sparkforge import server as S      # noqa: E402
+from longrun import api_v02 as A   # noqa: E402
+from longrun import server as S      # noqa: E402
 
 results = []
 
@@ -71,14 +71,14 @@ check("a path-traversal session id is neutralised (stays under attachments/)",
 
 check("an empty upload is rejected", A.attach_save(b"", name="z") .get("ok") is False)
 
-os.environ["SPARKFORGE_ATTACH_MAX"] = "4"
+os.environ["LONGRUN_ATTACH_MAX"] = "4"
 check("an oversize upload is rejected", A.attach_save(b"12345", name="big.bin").get("ok") is False)
-del os.environ["SPARKFORGE_ATTACH_MAX"]
+del os.environ["LONGRUN_ATTACH_MAX"]
 
 # --- 2) server route ----------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
     srv += f.read()
 check("server exposes the raw upload route", 'path == "/api/attach"' in srv)
 check("the route calls attach_save", "api_v02.attach_save(" in srv)

@@ -1,6 +1,6 @@
 import pytest
 from hypothesis import given, strategies as st
-from sparkforge import server as prompt
+from longrun import server as prompt
 
 @given(st.text(), st.text())
 def test_extract_json_property(before, after):

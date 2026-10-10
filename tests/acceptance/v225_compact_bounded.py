@@ -17,7 +17,7 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import context_engine   # noqa: E402
+from longrun import context_engine   # noqa: E402
 
 results = []
 LIMIT = 3.0   # seconds; a runaway loop would blow this by orders of magnitude

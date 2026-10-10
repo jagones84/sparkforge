@@ -18,10 +18,10 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-330-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge.jobs import JobRegistry, merge_deps, parse_plan_deps, plan_subjobs, waves  # noqa: E402
+from longrun.jobs import JobRegistry, merge_deps, parse_plan_deps, plan_subjobs, waves  # noqa: E402
 
 results = []
 
@@ -68,7 +68,7 @@ check("D1 the dependent worker is told what it waits for",
       "Waits for (already completed): J8.1." in msg)
 
 # ---- E: wiring ------------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8") as f:
     src = f.read()
 check("E1 the coordinator is ASKED to declare dependencies",
       "DEPENDENCIES (enforced)" in src and "(after AX)" in src)

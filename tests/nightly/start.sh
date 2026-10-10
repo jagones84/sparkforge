@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -u
-ROOT=/home/jagones/Repositories/sparkforge
+ROOT=/home/jagones/Repositories/longrun
 cd $ROOT
 rm -f .nightly_stop
 chmod +x scripts/nightly_mega.sh

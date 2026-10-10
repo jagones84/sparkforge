@@ -18,10 +18,10 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-331-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge.jobs import JobRegistry  # noqa: E402
+from longrun.jobs import JobRegistry  # noqa: E402
 
 results = []
 
@@ -46,7 +46,7 @@ check("A6 the constraints are kept (no subagents, no other parts)",
       "do NOT spawn subagents" in MSG and "do NOT do the other agents' parts" in MSG)
 check("A7 the declared dependency is still stated", "Waits for (already completed): J8.1." in MSG)
 
-with open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8") as f:
     src = f.read()
 check("B1 the plain-text-only wording is gone from the source", "concise plain text" not in src)
 check("B2 the delegation tells the worker to execute", "DO this now, end to end." in src)

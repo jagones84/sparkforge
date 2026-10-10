@@ -19,14 +19,14 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v271-")
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR", "DB"):
-    os.environ["SPARKFORGE_" + _k] = os.path.join(TMP, _k)
+    os.environ["LONGRUN_" + _k] = os.path.join(TMP, _k)
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
-    os.makedirs(os.environ["SPARKFORGE_" + _k], exist_ok=True)
+    os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import prompt as P  # noqa: E402
-from sparkforge import server as S  # noqa: E402
-from sparkforge import taskgraph as TG  # noqa: E402
+from longrun import prompt as P  # noqa: E402
+from longrun import server as S  # noqa: E402
+from longrun import taskgraph as TG  # noqa: E402
 
 results = []
 

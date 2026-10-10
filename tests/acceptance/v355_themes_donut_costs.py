@@ -25,12 +25,12 @@ def _read(*parts):
 
 
 TMP = tempfile.mkdtemp(prefix="sf-v355-")
-os.environ["SPARKFORGE_COSTS_DIR"] = os.path.join(TMP, "costs")
-os.environ["SPARKFORGE_PRICES_FILE"] = os.path.join(TMP, "prices.json")
-os.environ["SPARKFORGE_PRICES"] = json.dumps({"deepseek/deepseek-chat": [2.0, 8.0]})
+os.environ["LONGRUN_COSTS_DIR"] = os.path.join(TMP, "costs")
+os.environ["LONGRUN_PRICES_FILE"] = os.path.join(TMP, "prices.json")
+os.environ["LONGRUN_PRICES"] = json.dumps({"deepseek/deepseek-chat": [2.0, 8.0]})
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import costs as C  # noqa: E402
+from longrun import costs as C  # noqa: E402
 
 results = []
 
@@ -92,11 +92,11 @@ check("C14 a failed refresh returns an error, never raises",
       bad.get("ok") is False and "error" in bad, str(bad))
 
 # --- B: static guards --------------------------------------------------------
-SRV = _read("src", "sparkforge", "server.py") + _read("src", "sparkforge", "agent.py")
-API = _read("src", "sparkforge", "api_v02.py")
+SRV = _read("src", "longrun", "server.py") + _read("src", "longrun", "agent.py")
+API = _read("src", "longrun", "api_v02.py")
 HTML = _read("webui", "index.html")
 BATT = _read("tests", "battery.sh")
-COSTS = _read("src", "sparkforge", "costs.py")
+COSTS = _read("src", "longrun", "costs.py")
 
 check("S1 the server prices each call and pushes `cost.usage`",
       "costs.record(" in SRV and '"cost.usage"' in SRV, "")
@@ -108,9 +108,9 @@ check("S3 the WebUI has a Cost panel + live listener",
 check("S4 the context breakdown is a DONUT now, not the stacked bar",
       "function _ctxDonut" in HTML and ".ctxdonut" in HTML and ".ctxbar" not in HTML, "")
 check("S5 the battery isolates the cost dir + the price cache",
-      "SPARKFORGE_COSTS_DIR" in BATT and "SPARKFORGE_PRICES_FILE" in BATT, "")
+      "LONGRUN_COSTS_DIR" in BATT and "LONGRUN_PRICES_FILE" in BATT, "")
 check("S6 the price cache path is overridable and the module is stdlib-only",
-      "SPARKFORGE_PRICES_FILE" in COSTS and "urllib.request" in COSTS, "")
+      "LONGRUN_PRICES_FILE" in COSTS and "urllib.request" in COSTS, "")
 
 print("---")
 ok = sum(results)

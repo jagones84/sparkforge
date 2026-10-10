@@ -19,15 +19,15 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v281-")
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR", "DB"):
-    os.environ["SPARKFORGE_" + _k] = os.path.join(TMP, _k)
+    os.environ["LONGRUN_" + _k] = os.path.join(TMP, _k)
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR"):
-    os.makedirs(os.environ["SPARKFORGE_" + _k], exist_ok=True)
+    os.makedirs(os.environ["LONGRUN_" + _k], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import api_v02 as A     # noqa: E402
-from sparkforge import server as S       # noqa: E402
-from sparkforge import term as T         # noqa: E402
-import sparkforge.registry as REG        # noqa: E402
+from longrun import api_v02 as A     # noqa: E402
+from longrun import server as S       # noqa: E402
+from longrun import term as T         # noqa: E402
+import longrun.registry as REG        # noqa: E402
 
 results = []
 
@@ -102,11 +102,11 @@ check("the body keeps the OpenAI-compatible shape",
       S._completion_body("m", [{"role": "user", "content": "x"}], True).get("stream") is True)
 
 # --- 4) source wiring --------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "rllm.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "rllm.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8") as f:
     av = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "term.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "term.py"), encoding="utf-8") as f:
     trm = f.read()
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     ui = f.read()

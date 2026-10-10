@@ -19,8 +19,8 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import memory as mem  # noqa: E402
-from sparkforge import tools  # noqa: E402
+from longrun import memory as mem  # noqa: E402
+from longrun import tools  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="sf-317-")
 mem.DATA_DIR = TMP                 # isolate from the live data/memory
@@ -87,10 +87,10 @@ out2 = tools._memory({"action": "purge"}, "run-317")
 check("C2 tool action=purge removes invalidated records", not on_disk(r4["mid"]), str(out2))
 
 # ---- D: source wiring ------------------------------------------------------
-msrc = open(os.path.join(REPO, "src", "sparkforge", "memory.py"), encoding="utf-8").read()
+msrc = open(os.path.join(REPO, "src", "longrun", "memory.py"), encoding="utf-8").read()
 check("D1 memory.forget exists", "def forget(" in msrc)
 check("D2 memory.purge_invalidated exists", "def purge_invalidated(" in msrc)
-asrc = open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8").read()
+asrc = open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8").read()
 check("D3 DELETE /api/memory is wired", 'if path == "/api/memory":' in asrc)
 
 print("---")

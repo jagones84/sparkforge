@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to SparkForge are documented here. The format follows
+All notable changes to Longrun are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -307,7 +307,7 @@ All notable changes to SparkForge are documented here. The format follows
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire
-  (SparkForge's protocol is text-based JSON actions) — replies to a tool request with
+  (Longrun's protocol is text-based JSON actions) — replies to a tool request with
   DeepSeek's native tool-call markup: an envelope carrying the marker `DSML` wrapped in
   full-width vertical bars (U+FF5C), holding an `invoke name="X"` with `parameter
   name="Y"` children. `extract_json` found no JSON and `_looks_like_json_action` was
@@ -470,7 +470,7 @@ All notable changes to SparkForge are documented here. The format follows
 - **The side rail could no longer edit the rules (JAG-361).** The editable Rules panel lived
   only in Settings, while the side rail had a Role-only pane with no file paths. There is now
   ONE complete **Rules** section: the per-session role, the GLOBAL
-  `~/.config/sparkforge/RULES.md` and the PROJECT `<ws>/.sparkforge/RULES.md`, each with its
+  `~/.config/longrun/RULES.md` and the PROJECT `<ws>/.longrun/RULES.md`, each with its
   real absolute path, the `AGENTS.md` addenda that are ALSO loaded, and an in-place editor +
   save. (`loadRole()` is kept as an alias so every call site still works.)
 - **Cost was only ever an estimate (JAG-361).** When the provider reports the charge itself it
@@ -544,7 +544,7 @@ All notable changes to SparkForge are documented here. The format follows
   was seeded from the local `agency-agents` clone, but the seed stored only the short LABEL
   (`agents.json.role`); the agent's role PROMPT (the clone's `.md` body) was never written, so the
   Bridge `✎ prompt` editor AND the main-app ROLE.md opened empty for all 30 seeded agents. The new
-  `sparkforge.agency` module reads the clone and `scripts/seed_agent_roles.py` materialises each
+  `longrun.agency` module reads the clone and `scripts/seed_agent_roles.py` materialises each
   agent's body into `data/roles/<session>.md` — the SAME file both UIs read, so the Bridge prompt
   and the main-app ROLE.md are now identical. `scripts/seed_teams.py` calls it after seeding, so a
   seeded agent is never left without its role. Non-destructive: only an EMPTY role is filled
@@ -612,7 +612,7 @@ All notable changes to SparkForge are documented here. The format follows
   returns to `ctxRight == vw`; dragging the grip to `clientX:-800` leaves `ctxRight == vw` (on-screen).
 
 ### Added
-- **`src/README.md` (JAG-370)** — states plainly which tree ships: `src/sparkforge/`
+- **`src/README.md` (JAG-370)** — states plainly which tree ships: `src/longrun/`
   is the application (what `run.sh` / `python3 server.py` import and what `tests/`
   exercise); the sibling `src2/` is the optional, detachable Bridge beta.
 - **`tests/acceptance/v368_panel_resize.py` (16 checks)** — the border grip runs on pointer
@@ -624,7 +624,7 @@ All notable changes to SparkForge are documented here. The format follows
   is bounded by that cap, the release re-fits the panels, a restored width is clamped, and the
   fit maths self-heals an already-too-wide dock.
   Battery 119 → 120 (the README badge/one-liner were updated to match).
-- **`src/sparkforge/agency.py` + `scripts/seed_agent_roles.py` (JAG-365)** — map an org agent
+- **`src/longrun/agency.py` + `scripts/seed_agent_roles.py` (JAG-365)** — map an org agent
   NAME to its role prompt in the local `agency-agents` clone (`by_name`, `role_for`,
   `fill_roles`) and backfill `data/roles/<sid>.md`, non-destructively. `v341_team_seed` grew four
   checks (Q1–Q4) to lock the materialised role + the no-clobber guarantee. Battery stays 119.
@@ -670,7 +670,7 @@ All notable changes to SparkForge are documented here. The format follows
   per-session ledger (`data/costs/<session>.json`), surfaced in a new right-panel **Cost**
   section: session total, tokens in/out, and **one row per API call** (model, time, tokens,
   $), pushed live on a `cost.usage` SSE event so it updates mid-run. Prices come from
-  `SPARKFORGE_PRICES`, `config/prices.yaml` (or `config/prices.json`), or the `↻ prices`
+  `LONGRUN_PRICES`, `config/prices.yaml` (or `config/prices.json`), or the `↻ prices`
   button, which pulls OpenRouter's PUBLIC model catalogue (no key needed) into
   `data/prices.json`. An unpriced model (e.g. a local GGUF) reports `usd: null` — never a
   fake zero. Verified live: a chat turn wrote 3 priced-shape call records (with cached
@@ -690,7 +690,7 @@ All notable changes to SparkForge are documented here. The format follows
   to the top) now shows a 📌 marker and a heavier title in the left panel, so the pin is
   visible without opening the session menu.
 - **Accurate positioning + dependency honesty (JAG-354).** The README no longer frames
-  SparkForge as "not a meta-harness" (a meta-harness collects *other* harnesses; SparkForge
+  Longrun as "not a meta-harness" (a meta-harness collects *other* harnesses; Longrun
   is ONE harness whose own sessions are the agents you organise into teams and an org
   chart). The dependency claim is now truthful: the core is stdlib-only, with **PyYAML**
   (pure-Python) as the single third-party import — required only to read the shipped
@@ -733,7 +733,7 @@ All notable changes to SparkForge are documented here. The format follows
 
 ## [1.0.0] — 2026-10-07
 
-The first tagged release. SparkForge is a local-first, stdlib-only agent harness that
+The first tagged release. Longrun is a local-first, stdlib-only agent harness that
 **drives one LLM hard** and then runs **its own sessions as a team of agents**. It is a
 single harness — not a meta-harness: every agent is one of its sessions, a full harness
 instance with its own tools, skills, plan, memory and transcript.

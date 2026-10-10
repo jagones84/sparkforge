@@ -21,17 +21,17 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-343-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_TEAMS_FILE"] = os.path.join(TMP, "teams.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import agents, teams, orchestration  # noqa: E402
+from longrun import agents, teams, orchestration  # noqa: E402
 
 results = []
 
@@ -112,12 +112,12 @@ orchestration.handle(fh, "POST", "/api/agents", {}, {"session": "s4", "model": t
 check("D3 a cloud model is allowed", fh.sent["obj"]["ok"] is True)
 
 # --- E: env can change the cap ---------------------------------------------
-os.environ["SPARKFORGE_TEAM_LOCAL_SLOTS"] = "0"
+os.environ["LONGRUN_TEAM_LOCAL_SLOTS"] = "0"
 res0 = T.assign_models("T1")
 check("E1 local_slots=0 keeps NO local",
       res0["local_kept"] == [] and all(
           (a.get("model") or "") for a in agents.REGISTRY.list()["agents"] if a["name"].startswith("Spec")))
-os.environ.pop("SPARKFORGE_TEAM_LOCAL_SLOTS", None)
+os.environ.pop("LONGRUN_TEAM_LOCAL_SLOTS", None)
 
 print("---")
 ok = sum(1 for r in results if r)

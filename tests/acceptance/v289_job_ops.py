@@ -16,8 +16,8 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v289-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
 
 results = []
 
@@ -27,7 +27,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import jobs  # noqa: E402
+from longrun import jobs  # noqa: E402
 
 reg = jobs.JOBS
 reg._run = lambda jid: None  # never spawn a real worker
@@ -50,7 +50,7 @@ check("dispatch clears the stale error", (reg.get(jid).get("error") or "") == ""
 check("dispatch refuses a job already running", reg.dispatch(jid)["ok"] is False)
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the Orbit UI can create + designate an agent",
       'id="agNew"' in ui and "async create()" in ui and '"/api/agents"' in ui

@@ -19,7 +19,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 

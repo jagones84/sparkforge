@@ -30,9 +30,9 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v310-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
 
 results = []
 
@@ -47,7 +47,7 @@ def read(*parts):
         return f.read()
 
 
-from sparkforge import jobs  # noqa: E402
+from longrun import jobs  # noqa: E402
 
 OLD = {"role": "assistant", "content": "OLD REPLY from a previous run"}
 
@@ -94,7 +94,7 @@ check("the substantial reply of THIS turn wins", out.startswith("DELIVERABLE"), 
 jobs._srv = _orig_srv
 
 # (d) _run must REFUSE to accept a job whose coordinator produced no reply --------
-from sparkforge import agents as agents_mod  # noqa: E402
+from longrun import agents as agents_mod  # noqa: E402
 
 agents_mod.REGISTRY.designate("coordX", name="Coord", role="orchestrator")
 aid = agents_mod.REGISTRY.get("coordX")["id"]      # e.g. "A1" (create takes AGENT ids)
@@ -112,7 +112,7 @@ st2 = (jobs.JOBS.get(jid2) or {}).get("status")
 check("a job IS accepted when the coordinator answers", st2 == "done", "st=%r" % st2)
 
 # ------------------------------------------------------------------ source locks
-j = read("src", "sparkforge", "jobs.py")
+j = read("src", "longrun", "jobs.py")
 check("the reply fallback is scoped to THIS turn",
       'turn = s.get("messages", [])[before:]' in j and "for m in reversed(turn):" in j)
 check("the whole-session stale fallback is gone",

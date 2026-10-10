@@ -18,12 +18,12 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _tmp = tempfile.mkdtemp(prefix="sf-238-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_CONFIG_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(_tmp, "sessions")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(_tmp, "cfg")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_CONFIG_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
-from sparkforge import context_engine, server  # noqa: E402
+from longrun import context_engine, server  # noqa: E402
 
 results = []
 
@@ -61,7 +61,7 @@ except Exception as e:  # noqa: BLE001
 poison = {"id": "v238poison", "title": "poison", "model": None, "workspace": None,
           "messages": [{"role": "user", "content": 123, "ts": 1.0},
                        {"role": "assistant", "content": "ok", "ts": 2.0}]}
-with open(os.path.join(os.environ["SPARKFORGE_SESSIONS_DIR"], "v238poison.json"),
+with open(os.path.join(os.environ["LONGRUN_SESSIONS_DIR"], "v238poison.json"),
           "w", encoding="utf-8") as f:
     json.dump(poison, f)
 try:
@@ -83,7 +83,7 @@ except Exception as e:  # noqa: BLE001
 
 # ---- static guards ---------------------------------------------------------
 def read(rel):
-    with open(os.path.join(REPO, "src", "sparkforge", rel), encoding="utf-8") as f:
+    with open(os.path.join(REPO, "src", "longrun", rel), encoding="utf-8") as f:
         return f.read()
 
 

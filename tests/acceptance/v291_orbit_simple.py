@@ -17,9 +17,9 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v291-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_ROLES_DIR"] = os.path.join(TMP, "roles")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_ROLES_DIR"] = os.path.join(TMP, "roles")
 
 results = []
 
@@ -29,7 +29,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import agents, orchestration  # noqa: E402
+from longrun import agents, orchestration  # noqa: E402
 
 AR = agents.REGISTRY
 AR.designate("sess-a", name="Ana", role="analyst")
@@ -65,7 +65,7 @@ ok = orchestration.handle(fh, "POST", "/api/jobs", {}, {"goal": "x", "assignee":
 check("a job for an unknown agent is refused", ok and fh.sent["obj"]["ok"] is False)
 
 # --- UI wiring -------------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the agents table has a model + reports-to control",
       'id="agBody"' in ui and 'data-f="model"' in ui and 'data-f="reports_to"' in ui)

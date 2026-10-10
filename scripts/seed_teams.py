@@ -3,7 +3,7 @@
 
 Reads the local clone of **agency-agents** (``strategy/runbooks.json`` + each agent
 ``.md`` frontmatter) and materialises, for every chosen runbook, ONE team whose
-members are real SparkForge agents arranged in an organigram:
+members are real Longrun agents arranged in an organigram:
 
     coordinator (root)
     ├── <group> lead ── specialists of that group …
@@ -17,7 +17,7 @@ Usage (on the DGX, from the repo root):
     python3 scripts/seed_teams.py                 # the default 3 teams
     python3 scripts/seed_teams.py startup-mvp     # a subset, by runbook slug
 Env:
-    SPARKFORGE_AGENCY_DIR   path to the agency-agents clone
+    LONGRUN_AGENCY_DIR   path to the agency-agents clone
                             (default ~/Repositories/agency-agents)
 """
 import json
@@ -28,7 +28,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-AGENCY = os.environ.get("SPARKFORGE_AGENCY_DIR") or os.path.expanduser(
+AGENCY = os.environ.get("LONGRUN_AGENCY_DIR") or os.path.expanduser(
     "~/Repositories/agency-agents")
 
 # Per-slug symbol + colour (the runbooks carry none). Fallback: the palette default.
@@ -90,7 +90,7 @@ def _roster_slugs(runbook):
 
 
 def seed(slugs=None, apply_models=False):
-    from sparkforge import server, agents, teams   # noqa: E402
+    from longrun import server, agents, teams   # noqa: E402
     idx = _agent_index()
     by_name = {str(a.get("name") or "").strip().lower(): a
                for a in agents.REGISTRY.list()["agents"]}
@@ -154,7 +154,7 @@ def seed(slugs=None, apply_models=False):
     # PROMPT (ROLE.md — the very file the Bridge prompt and the main app edit) stayed
     # VOID. Materialise it now from the clone's `.md` body. Non-destructive: only an
     # EMPTY role is filled, so a role the user wrote is never clobbered.
-    from sparkforge import agency
+    from longrun import agency
     role_report = agency.fill_roles()
 
     return {"ok": True, "teams": created["teams"], "agents_created": created["agents"],
@@ -163,7 +163,7 @@ def seed(slugs=None, apply_models=False):
 
 def main(argv):
     if not os.path.isdir(AGENCY):
-        print("agency-agents not found at %s (set SPARKFORGE_AGENCY_DIR)" % AGENCY)
+        print("agency-agents not found at %s (set LONGRUN_AGENCY_DIR)" % AGENCY)
         return 2
     args = argv[1:] or []
     apply_models = "--models" in args

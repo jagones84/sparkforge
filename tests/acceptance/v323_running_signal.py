@@ -22,14 +22,14 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-323-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 
@@ -64,11 +64,11 @@ check("A3 clearing the turn clears the flag",
       _row("v323run").get("running") is False, str(_row("v323run")))
 
 # ---- wiring ---------------------------------------------------------------
-srv = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
+srv = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
 check("B1 the server publishes chat.run on the global feed",
       'publish("chat.run"' in srv)
 check("B2 the session list reads the live active-turn registry",
-      "_active = set(_ACTIVE_CHAT.keys())" in read("src", "sparkforge", "stores.py"))
+      "_active = set(_ACTIVE_CHAT.keys())" in read("src", "longrun", "stores.py"))
 
 ui = read("webui", "index.html")
 check("C1 the feed marks a session busy on chat.run",

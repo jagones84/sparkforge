@@ -9,7 +9,7 @@ cannot finish the handoff is RECORDED in BOTH chats.
 
 This locks the fix:
   * workers end with `STATUS: DONE` / `STATUS: BLOCKED: <why>` / `STATUS: FAILED`;
-  * a non-DONE attempt is RETRIED up to SPARKFORGE_JOB_RETRIES extra times;
+  * a non-DONE attempt is RETRIED up to LONGRUN_JOB_RETRIES extra times;
   * a subjob that still fails is marked `failed` (never `done`) and ESCALATED into
     BOTH the worker's and the coordinator's chat;
   * the coordinator's synthesis message lists the unfinished subjobs;
@@ -24,17 +24,17 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-337-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_JOB_RETRIES"] = "1"
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_JOB_RETRIES"] = "1"
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server, agents, jobs  # noqa: E402
+from longrun import server, agents, jobs  # noqa: E402
 
 results = []
 
@@ -56,11 +56,11 @@ check("A6 case-insensitive + mid-text", jobs.parse_status("blah\nstatus : done")
 
 # ---- B: retry budget ------------------------------------------------------
 check("B1 default retry budget = 1 extra attempt", jobs.job_retries() == 1)
-os.environ["SPARKFORGE_JOB_RETRIES"] = "0"
+os.environ["LONGRUN_JOB_RETRIES"] = "0"
 check("B2 env can disable retries", jobs.job_retries() == 0)
-os.environ["SPARKFORGE_JOB_RETRIES"] = "3"
+os.environ["LONGRUN_JOB_RETRIES"] = "3"
 check("B3 env can raise the budget", jobs.job_retries() == 3)
-os.environ["SPARKFORGE_JOB_RETRIES"] = "1"
+os.environ["LONGRUN_JOB_RETRIES"] = "1"
 
 # ---- C: the delegation demands an explicit outcome ------------------------
 MSG = jobs.JobRegistry._delegation_msg(
@@ -125,10 +125,10 @@ check("E2 its subjob is done", _sub2.get("status") == "done", str(_sub2))
 check("E3 its run is done", _run2.get("state") == "done", str(_run2))
 
 # ---- F: wiring in the source ---------------------------------------------
-jsrc = open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8").read()
+jsrc = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
 check("F1 jobs.py parses STATUS", "def parse_status(" in jsrc and "_STATUS_RE" in jsrc)
 check("F2 jobs.py retries + escalates", "def _log_escalation(" in jsrc
-      and "SPARKFORGE_JOB_RETRIES" in jsrc)
+      and "LONGRUN_JOB_RETRIES" in jsrc)
 check("F3 the synthesis flags unfinished subjobs", "UNFINISHED SUBJOBS" in jsrc)
 check("F4 the job records failed_subjobs / partial",
       "failed_subjobs" in jsrc and '"partial"' in jsrc)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the SparkForge PWA icons (JAG-390).
+"""Generate the Longrun PWA icons (JAG-390).
 
 Dev-only build script (needs Pillow). Writes the PNG icons referenced by
 `webui/manifest.webmanifest` into `webui/assets/`. Run from anywhere:

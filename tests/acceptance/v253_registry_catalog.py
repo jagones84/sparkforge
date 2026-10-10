@@ -15,11 +15,11 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v253-")
-os.environ.setdefault("SPARKFORGE_CONFIG_DIR", os.path.join(TMP, "cfg"))
-os.environ.setdefault("SPARKFORGE_SESSIONS_DIR", os.path.join(TMP, "sessions"))
+os.environ.setdefault("LONGRUN_CONFIG_DIR", os.path.join(TMP, "cfg"))
+os.environ.setdefault("LONGRUN_SESSIONS_DIR", os.path.join(TMP, "sessions"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import registry  # noqa: E402
+from longrun import registry  # noqa: E402
 
 results = []
 
@@ -80,7 +80,7 @@ finally:
     registry._external_tools = orig
 
 # static guards
-with open(os.path.join(REPO, "src", "sparkforge", "registry.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "registry.py"), encoding="utf-8") as f:
     src = f.read()
 check("catalog snapshots external tools once", "ext = _external_tools()" in src)
 check("catalog passes the snapshot to tool_spec", "tool_spec(name, ext)" in src)

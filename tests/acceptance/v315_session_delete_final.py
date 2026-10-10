@@ -23,17 +23,17 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-315-")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(TMP, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(TMP, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(TMP, "runs")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(TMP, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(TMP, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 
@@ -84,10 +84,10 @@ server._load_tombstones()
 check("B3 the tombstone survives a reload", SID in server._DELETED_SESSIONS)
 
 # ---- C: source wiring ------------------------------------------------------
-src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-src += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
 check("C1 the delete handler persists tombstones", "_persist_tombstones()" in src)
-check("C2 a deleted id is not silently recreated", "if _gone:" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
+check("C2 a deleted id is not silently recreated", "if _gone:" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
 check("C3 the old unconditional discard is gone", "_DELETED_SESSIONS.discard(sid)" not in src)
 
 print("---")

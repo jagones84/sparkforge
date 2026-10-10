@@ -9,7 +9,7 @@ Locked here:
   * orbit.html: the 5s auto-poll no longer rebuilds the agent table mid-edit;
   * console.html: the event stream subscribes to NAMED /api/feed frames (onmessage never fired);
   * editor.js: closeTab keeps the right active tab; refreshAll warns before discarding edits;
-  * sparkforge/orbit/api.py: POST routes map `{"ok": false}` to HTTP 400 (were always 200);
+  * longrun/orbit/api.py: POST routes map `{"ok": false}` to HTTP 400 (were always 200);
   * server.publish: the payload's own `id`/`ts` are renamed BEFORE the DB insert, so replay
     from SQLite no longer clobbers the integer envelope id;
   * server: raw audio/zip uploads cap the Content-Length read (memory-DoS).
@@ -51,7 +51,7 @@ check("loadApprovals is guarded",
       'try { out = await api("GET", "/api/approvals?status=pending"); }' in gui)
 
 # ---------------------------------------------------------------- orbit.html
-orbit = read("src", "sparkforge", "orbit", "web", "orbit.html")
+orbit = read("src", "longrun", "orbit", "web", "orbit.html")
 check("agent-table rebuild is deferred while editing",
       "const editing =" in orbit and "if (editing || roleDirty) return;" in orbit)
 
@@ -69,8 +69,8 @@ check("closeTab keeps the correct active tab",
       "if (i < state.active) state.active -= 1;" in ed)
 check("refreshAll warns before discarding edits", "discard unsaved changes" in ed)
 
-# ------------------------------------------------------------- sparkforge/orbit api
-from sparkforge.orbit import api as oapi  # noqa: E402
+# ------------------------------------------------------------- longrun/orbit api
+from longrun.orbit import api as oapi  # noqa: E402
 
 check("orbit api exposes _ok helper", hasattr(oapi, "_ok"))
 
@@ -91,11 +91,11 @@ h3 = _FakeHandler()
 oapi._ok(h3, {"sessions": []})  # no `ok` key -> success
 check("orbit _ok maps ok=false to 400", h1.code == 400)
 check("orbit _ok keeps success at 200", h2.code == 200 and h3.code == 200)
-oapi_src = read("src", "sparkforge", "orbit", "api.py")
+oapi_src = read("src", "longrun", "orbit", "api.py")
 check("orbit POST routes use _ok", oapi_src.count("_ok(handler,") >= 3)
 
 # ------------------------------------------------------------- server.publish
-from sparkforge import server as srv  # noqa: E402
+from longrun import server as srv  # noqa: E402
 
 ev = srv.publish("approval.request", id="ap_regress", tool="fs.write")
 check("in-memory event id is int", isinstance(ev.get("id"), int))
@@ -110,7 +110,7 @@ check("replayed event id stays int", bool(replayed) and isinstance(replayed[-1].
       "got %r" % (replayed[-1].get("id") if replayed else None))
 
 # ------------------------------------------------------------- raw upload cap
-s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
+s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
 check("raw uploads cap the Content-Length read", s.count("self.rfile.read(min(n, MAX_BODY_BYTES))") >= 2)
 
 # --------------------------------------------------- feed replay is bounded

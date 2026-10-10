@@ -26,14 +26,14 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-325-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 
@@ -88,8 +88,8 @@ server.turn_end(SID2, t2)
 check("B2 the current token clears it", _row(SID2).get("running") is False)
 
 # ---- wiring: every entry point uses the bracket ---------------------------
-srv = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
-ev = read("src", "sparkforge", "events.py")
+srv = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
+ev = read("src", "longrun", "events.py")
 check("C1 the shared bracket lives in events.py and is re-exported by server",
       "def turn_begin(" in ev and "def turn_end(" in ev and "turn_begin" in srv)
 check("C2 the sync /api/chat path brackets its turn",
@@ -100,7 +100,7 @@ check("C3 the sync path releases in a finally (any outcome)",
 check("C4 the streaming path still registers (JAG-323 regression)",
       '_ACTIVE_CHAT[sess["id"]] = {"ev0": feed_seq()' in srv)
 
-api2 = read("src", "sparkforge", "api_v02.py")
+api2 = read("src", "longrun", "api_v02.py")
 check("C5 the in-process MCP chat bridge brackets its turn",
       "srv.turn_begin(sess[\"id\"])" in api2 and "srv.turn_end(sess[\"id\"], tok)" in api2)
 

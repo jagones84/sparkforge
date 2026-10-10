@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""v285 — the optional Orbit command deck (sparkforge/orbit).
+"""v285 — the optional Orbit command deck (longrun/orbit).
 
 JAG-285 (user): rebuild the /console deck as a coherent, OOP deck that orchestrates
 several sessions and can create them ahead of time; the Model Bay must show EVERY
 provider, not only the DGX router.
 
 Locked here:
-  * the deck is importable as `sparkforge.orbit` and exposes `serve_page` + `handle`;
+  * the deck is importable as `longrun.orbit` and exposes `serve_page` + `handle`;
   * the Model Bay reads the full `providers.catalog` (all providers), not just the
     local router roster, and maps each model with its context window;
   * the SessionRegistry can pre-create a session and bind a model;
   * the Orchestrator refuses an empty goal / no targets (and only then starts work);
   * the server reaches the deck ONLY through guarded, swallowing hooks, and never
-    imports it at the top level — so removing `sparkforge/orbit/` leaves the app
+    imports it at the top level — so removing `longrun/orbit/` leaves the app
     untouched;
   * the deck's routes never shadow a non-orbit path.
 
-Deterministic, no live server. Run: python3 tests/v285_sparkforge.orbit.py
+Deterministic, no live server. Run: python3 tests/v285_longrun.orbit.py
 """
 import os
 import sys
@@ -43,21 +43,21 @@ class FakeHandler:
 
 # --- 0) importable as a normal sub-package ------------------------------------
 try:
-    from sparkforge import orbit as orbit_beta
-    check("the deck imports as sparkforge.orbit and exposes the two hooks",
+    from longrun import orbit as orbit_beta
+    check("the deck imports as longrun.orbit and exposes the two hooks",
           callable(getattr(orbit_beta, "serve_page", None))
           and callable(getattr(orbit_beta, "handle", None)))
 except Exception as exc:  # noqa: BLE001
-    check("the deck imports as sparkforge.orbit and exposes the two hooks", False, repr(exc))
+    check("the deck imports as longrun.orbit and exposes the two hooks", False, repr(exc))
     orbit_beta = None
 
 # --- 1) Model Bay = full catalogue -------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "bay.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "bay.py"), encoding="utf-8") as f:
     bay_src = f.read()
 check("the Model Bay reads the FULL provider catalogue (not the DGX router only)",
       "catalog(loaded_aliases=" in bay_src and "providers" in bay_src)
 if orbit_beta:
-    from sparkforge.orbit.bay import ModelBay
+    from longrun.orbit.bay import ModelBay
     snap = ModelBay().snapshot()
     check("the snapshot has the expected shape",
           isinstance(snap.get("providers"), list) and isinstance(snap.get("count"), int)
@@ -72,7 +72,7 @@ if orbit_beta:
 
 # --- 2) Session registry: list + pre-create ----------------------------------
 if orbit_beta:
-    from sparkforge.orbit.registry import SessionRegistry
+    from longrun.orbit.registry import SessionRegistry
     reg = SessionRegistry()
     listed = reg.list()
     check("the roster lists sessions with a running flag",
@@ -84,15 +84,15 @@ if orbit_beta:
 
 # --- 3) Orchestrator guards ---------------------------------------------------
 if orbit_beta:
-    from sparkforge.orbit.orchestrator import Orchestrator
+    from longrun.orbit.orchestrator import Orchestrator
     orch = Orchestrator()
     check("dispatch with no goal is refused", orch.dispatch(["s1"], "").get("ok") is False)
     check("dispatch with no target is refused", orch.dispatch([], "do it").get("ok") is False)
 
 # --- 3b) Attention feed ("what needs me", Paperclip-style) -------------------
 if orbit_beta:
-    from sparkforge.orbit.attention import AttentionFeed
-    from sparkforge.orbit.registry import SessionRegistry as _Reg
+    from longrun.orbit.attention import AttentionFeed
+    from longrun.orbit.registry import SessionRegistry as _Reg
     feed = AttentionFeed(_Reg(), lambda: [{"job": "j1", "session": "s1", "state": "error",
                                            "error": "boom", "started": 1}])
     snap = feed.snapshot()
@@ -109,7 +109,7 @@ if orbit_beta:
 
 # --- 4) API surface: routing + page ------------------------------------------
 if orbit_beta:
-    from sparkforge.orbit import api
+    from longrun.orbit import api
     fh = FakeHandler()
     check("serve_page answers /orbit", api.serve_page(fh, "/orbit") is True
           and "Orbit" in (fh.sent or {}).get("obj", ""))
@@ -135,17 +135,17 @@ if orbit_beta:
 
 # --- 5) detachability: server reaches the deck only via guarded hooks ---------
 # JAG-370: the hooks live in `bridge.py`; JAG-393: the deck moved into the package.
-with open(os.path.join(REPO, "src", "sparkforge", "bridge.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "bridge.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     server_src = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
     server_src += f.read()
 
 
 def _top_level_deck_import(text):
     return any(ln.startswith(("import orbit", "from . import orbit",
-                              "from sparkforge import orbit"))
+                              "from longrun import orbit"))
                for ln in text.splitlines())
 
 
@@ -161,7 +161,7 @@ check("the server delegates deck API routes on every method",
           for m in ("GET", "POST", "PATCH", "DELETE")))
 
 # --- 6) the UI is OOP + self-contained ---------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the Orbit UI is object-oriented (classes)",
       all(("class %s" % c) in ui for c in ("Api", "AgentsView", "OrgChartView",

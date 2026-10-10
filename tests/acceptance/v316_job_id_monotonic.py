@@ -18,17 +18,17 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-316-")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(TMP, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(TMP, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(TMP, "runs")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(TMP, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(TMP, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 results = []
 
@@ -83,9 +83,9 @@ d = new_session("d")
 check("B4 a fresh session keeps climbing after a wipe", d > c, "c=%s d=%s" % (c, d))
 
 # ---- C: source wiring ------------------------------------------------------
-src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-check("C1 the counter persists a high-water mark", "_write_seq(n)" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
-check("C2 _max_job starts from the persisted seq", "best = _read_seq()" in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
+src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
+check("C1 the counter persists a high-water mark", "_write_seq(n)" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
+check("C2 _max_job starts from the persisted seq", "best = _read_seq()" in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
 
 print("---")
 ok = sum(1 for r in results if r)

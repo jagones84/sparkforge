@@ -15,10 +15,10 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-336-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge.jobs import merge_deps, parse_plan_deps, plan_subjobs, waves  # noqa: E402
+from longrun.jobs import merge_deps, parse_plan_deps, plan_subjobs, waves  # noqa: E402
 
 results = []
 

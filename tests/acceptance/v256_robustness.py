@@ -16,14 +16,14 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-v256-")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(TMP, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(TMP, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(TMP, "runs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(TMP, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(TMP, "runs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import tools  # noqa: E402
+from longrun import tools  # noqa: E402
 
 results = []
 
@@ -60,11 +60,11 @@ except Exception as e:  # noqa: BLE001
     check("JAG-256 a normal tool still executes", False, repr(e))
 
 # B) static guards
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     sv = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8") as f:
     sv += f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "tools.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "tools.py"), encoding="utf-8") as f:
     tv = f.read()
 check("JAG-256 system-prompt inject de-duplicated per session",
       "_LAST_SYS_INJECT" in sv and '_LAST_SYS_INJECT.get(sess["id"]) != _h' in sv)

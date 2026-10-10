@@ -21,7 +21,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SRC = open(os.path.join(REPO, "src", "sparkforge", "forge.py"), encoding="utf-8").read()
+SRC = open(os.path.join(REPO, "src", "longrun", "forge.py"), encoding="utf-8").read()
 
 results = []
 
@@ -79,9 +79,9 @@ check("tools accepts the preset actions",
                                '"selfevolve"', '"reasoning"', '"approvals"')))
 
 # --- HTTP routes the CLI calls must exist server-side ------------------------
-srv = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-srv += open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8").read()
-orch = open(os.path.join(REPO, "src", "sparkforge", "orchestration.py"), encoding="utf-8").read()
+srv = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
+srv += open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8").read()
+orch = open(os.path.join(REPO, "src", "longrun", "orchestration.py"), encoding="utf-8").read()
 check("server serves /api/sessions/<sid>/clear", 'path.endswith("/clear")' in srv)
 check("server serves /api/sessions/<sid>/model", 'path.endswith("/model")' in srv)
 check("orchestration serves /api/routines", '_is(path, "/api/routines")' in orch)

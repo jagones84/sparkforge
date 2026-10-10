@@ -61,13 +61,13 @@ check("C3 the undefined border token and the forced-dark popup are gone",
 
 # --- B: REAL per-call cost ---------------------------------------------------
 TMP = tempfile.mkdtemp(prefix="sf-v361-")
-os.environ["SPARKFORGE_COSTS_DIR"] = os.path.join(TMP, "costs")
-os.environ["SPARKFORGE_PRICES_FILE"] = os.path.join(TMP, "prices.json")
-os.environ["SPARKFORGE_PRICES"] = json.dumps({
+os.environ["LONGRUN_COSTS_DIR"] = os.path.join(TMP, "costs")
+os.environ["LONGRUN_PRICES_FILE"] = os.path.join(TMP, "prices.json")
+os.environ["LONGRUN_PRICES"] = json.dumps({
     "m/x": {"in": 2.0, "out": 8.0, "cache_read": 0.5, "request": 0.01}})
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import costs as C  # noqa: E402
+from longrun import costs as C  # noqa: E402
 
 S = "v361"
 # 1) the provider reports the charge itself -> EXACT, used verbatim

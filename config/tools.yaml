@@ -1,4 +1,4 @@
-# SparkForge tool registry — v0.2
+# Longrun tool registry — v0.2
 # Declarative allowlist + approval policy. Edit and POST /api/tools to reload
 # (or just restart the server). Nothing here is enabled for destructive use:
 # unknown tools are denied, and every mutating action needs an approval gate.
@@ -126,7 +126,7 @@ tools:
   # write a file (host-side, constrained to the allowed roots; JAG-59: the repo
   # root so the agent can create/edit the DGX repos it works on)
   # JAG-61: also allow the Repositories parent — "." resolves to REPO
-  # (sparkforge/), so without this the agent cannot write to sibling repos like
+  # (longrun/), so without this the agent cannot write to sibling repos like
   # tododemo (it would fall back to printf-through-shell).
   fs.write:
     enabled: true

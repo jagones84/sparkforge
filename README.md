@@ -1,12 +1,12 @@
-<img src="assets/banner.svg" alt="SparkForge — the agent harness built to DRIVE the LLM" width="100%">
+<img src="assets/banner.svg" alt="Longrun — the agent harness built to DRIVE the LLM" width="100%">
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![deps](https://img.shields.io/badge/deps-stdlib%20%2B%20PyYAML-brightgreen.svg)](#install--run)
 [![tests](https://img.shields.io/badge/battery-125%2F125%20green-success.svg)](#the-quality-gate)
-[![CI](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml/badge.svg)](https://github.com/jagones84/sparkforge/actions/workflows/ci.yml)
+[![CI](https://github.com/jagones84/longrun/actions/workflows/ci.yml/badge.svg)](https://github.com/jagones84/longrun/actions/workflows/ci.yml)
 
-**SparkForge is a single agent harness — one engine that drives one LLM
+**Longrun is a single agent harness — one engine that drives one LLM
 extremely well.** Disciplined context, a real tool loop, evidence-gated task
 tracking, verifier gates. **Then it runs that same harness as a team**: every
 *session* it already runs **is** an agent — its own tools, skills, plan, memory
@@ -21,9 +21,9 @@ dependency order; the master synthesises the result.
 
 ---
 
-## Why SparkForge
+## Why Longrun
 
-|  | SparkForge |
+|  | Longrun |
 |---|---|
 | **One LLM, driven hard** | Context is *bounded* (tool-output offload, budget = the model's real window, auto-compact), not dumped. The model plans inline, acts with real tools, and closes steps **with evidence**. |
 | **TEAMS of meta-agents** | A 5-level object model — Team → Job → Subjob → Agent → Todo — with a coordinator that decomposes a goal and hands **dependencies** to the team. |
@@ -34,7 +34,7 @@ dependency order; the master synthesises the result.
 | **Observable end to end** | Every delta, thought, tool call, delegation and todo change is streamed over SSE and persisted — you can *watch* the team work. |
 
 **A single harness — not a "meta-harness".** A meta-harness is a collector that
-orchestrates *other* harnesses; SparkForge has **one** engine. The agents it
+orchestrates *other* harnesses; Longrun has **one** engine. The agents it
 orchestrates are simply *its own sessions*, organised into teams and an org chart
 you can inspect and re-wire.
 
@@ -94,7 +94,7 @@ cloud models, and the strongest (still cheap) cloud goes to the leads.
 - 🖥️ **WebUI** (`/`) — dark glassmorphism, live CoT, task graph, sessions labelled with their team.
 - 🛰️ **Bridge** (`/orbit`) — the mission-control deck: **org chart, live constellation, job create/dispatch, team selector, model policy**, one column, mobile-style.
 - ⌨️ **CLI** (`forge.py`) and a **mobile-ready HTTP API** — command the DGX from your phone over Tailscale.
-- 🔌 **Bidirectional MCP** — use SparkForge *from* any MCP client, and connect *external* MCP servers as native tools.
+- 🔌 **Bidirectional MCP** — use Longrun *from* any MCP client, and connect *external* MCP servers as native tools.
 
 All views share one theme — pick **Indigo / Dark / Midnight / Forest / Sand / Sepia** in ⚙ → Appearance (six eye-saver palettes).
 
@@ -104,7 +104,7 @@ All views share one theme — pick **Indigo / Dark / Midnight / Forest / Sand / 
 
 **Requirements:** Python **3.10+**, plus **PyYAML** (pure-Python — no compiler, no
 wheels) to read the shipped `config/*.yaml`. Nothing else: the core
-(`src/sparkforge/`) imports only the standard library, and every heavier extra
+(`src/longrun/`) imports only the standard library, and every heavier extra
 (`numpy`, `sentence_transformers`, OpenTelemetry, `psutil`, the voice stack) is
 optional and lazily guarded. The tool allowlist stays **fail-closed**: if PyYAML is
 missing while `config/tools.yaml` exists, the harness refuses to start rather than
@@ -123,12 +123,12 @@ run with an unverified policy. You need an LLM: a local **llama.cpp router**
 The core is **pure stdlib** (PyYAML is its only third-party import, and it is
 pure-Python), so there are no compiled wheels to build — any OS/architecture
 with **CPython 3.10+** runs it identically. The only OS-specific code lives in one place,
-[`src/sparkforge/osutil.py`](src/sparkforge/osutil.py): shell spawn
+[`src/longrun/osutil.py`](src/longrun/osutil.py): shell spawn
 (`/bin/sh -c` ↔ `cmd /c`), process-tree kill (`SIGTERM/SIGKILL` ↔ `taskkill /T /F`) and
 `PATH`/`PATHEXT` resolution (`npx` ↔ `npx.cmd`).
 
 ```bash
-git clone https://github.com/jagones84/sparkforge && cd sparkforge
+git clone https://github.com/jagones84/longrun && cd longrun
 cp .env.template .env          # keys stay local (gitignored) — never commit them
 ./run.sh                       # WebUI + API on http://127.0.0.1:8790
 ./run.sh --host 0.0.0.0        # expose on the Tailscale/LAN IP for your phone
@@ -137,7 +137,7 @@ cp .env.template .env          # keys stay local (gitignored) — never commit t
 **Windows 10/11 (x64, native, no WSL):**
 
 ```powershell
-git clone https://github.com/jagones84/sparkforge; cd sparkforge
+git clone https://github.com/jagones84/longrun; cd longrun
 Copy-Item .env.template .env
 .\run.ps1                      # WebUI + API on http://127.0.0.1:8790
 ```
@@ -149,8 +149,8 @@ for the mission-control deck. Auth (optional but recommended) is a bearer token:
 **Always-on (Linux, systemd user unit):**
 
 ```bash
-cp deploy/sparkforge.service ~/.config/systemd/user/
-systemctl --user enable --now sparkforge.service
+cp deploy/longrun.service ~/.config/systemd/user/
+systemctl --user enable --now longrun.service
 ```
 
 > Sandbox is optional: install `docker`, `bubblewrap` or `nsjail` for real isolation;
@@ -161,7 +161,7 @@ systemctl --user enable --now sparkforge.service
 ## The quality gate
 
 The **only** regression gate is one deterministic, fully-isolated battery — it points
-every `SPARKFORGE_*` data dir at a throwaway temp dir, so it never touches live state:
+every `LONGRUN_*` data dir at a throwaway temp dir, so it never touches live state:
 
 ```bash
 bash tests/battery.sh        # → === battery: 125/125 GREEN ===
@@ -192,4 +192,4 @@ For the *live* seams (reload, session swap, swap-during-run, long tasks) see
 © 2025–2026 Giovanni J. Agones ([jagones84](https://github.com/jagones84)).
 Licensed under **AGPL-3.0** — see [LICENSE](LICENSE).
 
-If SparkForge is useful to you, ⭐ star the repo — it helps others find it.
+If Longrun is useful to you, ⭐ star the repo — it helps others find it.

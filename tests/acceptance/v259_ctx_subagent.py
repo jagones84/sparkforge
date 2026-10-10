@@ -19,7 +19,7 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import providers as P  # noqa: E402
+from longrun import providers as P  # noqa: E402
 
 results = []
 
@@ -57,7 +57,7 @@ check("local dgx alias uses the live window",
       str(P.context_length("dgx:" + DGX)))
 
 # 5) static guards for the two wirings
-with open(os.path.join(REPO, "src", "sparkforge", "subagent.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "subagent.py"), encoding="utf-8") as f:
     sa = f.read()
 check("subagent.spawn honours the subagent role model",
       'routing.role_model("subagent") or routing.pick("subagent")' in sa)
@@ -67,7 +67,7 @@ with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
 check("chooseModel re-measures the ctx bar",
       "JAG-258: re-measure the context bar" in ix and "loadCtx();" in ix)
 
-with open(os.path.join(REPO, "src", "sparkforge", "providers.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "providers.py"), encoding="utf-8") as f:
     pv = f.read()
 check("providers fetches the local live window (and warms it)",
       "_fetch_local_contexts" in pv

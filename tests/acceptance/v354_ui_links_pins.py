@@ -10,7 +10,7 @@ Deterministic (no model, no network). Two halves:
        code extensions too;
      - `_rawUrl` carries the session so a relative image preview resolves;
      - the fs endpoints resolve a relative `?path=` against the session workspace;
-     - the README no longer frames SparkForge as "not a meta-harness" and states the
+     - the README no longer frames Longrun as "not a meta-harness" and states the
        one real dependency (PyYAML) instead of "zero pip dependencies".
   B) Behavioural: a task list survives transcript compaction (it is re-injected into
      the current user turn, and the task graph is never touched).
@@ -30,7 +30,7 @@ def _read(*parts):
 
 
 HTML = _read("webui", "index.html")
-API = _read("src", "sparkforge", "api_v02.py")
+API = _read("src", "longrun", "api_v02.py")
 README = _read("README.md")
 CHANGELOG = _read("CHANGELOG.md")
 
@@ -93,14 +93,14 @@ check("D5 the README battery count matches the acceptance-suite size",
 # --- B: a task list survives compaction --------------------------------------
 TMP = tempfile.mkdtemp(prefix="sf-v354-")
 for _k in ("CONFIG_DIR", "SESSIONS_DIR", "EDITS_DIR", "RUNS_DIR", "GRAPH_DIR", "ROLES_DIR"):
-    os.environ["SPARKFORGE_" + _k] = os.path.join(TMP, _k)
+    os.environ["LONGRUN_" + _k] = os.path.join(TMP, _k)
     os.makedirs(os.path.join(TMP, _k), exist_ok=True)
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import context_engine as CE  # noqa: E402
-from sparkforge import server as S  # noqa: E402
-from sparkforge import taskgraph as TG  # noqa: E402
+from longrun import context_engine as CE  # noqa: E402
+from longrun import server as S  # noqa: E402
+from longrun import taskgraph as TG  # noqa: E402
 
 g = TG.ensure("cc1", session_id="cc1")
 TG.add_node(g, "open task XY")

@@ -1,0 +1,15 @@
+[Unit]
+Description=Longrun — local agent harness (always-on)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Repositories/longrun
+ExecStart=/usr/bin/python3 %h/Repositories/longrun/server.py --host 0.0.0.0 --port 8790 --token ${LONGRUN_TOKEN}
+EnvironmentFile=-%h/.config/longrun/env
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

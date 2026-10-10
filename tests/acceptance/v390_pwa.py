@@ -16,7 +16,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 UI = os.path.join(REPO, "webui", "index.html")
 MAN = os.path.join(REPO, "webui", "manifest.webmanifest")
 SW = os.path.join(REPO, "webui", "sw.js")
-API = os.path.join(REPO, "src", "sparkforge", "httpapi.py")
+API = os.path.join(REPO, "src", "longrun", "httpapi.py")
 ASSETS = os.path.join(REPO, "webui", "assets")
 
 with open(UI, encoding="utf-8") as f:

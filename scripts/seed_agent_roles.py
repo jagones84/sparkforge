@@ -14,7 +14,7 @@ Usage (on the DGX, from the repo root):
     python3 scripts/seed_agent_roles.py            # fill only EMPTY roles
     python3 scripts/seed_agent_roles.py --force    # overwrite every matched role
 Env:
-    SPARKFORGE_AGENCY_DIR   the clone (default ~/Repositories/agency-agents)
+    LONGRUN_AGENCY_DIR   the clone (default ~/Repositories/agency-agents)
 """
 import os
 import sys
@@ -22,12 +22,12 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import agency  # noqa: E402
+from longrun import agency  # noqa: E402
 
 
 def main(argv):
     if not agency.available():
-        print("agency-agents not found at %s (set SPARKFORGE_AGENCY_DIR)"
+        print("agency-agents not found at %s (set LONGRUN_AGENCY_DIR)"
               % agency.agency_dir())
         return 2
     force = "--force" in argv[1:]

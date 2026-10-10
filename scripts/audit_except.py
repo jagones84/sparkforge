@@ -11,7 +11,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(REPO, "src", "sparkforge")
+SRC = os.path.join(REPO, "src", "longrun")
 
 
 def is_swallow(body):

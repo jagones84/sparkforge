@@ -23,14 +23,14 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-320-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import server, taskgraph  # noqa: E402
+from longrun import server, taskgraph  # noqa: E402
 
 results = []
 
@@ -104,9 +104,9 @@ check("D1 a failure on one step does not block an unrelated step",
       status_of(OID) == "done", str(status_of(OID)))
 
 # ---- E: source wiring ------------------------------------------------------
-_tg = open(os.path.join(REPO, "src", "sparkforge", "taskgraph.py"), encoding="utf-8").read()
-src = open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8").read()
-src += open(os.path.join(REPO, "src", "sparkforge", "agent.py"), encoding="utf-8").read()
+_tg = open(os.path.join(REPO, "src", "longrun", "taskgraph.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8").read()
+src += open(os.path.join(REPO, "src", "longrun", "agent.py"), encoding="utf-8").read()
 check("E1 taskgraph exposes the durable recorder", "def record_delegation(" in _tg)
 check("E2 taskgraph exposes the marker consumer", "def clear_delegation(" in _tg)
 check("E3 the guard is in the todo-done path", "refusing 'done'" in src)

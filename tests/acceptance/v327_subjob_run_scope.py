@@ -7,7 +7,7 @@ so no new plan opened and `subjob_todos` merged the previous run's todos with th
 run's — a subjob "embraced" stale work.
 
 Fix: a re-run opens a FRESH plan per participating agent (`jobs._run`), and the two
-read-only views (`JobRegistry.subjob_todos`, `sparkforge.orbit.api._subjobs_of`) scope a
+read-only views (`JobRegistry.subjob_todos`, `longrun.orbit.api._subjobs_of`) scope a
 subjob to the LATEST plan it appeared in — so the mapping survives a later, unrelated
 plan on the same session but never merges two runs.
 
@@ -19,17 +19,17 @@ import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TMP = tempfile.mkdtemp(prefix="sf-327-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.environ["LONGRUN_DB"] = os.path.join(TMP, "events.db")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import agents, jobs, taskgraph as tg  # noqa: E402
+from longrun import agents, jobs, taskgraph as tg  # noqa: E402
 
 results = []
 
@@ -94,7 +94,7 @@ check("B4 a later unrelated plan does not drop the subjob's todos",
 
 # ---- C: the constellation view scopes the same way ------------------------
 try:
-    from sparkforge.orbit import api as oapi
+    from longrun.orbit import api as oapi
     payload = oapi._subjobs_of(
         [{"id": "A1", "session": "s1"}],
         [{"id": "J1", "subjobs": {"J1.1": {"id": "J1.1", "agent": "A1", "deps": [],
@@ -107,13 +107,13 @@ except Exception as e:  # noqa: BLE001
     check("C1 the constellation takes only the latest plan's todos", False, str(e))
 
 # ---- D: wiring ------------------------------------------------------------
-src = read("src", "sparkforge", "jobs.py")
+src = read("src", "longrun", "jobs.py")
 check("D1 the runner opens a fresh plan on a RE-RUN",
       'if _g.get("jid") == jid:' in src and "begin_plan(_g)" in src)
 check("D2 subjob_todos uses the latest-plan scope", "latest_plan_nodes([" in src)
-apy = read("src", "sparkforge", "orbit", "api.py")
+apy = read("src", "longrun", "orbit", "api.py")
 check("D3 the constellation view uses the shared scope",
-      "from sparkforge.jobs import latest_plan_nodes" in apy)
+      "from longrun.jobs import latest_plan_nodes" in apy)
 
 print("---")
 ok = sum(1 for r in results if r)

@@ -18,14 +18,14 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("SPARKFORGE_CONFIG_DIR", os.path.join(REPO, ".tmp-v229-cfg"))
+os.environ.setdefault("LONGRUN_CONFIG_DIR", os.path.join(REPO, ".tmp-v229-cfg"))
 sys.path.insert(0, os.path.join(REPO, "src"))
-from sparkforge import server  # noqa: E402
+from longrun import server  # noqa: E402
 
 HTML = os.path.join(REPO, "webui", "index.html")
 with open(HTML, encoding="utf-8") as f:
     html = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     py = f.read()
 
 results = []

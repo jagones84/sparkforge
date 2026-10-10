@@ -20,10 +20,10 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v292-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_ROLES_DIR"] = os.path.join(TMP, "roles")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_ROLES_DIR"] = os.path.join(TMP, "roles")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 
 results = []
 
@@ -33,7 +33,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import agents, orchestration, prompt, roles  # noqa: E402
+from longrun import agents, orchestration, prompt, roles  # noqa: E402
 
 # --- storage: one file per session id --------------------------------------
 w = roles.write("sess-a", "Role: analyst\n- be terse")
@@ -94,7 +94,7 @@ check("a different name is accepted", ok2["ok"] and AR.get("s2").get("name") == 
 check("name_taken is case-insensitive", AR.name_taken("beta") is True)
 
 # --- CLI + primary WebUI wiring --------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "forge.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "forge.py"), encoding="utf-8") as f:
     cli = f.read()
 check("the CLI exposes roles/agents/jobs",
       'add_parser("roles")' in cli and 'add_parser("agents")' in cli
@@ -104,7 +104,7 @@ with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
 check("the primary WebUI has the Rules panel (role + global/project rules)",
       'data-insp="rules"' in gui and "async function loadRole()" in gui
       and "/api/roles" in gui and "/api/rules" in gui)
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     oui = f.read()
 check("the Orbit deck edits the same role API",
       '"/api/roles?session="' in oui and 'data-p="role"' in oui)

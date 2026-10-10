@@ -22,8 +22,8 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v286-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 
 results = []
 
@@ -33,7 +33,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import agents, jobs, orchestration  # noqa: E402
+from longrun import agents, jobs, orchestration  # noqa: E402
 
 reg = agents.REGISTRY
 
@@ -120,7 +120,7 @@ check("the GUI badges org agents and guards their delete",
       and "is an ORG AGENT" in html)
 check("the deck button opens the Orbit beta", "location.href='/orbit'" in html)
 
-with open(os.path.join(REPO, "src", "sparkforge", "api_v02.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "api_v02.py"), encoding="utf-8") as f:
     av = f.read()
 check("api_v02 delegates to the orchestration routes (native, no new server hook)",
       "orchestration.handle(handler, method, path, qs, body)" in av)

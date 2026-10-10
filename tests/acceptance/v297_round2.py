@@ -33,7 +33,7 @@ def read(*parts):
 
 
 # ---------------------------------------------------------------- server.py
-s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
+s = read("src", "longrun", "server.py") + read("src", "longrun", "httpapi.py")
 check("turn registration carries a unique token", '"tok": _turn_tok' in s)
 check("only the owning turn clears its registration",
       'if (_ACTIVE_CHAT.get(sess["id"]) or {}).get("tok") is _turn_tok:' in s)

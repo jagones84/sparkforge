@@ -17,8 +17,8 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v290-")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
 
 results = []
 
@@ -28,7 +28,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-from sparkforge import agents, jobs  # noqa: E402
+from longrun import agents, jobs  # noqa: E402
 
 reg = jobs.JOBS
 reg._run = lambda jid: None   # never spawn a real worker
@@ -106,7 +106,7 @@ class FakeHandler:
         return True
 
 
-from sparkforge import orchestration  # noqa: E402
+from longrun import orchestration  # noqa: E402
 
 fh = FakeHandler()
 ok = orchestration.handle(fh, "POST", "/api/jobs/wake", {}, {})
@@ -122,7 +122,7 @@ check("GET /api/agents/<sid>/chain answers the chain",
       ok and fh.sent["obj"]["chain"] == ["A3", "A2", "A1"])
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as fh2:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as fh2:
     ui = fh2.read()
 check("the Orbit job form assigns by recipient (assignee)",
       'id="jobTo"' in ui and "{goal, assignee}" in ui)

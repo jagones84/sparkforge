@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something is broken in SparkForge
+about: Something is broken in Longrun
 title: "[bug] "
 labels: bug
 assignees: ""
@@ -22,7 +22,7 @@ assignees: ""
 
 ## Environment
 
-- SparkForge version / commit:
+- Longrun version / commit:
 - OS: <!-- e.g. Ubuntu 24.04 (DGX Spark) / Windows 11 -->
 - Python: <!-- `python3 --version` -->
 - Model / provider: <!-- e.g. dgx:qwen-3.8-27b / openrouter:... -->
@@ -38,4 +38,4 @@ bash tests/battery.sh
 
 ## Anything else
 
-<!-- Logs (`journalctl --user -u sparkforge.service -f`), feed events, screenshots. -->
+<!-- Logs (`journalctl --user -u longrun.service -f`), feed events, screenshots. -->

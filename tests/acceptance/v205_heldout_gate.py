@@ -24,15 +24,15 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 tmp = tempfile.mkdtemp(prefix="sf-205-")
-os.environ["SPARKFORGE_HELDOUT_DIR"] = os.path.join(tmp, "heldout")
-os.environ["SPARKFORGE_REQUIRE_HELDOUT"] = "1"
-suite = os.path.join(os.environ["SPARKFORGE_HELDOUT_DIR"], "suite")
+os.environ["LONGRUN_HELDOUT_DIR"] = os.path.join(tmp, "heldout")
+os.environ["LONGRUN_REQUIRE_HELDOUT"] = "1"
+suite = os.path.join(os.environ["LONGRUN_HELDOUT_DIR"], "suite")
 os.makedirs(suite, exist_ok=True)
 check_all = os.path.join(suite, "check_all.py")
 with open(check_all, "w", encoding="utf-8") as f:
     f.write("print('judge: invariants ok')\n")
 
-from sparkforge import heldout, selfevolve  # noqa: E402
+from longrun import heldout, selfevolve  # noqa: E402
 
 results = []
 
@@ -100,14 +100,14 @@ check("F1 external judge governs (local check.py ignored)", not res_f.get("ok"),
       str(res_f.get("error"))[:80])
 
 # ---- E: missing held-out dir -> fail-closed ----
-good_dir = os.environ["SPARKFORGE_HELDOUT_DIR"]
-os.environ["SPARKFORGE_HELDOUT_DIR"] = os.path.join(tmp, "nope")
+good_dir = os.environ["LONGRUN_HELDOUT_DIR"]
+os.environ["LONGRUN_HELDOUT_DIR"] = os.path.join(tmp, "nope")
 g = heldout.gate(runner=lambda s, c: (True, "ok"))
 check("E1 missing dir -> gate not green", not g["green"] and g["reason"] == "no_manifest",
       str(g["reason"]))
 res_e = selfevolve.promote(make_proposal("candw"), skills_dir=os.path.join(tmp, "skills"))
 check("E2 promote fail-closed on missing dir", not res_e.get("ok"), str(res_e.get("error"))[:80])
-os.environ["SPARKFORGE_HELDOUT_DIR"] = good_dir
+os.environ["LONGRUN_HELDOUT_DIR"] = good_dir
 
 shutil.rmtree(tmp, ignore_errors=True)
 ok = sum(results)

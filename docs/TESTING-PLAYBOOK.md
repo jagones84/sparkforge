@@ -1,4 +1,4 @@
-# SparkForge — Harness Testing Playbook
+# Longrun — Harness Testing Playbook
 
 How we test the harness **the smart way**: drive the real thing, distrust the happy
 path, and verify the seams (reload, session swap, concurrent turns, topic pivot).
@@ -32,7 +32,7 @@ Written down so a future session does not have to rediscover it.
    never leave the harness polluted (that was itself a past complaint).
 6. **Never test inside the harness repo.** Bind every live test session to a
    dedicated workspace under `/home/jagones/Repositories/TESTS/`
-   (e.g. `TESTS/harness-e2e`) — **not** `Repositories/sparkforge`. Driving an
+   (e.g. `TESTS/harness-e2e`) — **not** `Repositories/longrun`. Driving an
    agent/tool loop in the harness's own repo pollutes `data/`, risks edits to the
    source and muddies git state.
 

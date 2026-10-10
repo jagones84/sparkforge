@@ -20,11 +20,11 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v311-")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
-os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
-os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(TMP, "sessions")
+os.environ["LONGRUN_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(TMP, "graphs")
+os.makedirs(os.environ["LONGRUN_SESSIONS_DIR"], exist_ok=True)
 
 results = []
 
@@ -34,7 +34,7 @@ def check(name, ok, detail=""):
     print("%s %s%s" % ("PASS" if ok else "FAIL", name, (" :: " + str(detail)) if detail else ""))
 
 
-from sparkforge import server, jobs, agents  # noqa: E402
+from longrun import server, jobs, agents  # noqa: E402
 
 # ---- A: session CLEAR (server-side contract) -------------------------------
 s = server.get_or_create_session(None, "clear-me")
@@ -52,12 +52,12 @@ check("clear keeps the session itself", server.load_session(sid) is not None)
 check("clear keeps the title", server.load_session(sid).get("title") == "clear-me")
 
 # the route must exist in the server source (wired, not just a helper)
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     srv = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
     srv += f.read()
 check("POST /api/sessions/<sid>/clear route exists", 'path.endswith("/clear")' in srv)
-check("clear publishes session.cleared", 'publish("session.cleared"' in open(os.path.join(REPO, "src", "sparkforge", "stores.py"), encoding="utf-8").read())
+check("clear publishes session.cleared", 'publish("session.cleared"' in open(os.path.join(REPO, "src", "longrun", "stores.py"), encoding="utf-8").read())
 
 # ---- B: session RENAME (server-side contract) ------------------------------
 check("POST /api/sessions/<sid>/rename route exists", 'path.endswith("/rename")' in srv)
@@ -88,7 +88,7 @@ check("a finished job IS deleted", res.get("ok") is True)
 check("the deleted job is gone", jobs.JOBS.get(jid) is None)
 check("deleting a missing job is a clean refusal", jobs.JOBS.delete("J9999").get("ok") is False)
 
-with open(os.path.join(REPO, "src", "sparkforge", "orchestration.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orchestration.py"), encoding="utf-8") as f:
     orch = f.read()
 check("DELETE /api/jobs/<id> is routed", 'method == "DELETE" and path.startswith("/api/jobs/")' in orch)
 
@@ -104,7 +104,7 @@ check("a compaction notice is shown in the chat feed", 'es.addEventListener("con
 check("the composer bar has a VISIBLE reset button", 'id="resetBtn"' in gui and 'onclick="clearSession()"' in gui)
 check("the overflow menu offers reset session", "reset session" in gui)
 
-with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     orb = f.read()
 check("Orbit agent row has a clear button", 'data-clear' in orb)
 check("Orbit clear calls /clear", "/clear" in orb)

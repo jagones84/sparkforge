@@ -6,7 +6,7 @@ on:
   pull_request:
 
 # Read-only: the battery is deterministic and isolated (it points every
-# SPARKFORGE_* data dir at a temp dir), so no secrets or network are required.
+# LONGRUN_* data dir at a temp dir), so no secrets or network are required.
 permissions:
   contents: read
 

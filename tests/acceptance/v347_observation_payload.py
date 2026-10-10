@@ -15,7 +15,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import tools  # noqa: E402
+from longrun import tools  # noqa: E402
 
 results = []
 
@@ -43,10 +43,10 @@ o = tools.observation({"tool": "fs.edit", "path": "/x", "replacements": 2,
 check("B1 fs.edit leaks the replacement count", "2" in o and "replacements" in o, repr(o))
 
 # --- C: self (structured dict, no stdout/path) must NOT be empty -------------
-o = tools.observation({"tool": "self", "name": "SparkForge", "version": "0.5.0",
+o = tools.observation({"tool": "self", "name": "Longrun", "version": "0.5.0",
                        "repo_path": "/r", "skills": {"count": 42}, **HDR})
 check("C1 self is NOT an empty observation", body(o) != "", repr(o))
-check("C2 self leaks its payload", "SparkForge" in o or "0.5.0" in o, repr(o))
+check("C2 self leaks its payload", "Longrun" in o or "0.5.0" in o, repr(o))
 
 # --- D: improve (payload under `proposal`) -----------------------------------
 o = tools.observation({"tool": "improve", "proposal": {"scope": "skill", "path": "p"},

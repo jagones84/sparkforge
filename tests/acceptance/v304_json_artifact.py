@@ -35,7 +35,7 @@ def read(*parts):
         return f.read()
 
 
-from sparkforge.server import _looks_like_action_dict  # noqa: E402
+from longrun.server import _looks_like_action_dict  # noqa: E402
 
 # --- artifacts the model means as its ANSWER: must NOT be treated as actions ---
 BOOK_SCHEMA = json.loads(
@@ -68,7 +68,7 @@ check("a string is not a dict action", _looks_like_action_dict("hello") is False
 check("None is not a dict action", _looks_like_action_dict(None) is False)
 
 # ------------------------------------------------------------------ source locks
-s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "agent.py")
+s = read("src", "longrun", "server.py") + read("src", "longrun", "agent.py")
 check("the action-dict discriminator exists", "def _looks_like_action_dict(act)" in s)
 check("it keys on the action signals",
       '_JSON_ACTION_KEYS = ("action", "tool", "tool_name", "args", "todos", "steps")' in s)

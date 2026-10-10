@@ -1,4 +1,4 @@
-# SparkForge CLI — `forge.py`
+# Longrun CLI — `forge.py`
 
 Command the harness from the terminal. `forge.py` is a thin, **stdlib-only** client
 over the *same* REST API the WebUI and the mobile app use: it duplicates **no**
@@ -10,23 +10,23 @@ the UI, its endpoint is reachable from here.
 ## 0. TL;DR
 
 ```bash
-cd /home/jagones/Repositories/sparkforge
-export SPARKFORGE_URL=http://127.0.0.1:8790          # default already
-export SPARKFORGE_TOKEN=$(grep '^SPARKFORGE_TOKEN=' ~/.config/sparkforge/env | cut -d= -f2)
+cd /home/jagones/Repositories/longrun
+export LONGRUN_URL=http://127.0.0.1:8790          # default already
+export LONGRUN_TOKEN=$(grep '^LONGRUN_TOKEN=' ~/.config/longrun/env | cut -d= -f2)
 python3 forge.py --help
 ```
 
 * **Data commands** print pretty JSON (or aligned tables for `ls` commands).
 * **Streaming commands** print live text: `chat --stream`, `agent`, `feed`,
   `blackboard watch`, `swarm` finishes with a summary.
-* The token is **never** stored in the repo; it lives in `~/.config/sparkforge/env`.
+* The token is **never** stored in the repo; it lives in `~/.config/longrun/env`.
 
 ---
 
 ## 1. Prerequisites
 
 1. The server must be running (`bash trash/restart-server.sh`, or `./run.sh`).
-2. If the server requires a token (`--token ...`), export `SPARKFORGE_TOKEN`.
+2. If the server requires a token (`--token ...`), export `LONGRUN_TOKEN`.
 3. `forge.py` uses only the Python standard library (no `pip install`).
 
 Exit codes: `0` success; `1` when chat/plan/history return `{"error": ...}`;
@@ -340,4 +340,4 @@ These connect to a `text/event-stream` and print until `Ctrl-C` / completion:
   same policy (compaction, routing, approvals) applies as in the WebUI/app.
 * `models ensure` and `eval run` can be slow (model load / multiple turns).
 * Add a shell alias for convenience:
-  `alias forge='python3 /home/jagones/Repositories/sparkforge/forge.py'`.
+  `alias forge='python3 /home/jagones/Repositories/longrun/forge.py'`.

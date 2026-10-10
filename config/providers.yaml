@@ -1,4 +1,4 @@
-# SparkForge providers — every LLM the harness can talk to (JAG-71).
+# Longrun providers — every LLM the harness can talk to (JAG-71).
 #
 # ONE place that lists providers + the models each one exposes, so the mobile app
 # can pick any of them and the harness routes the request to the right endpoint.
@@ -15,7 +15,7 @@
 version: "1"
 
 # Keys are loaded from these files at startup (first hit wins, no overwrite):
-#   $SPARKFORGE_ENV_FILE, <repo>/.env, ~/.hermes/.env
+#   $LONGRUN_ENV_FILE, <repo>/.env, ~/.hermes/.env
 env_files:
   - .env
   - ~/.hermes/.env

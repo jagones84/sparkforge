@@ -1,16 +1,16 @@
-# Contributing to SparkForge
+# Contributing to Longrun
 
-Thanks for your interest! SparkForge is a **stdlib-only** harness — that constraint is
+Thanks for your interest! Longrun is a **stdlib-only** harness — that constraint is
 deliberate and load-bearing, so please respect it.
 
 ## Ground rules
 
-- **No third-party runtime dependencies.** The core (`src/sparkforge/`) imports only the
+- **No third-party runtime dependencies.** The core (`src/longrun/`) imports only the
   Python standard library. New behaviour must not add a `pip` requirement to the core.
   The single exception is **PyYAML** (pure-Python), used only to read the shipped
   `config/*.yaml`; JSON configs work without it.
-- **Keep it cross-platform.** Platform-specific code lives in `src/sparkforge/osutil.py`.
-  No POSIX assumption may leak into the core — SparkForge runs on Linux x86_64,
+- **Keep it cross-platform.** Platform-specific code lives in `src/longrun/osutil.py`.
+  No POSIX assumption may leak into the core — Longrun runs on Linux x86_64,
   Linux arm64/aarch64 (NVIDIA DGX Spark) and Windows x64 from the same code.
 - **No secrets in the repo.** Keys live in a local `.env` / `~/.hermes/.env` (gitignored).
   `.env.template` is the only tracked env file.
@@ -34,7 +34,7 @@ bash tests/battery.sh          # → === battery: 125/125 GREEN ===
 3. **Test.** Add or update a test under `tests/acceptance/v<NNN>_<topic>.py` (the battery
    auto-discovers `tests/acceptance/v*.py`). Tests must be deterministic — no wall-clock
    races, no live model, no fixed data dirs (use `tempfile.mkdtemp()` and point every
-   `SPARKFORGE_*` var at it).
+   `LONGRUN_*` var at it).
 4. **Run the gate.** `bash tests/battery.sh` must be **GREEN** before you open a PR.
 5. **Commit** atomically with a typed message (`feat:`, `fix:`, `refactor:`, `test:`,
    `docs:`, `chore:`) explaining the *why*.
@@ -53,8 +53,8 @@ bash tests/battery.sh          # → === battery: 125/125 GREEN ===
 
 | Path | What |
 |---|---|
-| `src/sparkforge/` | the harness package (server, agents, jobs, teams, taskgraph, tools, providers, …) |
-| `src/sparkforge/orbit/` | the Orbit command deck (`/orbit`) |
+| `src/longrun/` | the harness package (server, agents, jobs, teams, taskgraph, tools, providers, …) |
+| `src/longrun/orbit/` | the Orbit command deck (`/orbit`) |
 | `webui/` | the main single-file WebUI |
 | `tests/acceptance/` | the deterministic gate (auto-discovered) |
 | `docs/` | architecture, CLI, testing playbook, and the historical record |

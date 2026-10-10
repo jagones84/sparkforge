@@ -21,22 +21,22 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 TMP = tempfile.mkdtemp(prefix="sf-v362-")
-os.environ["SPARKFORGE_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
-os.environ["SPARKFORGE_ROLES_DIR"] = os.path.join(TMP, "roles")
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(TMP, "cfg")
-os.makedirs(os.environ["SPARKFORGE_ROLES_DIR"], exist_ok=True)
-os.makedirs(os.environ["SPARKFORGE_CONFIG_DIR"], exist_ok=True)
+os.environ["LONGRUN_AGENTS_FILE"] = os.path.join(TMP, "agents.json")
+os.environ["LONGRUN_ROLES_DIR"] = os.path.join(TMP, "roles")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(TMP, "cfg")
+os.makedirs(os.environ["LONGRUN_ROLES_DIR"], exist_ok=True)
+os.makedirs(os.environ["LONGRUN_CONFIG_DIR"], exist_ok=True)
 
 _AGENTS = {"seq": 2, "agents": {
     "sess_a1": {"id": "A1", "n": 1, "session": "sess_a1", "name": "Tester", "role": "QA"},
     "sess_a2": {"id": "A2", "n": 2, "session": "sess_a2", "name": "Builder", "role": "Dev"},
 }}
-with open(os.environ["SPARKFORGE_AGENTS_FILE"], "w", encoding="utf-8") as f:
+with open(os.environ["LONGRUN_AGENTS_FILE"], "w", encoding="utf-8") as f:
     json.dump(_AGENTS, f)
 
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import prompt, roles  # noqa: E402
+from longrun import prompt, roles  # noqa: E402
 
 results = []
 
@@ -49,9 +49,9 @@ def check(name, cond, extra=""):
 
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
     HTML = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "server.py"), encoding="utf-8") as f:
     SRV = f.read()
-with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "longrun", "httpapi.py"), encoding="utf-8") as f:
     SRV += f.read()
 
 # --- A: the agent identity is really in the prompt ---------------------------

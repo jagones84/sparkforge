@@ -19,17 +19,17 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 tmp = tempfile.mkdtemp(prefix="sf-350-")
 atexit.register(lambda: shutil.rmtree(tmp, ignore_errors=True))
-os.environ["SPARKFORGE_CONFIG_DIR"] = os.path.join(tmp, "cfg")
-os.environ["SPARKFORGE_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
-os.environ["SPARKFORGE_DB"] = os.path.join(tmp, "events.db")
-os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(tmp, "graphs")
-os.environ["SPARKFORGE_EDITS_DIR"] = os.path.join(tmp, "edits")
-os.environ["SPARKFORGE_RUNS_DIR"] = os.path.join(tmp, "runs")
+os.environ["LONGRUN_CONFIG_DIR"] = os.path.join(tmp, "cfg")
+os.environ["LONGRUN_SESSIONS_DIR"] = os.path.join(tmp, "sessions")
+os.environ["LONGRUN_DB"] = os.path.join(tmp, "events.db")
+os.environ["LONGRUN_GRAPH_DIR"] = os.path.join(tmp, "graphs")
+os.environ["LONGRUN_EDITS_DIR"] = os.path.join(tmp, "edits")
+os.environ["LONGRUN_RUNS_DIR"] = os.path.join(tmp, "runs")
 for d in ("cfg", "sessions", "graphs", "edits", "runs"):
     os.makedirs(os.path.join(tmp, d), exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from sparkforge import registry, server, tools  # noqa: E402
+from longrun import registry, server, tools  # noqa: E402
 
 results = []
 
@@ -105,10 +105,10 @@ r = tools._sessions({"action": "read", "session": "../etc/passwd"}, None)
 check("D3 traversal-shaped id is refused", r.get("ok") is False, "")
 
 # --- E: source wiring -------------------------------------------------------
-src = open(os.path.join(REPO, "src", "sparkforge", "tools.py"), encoding="utf-8").read()
+src = open(os.path.join(REPO, "src", "longrun", "tools.py"), encoding="utf-8").read()
 check("E1 _sessions is defined", "def _sessions(" in src, "")
 check("E2 it is dispatched", '"sessions": _sessions' in src, "")
-jobs = open(os.path.join(REPO, "src", "sparkforge", "jobs.py"), encoding="utf-8").read()
+jobs = open(os.path.join(REPO, "src", "longrun", "jobs.py"), encoding="utf-8").read()
 check("E3 the delegation carries the teammate session id", "[session %s]" in jobs, "")
 check("E4 the delegation tells the master to use `sessions`",
       "sessions{action:'read'" in jobs, "")

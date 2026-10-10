@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest a capability for SparkForge
+about: Suggest a capability for Longrun
 title: "[feat] "
 labels: enhancement
 assignees: ""
@@ -12,9 +12,9 @@ assignees: ""
 
 ## Proposed capability
 
-<!-- What you'd like SparkForge to do. -->
+<!-- What you'd like Longrun to do. -->
 
-## Why it fits SparkForge
+## Why it fits Longrun
 
 <!-- The constraints that matter: stdlib-only core, cross-platform (Linux + Windows),
      local-first, safe-by-default (allowlist + approval gate + sandbox). -->

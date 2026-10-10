@@ -1,6 +1,6 @@
 {
-  "name": "SparkForge — DGX Harness",
-  "short_name": "SparkForge",
+  "name": "Longrun — DGX Harness",
+  "short_name": "Longrun",
   "description": "Local agent harness: chat, tasks, context and the tool loop.",
   "start_url": "/",
   "scope": "/",
