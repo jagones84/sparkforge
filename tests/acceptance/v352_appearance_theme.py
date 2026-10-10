@@ -68,6 +68,12 @@ check("D1 a bolder-text preference exists",
 check("D2 bolder-text OFF is a real normal baseline (chrome labels not bold)",
       "html:not(.bold-text) .sess .t" in HTML
       and "html:not(.bold-text) button.primary" in HTML, "")
+# JAG-389: the session row is compact — the NAME is on its OWN full-width line
+# below the badges (never truncated) and the meta rides the badge line, pushed right.
+check("D3 the session name sits on its own FULL-WIDTH line (no truncation)",
+      ".sess .t { flex-basis: 100%" in HTML and ".sess .col" not in HTML, "")
+check("D4 the meta (msgs · age) rides the badge line, pushed right",
+      ".sess .n { margin-left: auto" in HTML, "")
 
 # --- E: compaction model in the chat model menu -----------------------------
 check("E1 the model menu renders the compaction bar",

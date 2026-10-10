@@ -266,6 +266,13 @@ All notable changes to SparkForge are documented here. The format follows
   ordinary commands (`ls /usr/bin`, `echo x > /tmp/y`) are unaffected; `/etc`, `/root` and
   other repos still escalate. The inert `Outside workspace` toggle was removed from the
   policy card and its caption rewritten. `v386` extended to 22/22; battery stays 124/124.
+- **The session list was too tall and truncated the names (JAG-389).** Each row put the
+  name BESIDE the badges with the meta below — two lines, and every long name ellipsised
+  ("Social Media S…", "Infrastructure…"). The name now sits on its OWN full-width line
+  BELOW the badges, while the meta (msgs · age) rides the badge line, pushed right; the
+  row is also tightened (`padding` 7→4px, `margin` 4→3px, `line-height` 1.12, smaller team
+  chips). Measured in the live drawer: **44px per row, down from 53px**, and the names are
+  no longer clipped. `v352` extended (D3/D4); battery stays 124/124.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire

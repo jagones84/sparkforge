@@ -199,8 +199,13 @@
   .agentline b { color: var(--acc); }
 
   /* sessions */
-  .sess { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px;
-    border: 1px solid transparent; margin-bottom: 4px; cursor: pointer; }
+  /* JAG-389: the session NAME goes on its OWN full-width line BELOW the badges,
+     and the meta (msgs · age) rides the badge line on the right — so the name is
+     never truncated and the row is tighter (was the name beside the badges, meta
+     below → 2 lines with truncated names). */
+  .sess { display: flex; flex-wrap: wrap; align-items: center; gap: 0 7px; padding: 4px 10px;
+    border-radius: 10px; border: 1px solid transparent; margin-bottom: 3px; cursor: pointer;
+    line-height: 1.12; }
   .sess:hover { background: var(--hover); }
   .sess.active { border-color: var(--accent); background: var(--sel); }
   /* JAG-168: a session busy with a chat turn keeps running in the background. */
@@ -216,10 +221,10 @@
   .sess.done::before { content: "🔔"; font-size: 10px; flex-shrink: 0;
     animation: sfpulse 1.2s ease-in-out infinite; }
   @keyframes sfpulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-  .sess .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .sess .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
-  .sess .n { color: var(--dim); font-size: 10px; letter-spacing: .02em; }
+  .sess .t { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; }
+  .sess .n { margin-left: auto; color: var(--dim); font-size: 10px; letter-spacing: .02em; }
   .sess .ws { font-size: 12px; flex-shrink: 0; opacity: .85; }
+  .sess .team { font-size: 12px; line-height: 1; flex-shrink: 0; }
   /* JAG-354: pinned sessions are marked in the rail (and sorted to the top). */
   .sess .pin { font-size: 11px; flex-shrink: 0; opacity: .95; }
   .sess.pinned .t { font-weight: 600; }
@@ -2661,7 +2666,7 @@ async function loadSessions() {
     const tchips = ag ? (ag.teams || []).map(id => { const t = _teamsById[id];
       return t ? `<span class="team" title="team ${esc(t.name)} — ${esc(t.id)}" style="flex-shrink:0">${esc(t.symbol || "•")}</span>` : ""; }).join("") : "";
     const pin = pinnedIds.includes(s.id) ? '<span class="pin" title="pinned session">📌</span>' : "";
-    d.innerHTML = `${pin}${agtag}${jid}${tchips}<span class="col"><span class="t">${esc(s.title || s.id)}</span><span class="n">${s.messages} msg${age}</span></span><span class="menu-btn" title="session actions">⋮</span>`;
+    d.innerHTML = `${pin}${agtag}${jid}${tchips}<span class="n">${s.messages} msg${age}</span><span class="menu-btn" title="session actions">⋮</span><span class="t">${esc(s.title || s.id)}</span>`;
     d.onclick = e => {
       if (e.target.classList.contains("menu-btn")) { openSessMenu(d, s, ag); return; }
       if (e.target.closest && e.target.closest(".sess-menu")) return;
