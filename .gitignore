@@ -56,6 +56,9 @@ tests/.e2e/
 .nightly_stop
 nohup.out
 
+# archify: transient preview dirs left by the architecture-diagram generator.
+.archify-preview-*/
+
 # Hypothesis property-test database (tests/properties).
 .hypothesis/
 
