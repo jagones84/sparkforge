@@ -468,7 +468,13 @@
   @media (max-height: 640px), (max-width: 920px) {
     header { flex-wrap: nowrap; overflow-x: auto; }
     header .sub { display: none; }
-    #composerBar { flex-wrap: nowrap; overflow-x: auto; }
+    /* JAG-3xx: the toolbar WRAPS here — it must NOT be `nowrap`. With nowrap on a phone
+       the flex algorithm SHRINKS `.cb-right`, and because that group is
+       `justify-content: flex-end` its buttons spill LEFT over `.cb-left` (measured:
+       plusBtn<->micBtn, qmode<->model-btn, qmode<->agentBtn, model-btn<->agentBtn), so a
+       tap landed on the wrong control and the composer / ⋯ looked dead. Wrapping keeps
+       every control full-size and tappable (the log shrinks first, see #log min-height:0). */
+    #composerBar { flex-wrap: wrap; }
   }
 
   /* CoT live drawer (mobile) */

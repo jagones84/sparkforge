@@ -131,6 +131,16 @@ All notable changes to SparkForge are documented here. The format follows
   a thin façade — imports, constants, `stream_with_fallback` and the re-export blocks.
 
 ### Fixed
+- **Mobile WebUI: the composer toolbar's buttons overlapped each other (JAG-3xx).** On a
+  phone `#composerBar` was forced to `flex-wrap: nowrap`, so the flex algorithm SHRANK
+  `.cb-right`; because that group is `justify-content: flex-end`, its buttons spilled
+  LEFT over `.cb-left` — measured overlaps `plusBtn↔micBtn`, `qmode↔model-btn`,
+  `qmode↔agentBtn`, `model-btn↔agentBtn`. A tap therefore landed on the wrong control:
+  `⚡ agent` / `⏹ stop` / `↺ reset` / `⋯` and the bottom tab bar all looked dead. The
+  narrow-width toolbar now **wraps** (two tidy rows; the log shrinks first), so every
+  control is full-size and tappable; guarded by `v282`. Verified under device emulation
+  (412×915, touch): `elementFromPoint` now returns each control itself, the `⋯` opens its
+  menu and the `sessions` tab opens the drawer.
 - **Mobile WebUI: the editor's file-tree pane and the settings nav could not be resized
   on a phone, and the editor overlay covered the bottom buttons (JAG-3xx).** Three
   touch-unusable spots, all reported from a real phone:

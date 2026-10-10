@@ -6,8 +6,9 @@ and the open editor tabs gave no way to know a file's full path / whether it is 
 the workspace, nor to copy it.
 
 Locked here:
-  * the composer bar is a single nowrap row; the model picker is the only flexible
-    element and it truncates (no more two-line toolbar);
+  * the composer bar is one row when it fits; on a narrow phone width it WRAPS (the
+    model picker is the only flexible element and it truncates) — it must never shrink
+    into an overlap;
   * every editor tab shows its full path on hover and has a right-click menu with
     'copy path' (mirroring the file tree), a 'reveal in file tree' action, and an
     outside-the-workspace marker (tab + status bar).
@@ -38,6 +39,12 @@ check("the composer toolbar is grouped into left/right clusters",
       and "#composerBar .cb-right { margin-left: auto" in ui)
 check("the bar wraps instead of clipping (no nowrap on the bar)",
       "#composerBar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }" in ui)
+# JAG-3xx: a phone width must WRAP too. A `nowrap` override made .cb-right shrink and,
+# with justify-content: flex-end, spill its buttons LEFT over .cb-left (measured 4
+# overlaps), so a tap landed on the wrong control and the composer / ⋯ looked dead.
+check("a narrow (phone) toolbar WRAPS — no nowrap override that overlaps .cb-left",
+      "#composerBar { flex-wrap: wrap; }" in ui
+      and "#composerBar { flex-wrap: nowrap" not in ui)
 check("the model picker is the flexible element and truncates",
       "#composerBar .cb-right .model-wrap > button { max-width: 190px" in ui
       and "#composerBar .mname" in ui)
