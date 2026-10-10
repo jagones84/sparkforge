@@ -6,14 +6,16 @@ that built this.
 
 ## Read order (do not skip)
 
-1. **`.agent/HANDOFF.md`** — what was just done, current state, dead paths to avoid.
-2. **`.agent/README-debugging.md`** — the debugging manual: folder map, the debug
-   ladder, golden rules, known bug classes, exact commands, rollback.
-3. **`docs/TESTING-PLAYBOOK.md`** — the mindset for testing the harness live.
-4. **`docs/ARCHITECTURE.md`** and **`docs/CLI.md`** — how the system is wired.
-5. **`tests/README.md`** — how to run the gate and write a test.
-6. **`docs/research/2026-10-06-debugging-large-codebases.md`** — the science of
-   debugging large, interrelated codebases (delta debugging, SBFL, slicing, …).
+> `.agent/` is the maintainer's **local** working memory (HANDOFF + per-domain
+> manuals) and is **gitignored** — it exists only in a development checkout, never
+> in a clone. Everything listed below is tracked and present in every clone.
+
+1. **`docs/ARCHITECTURE.md`** and **`docs/CLI.md`** — how the system is wired.
+2. **`docs/TESTING-PLAYBOOK.md`** — the mindset for testing the harness live.
+3. **`tests/README.md`** — how to run the gate and write a test.
+4. **`CONTRIBUTING.md`** — contribution rules and house style.
+5. **`docs/archive/research/2026-10-06-debugging-large-codebases.md`** — the science
+   of debugging large, interrelated codebases (delta debugging, SBFL, slicing, …).
 
 ## The 60-second mental model
 
@@ -32,7 +34,7 @@ that built this.
 ## The one command that matters
 
 ```bash
-bash tests/battery.sh     # 119/119 GREEN required before any commit
+bash tests/battery.sh     # 125/125 GREEN required before any commit
 ```
 
 ## Non-negotiables
@@ -42,4 +44,4 @@ bash tests/battery.sh     # 119/119 GREEN required before any commit
 - **`ast.parse` after any scripted patch**; `git checkout -- <file>` if you break it.
 - **Checkpoint before refactor**, then `git reset --hard <checkpoint>` to roll back.
 - **Trash goes to `trash/`**, temp scripts never pollute `scripts/` or the repo root.
-- **Update `.agent/HANDOFF.md` + the matching `README-*.md` in the same session.**
+- **Maintainers: update the local (gitignored) `.agent/HANDOFF.md` + the matching `README-*.md` in the same session.**

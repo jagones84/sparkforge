@@ -19,10 +19,12 @@ deliberate and load-bearing, so please respect it.
 
 ## Set up
 
+Install and run instructions live in
+[README → Install & run](README.md#install--run) (clone, `cp .env.template .env`,
+`./run.sh` on Linux/macOS or `.\run.ps1` on Windows). Then verify your checkout:
+
 ```bash
-git clone https://github.com/jagones84/sparkforge && cd sparkforge
-cp .env.template .env
-bash tests/battery.sh          # → === battery: 119/119 GREEN ===
+bash tests/battery.sh          # → === battery: 125/125 GREEN ===
 ```
 
 ## The loop
@@ -56,7 +58,7 @@ bash tests/battery.sh          # → === battery: 119/119 GREEN ===
 | `webui/` | the main single-file WebUI |
 | `tests/acceptance/` | the deterministic gate (auto-discovered) |
 | `docs/` | architecture, CLI, testing playbook, and the historical record |
-| `.agent/` | working notes + the debugging manual (see `AGENTS.md`) |
+| `.agent/` | maintainer's local working notes + debugging manual (untracked) |
 
 ## License
 

@@ -32,6 +32,6 @@ Dated, append-only records. They captured the design and evidence *at the time* 
 | [archive/PLAN.md](archive/PLAN.md) | the roadmap as of v0.7.x. |
 | [archive/WAYFORWARD_minor.md](archive/WAYFORWARD_minor.md) | dated forward-looking notes. |
 
-> Working notes for the current session — what was just done, dead paths to avoid, the
-> debugging manual — live in [`.agent/`](../.agent/) (`HANDOFF.md`,
-> `README-debugging.md`). Read `AGENTS.md` first for the read order.
+> The maintainer's session working notes (what was just done, dead paths to avoid, the
+> debugging manual) live in a **local, untracked** `.agent/` folder — they are not part of
+> a clone. Read [AGENTS.md](../AGENTS.md) first for the read order.

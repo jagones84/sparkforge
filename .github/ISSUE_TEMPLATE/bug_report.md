@@ -34,7 +34,7 @@ assignees: ""
 bash tests/battery.sh
 ```
 
-<!-- Paste the last line, e.g. `=== battery: 119/119 GREEN ===` or the failing test. -->
+<!-- Paste the last line, e.g. `=== battery: 125/125 GREEN ===` or the failing test. -->
 
 ## Anything else
 
