@@ -109,7 +109,7 @@ const STYLE = `
 #editorDock{position:relative;flex:0 0 auto;min-height:0;background:var(--bg2,#0f1320);
   border-left:1px solid var(--line,#26304a);display:flex;flex-direction:column;z-index:5;font-size:12px}
 #editorDock[hidden]{display:none}
-#editorDock .ed-resize{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:6}
+#editorDock .ed-resize{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:6;touch-action:none}
 #editorDock .ed-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line,#26304a)}
 #editorDock .ed-title{font-weight:600}
 #editorDock .ed-status{flex:1;opacity:.7;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -121,9 +121,16 @@ const STYLE = `
 #editorDock .ed-body{flex:1;min-height:0;display:flex;flex-direction:row}
 #editorDock .ed-tree{width:210px;flex:0 0 auto;overflow:auto;border-right:1px solid var(--line,#26304a);padding:6px;font-family:monospace;font-size:11px}
 #editorDock .ed-tree[hidden]{display:none}
-#editorDock .ed-tree-resize{flex:0 0 5px;width:5px;cursor:col-resize;background:transparent}
+#editorDock .ed-tree-resize{flex:0 0 5px;width:5px;cursor:col-resize;background:transparent;touch-action:none}
 #editorDock .ed-tree-resize:hover,#editorDock .ed-tree-resize.active{background:var(--accent,#8b7bf0)}
 #editorDock .ed-tree[hidden]+.ed-tree-resize{display:none}
+/* JAG-3xx: on TOUCH a 5px grip is impossible to hit and the 210px default tree eats
+   most of the dock, so widen both grips and give the tree less room by default. */
+@media (pointer:coarse){
+#editorDock .ed-resize{width:14px;left:-7px}
+#editorDock .ed-tree-resize{flex:0 0 14px;width:14px}
+#editorDock .ed-tree{width:150px}
+}
 #editorDock .ed-main{flex:1;min-width:0;display:flex;flex-direction:column}
 #editorDock .ed-trow{cursor:pointer;padding:2px 4px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #editorDock .ed-trow:hover{background:rgba(108,140,255,.12)}
@@ -218,9 +225,11 @@ function buildDock() {
 
   const saved = parseInt(localStorage.getItem(LS_W) || "", 10);
   if (saved) dock.style.width = Math.min(saved, _dockMaxW()) + "px";
+  // JAG-3xx: POINTER events, not mouse — a phone/tablet only fires pointerdown/move/up,
+  // so the old mousedown drag made the grip dead on touch (the dock width could not be
+  // changed at all on a mobile device).
   let dragging = false;
-  state.resizeEl.addEventListener("mousedown", (e) => { dragging = true; e.preventDefault(); });
-  window.addEventListener("mousemove", (e) => {
+  const _dockMove = (e) => {
     if (!dragging) return;
     // JAG-369: never let the dock grow so wide that it shoves the inspector off-screen.
     // The app owns the panel widths + the chat floor and exports the cap; the drag is
@@ -229,27 +238,56 @@ function buildDock() {
     const z = (typeof window._pageScale === "function") ? window._pageScale() : 1;
     const right = dock.getBoundingClientRect().right;
     const cap = Math.min(_vw() - 120, _dockMaxW());
-    const w = Math.min(cap, Math.max(320, (right - e.clientX) / z));
+    const w = Math.min(cap, Math.max(240, (right - e.clientX) / z));
     dock.style.width = w + "px";
     localStorage.setItem(LS_W, String(Math.round(w)));
+  };
+  const _dockUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    state.resizeEl.classList.remove("active");
+    _notifyLayout();
+  };
+  state.resizeEl.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    state.resizeEl.classList.add("active");
+    try { state.resizeEl.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
   });
-  window.addEventListener("mouseup", () => { if (dragging) { dragging = false; _notifyLayout(); } });
+  state.resizeEl.addEventListener("pointermove", _dockMove);
+  state.resizeEl.addEventListener("pointerup", _dockUp);
+  state.resizeEl.addEventListener("pointercancel", _dockUp);
 
   // JAG-252: drag the splitter between the file tree and the editor to give more
   // room to the file being read. Width is remembered per browser.
   const savedTree = parseInt(localStorage.getItem(LS_TREE_W) || "", 10);
   if (savedTree) state.treeEl.style.width = savedTree + "px";
   const treeResize = dock.querySelector(".ed-tree-resize");
+  // JAG-3xx: pointer events so the splitter also works by touch — a finger never
+  // produces the mousedown/mousemove pair the old code waited for, so on a phone the
+  // file-tree pane could not be shrunk at all (it stayed at its 210px default).
   let treeDragging = false;
-  treeResize.addEventListener("mousedown", (e) => { treeDragging = true; treeResize.classList.add("active"); e.preventDefault(); });
-  window.addEventListener("mousemove", (e) => {
+  const _treeMove = (e) => {
     if (!treeDragging) return;
     const left = state.treeEl.getBoundingClientRect().left;
-    const w = Math.min(_vw() - 200, Math.max(90, e.clientX - left));
+    const w = Math.min(_vw() - 160, Math.max(70, e.clientX - left));
     state.treeEl.style.width = w + "px";
     localStorage.setItem(LS_TREE_W, String(w));
+  };
+  const _treeUp = () => {
+    if (!treeDragging) return;
+    treeDragging = false;
+    treeResize.classList.remove("active");
+  };
+  treeResize.addEventListener("pointerdown", (e) => {
+    treeDragging = true;
+    treeResize.classList.add("active");
+    try { treeResize.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
   });
-  window.addEventListener("mouseup", () => { treeDragging = false; treeResize.classList.remove("active"); });
+  treeResize.addEventListener("pointermove", _treeMove);
+  treeResize.addEventListener("pointerup", _treeUp);
+  treeResize.addEventListener("pointercancel", _treeUp);
   window.addEventListener("resize", applyResponsive);
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || dock.hidden) return;
@@ -266,12 +304,44 @@ function _vw() { return document.documentElement.clientWidth || window.innerWidt
    The app owns the panel widths and the chat floor, so it exports window._dockMaxW; fall
    back to a plain viewport bound only if it is missing (should never happen). */
 function _dockMaxW() { return (typeof window._dockMaxW === "function") ? window._dockMaxW() : (_vw() - 120); }
+/* JAG-3xx: the visible header height — a fixed overlay must start BELOW it. */
+function _headerH() {
+  const h = document.querySelector("header");
+  const r = h && h.getBoundingClientRect();
+  return (r && r.height > 0) ? Math.round(r.height) : 44;
+}
+/* JAG-3xx: how many px the bottom chrome (chat composer + mobile tab bar) occupies, so
+   a fixed overlay can stop ABOVE it instead of covering buttons the user needs. */
+function _bottomChromeH() {
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  let top = vh;
+  for (const sel of ["#composer", "#tabbar"]) {
+    const el = document.querySelector(sel);
+    if (!el || getComputedStyle(el).display === "none") continue;
+    const r = el.getBoundingClientRect();
+    if (r.height > 0 && r.top < top) top = r.top;
+  }
+  const h = Math.round(vh - top);
+  return (h > 0 && h < vh) ? h : 0;
+}
 function applyResponsive() {
   if (!state.dock) return;
   const overlay = _vw() < 1024;
   state.dock.classList.toggle("ed-overlay", overlay);
   const saved = parseInt(localStorage.getItem(LS_W) || "420", 10);
-  state.dock.style.width = overlay ? "" : (Math.min(saved, _dockMaxW()) + "px");
+  if (overlay) {
+    // JAG-3xx: the fixed overlay ran top:44px -> bottom:0, so on a phone it covered
+    // the chat composer (send) AND the whole bottom tab bar — those buttons looked
+    // DEAD because the dock received every tap. Keep the dock between the real header
+    // and the bottom chrome so both stay visible and tappable.
+    state.dock.style.top = _headerH() + "px";
+    state.dock.style.bottom = _bottomChromeH() + "px";
+    state.dock.style.width = "";
+  } else {
+    state.dock.style.top = "";
+    state.dock.style.bottom = "";
+    state.dock.style.width = Math.min(saved, _dockMaxW()) + "px";
+  }
 }
 
 function activeTab() { return state.tabs[state.active] || null; }

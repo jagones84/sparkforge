@@ -86,15 +86,26 @@ check("D1 the app caps the dock by the room the panels + chat floor leave",
 check("D2 the dock drag is bounded by that cap (not only the viewport)",
       "function _dockMaxW()" in EDITOR
       and "const cap = Math.min(_vw() - 120, _dockMaxW());" in EDITOR
-      and "Math.min(cap, Math.max(320," in EDITOR, "")
-check("D3 releasing the dock resize re-fits the panels",
-      "if (dragging) { dragging = false; _notifyLayout(); }" in EDITOR, "")
+      and "Math.min(cap, Math.max(240," in EDITOR, "")
+check("D3 releasing the dock resize re-fits the panels (pointerup: mouse + touch)",
+      "const _dockUp = () => {" in EDITOR
+      and 'state.resizeEl.addEventListener("pointerup", _dockUp);' in EDITOR
+      and "_notifyLayout();" in EDITOR, "")
 check("D4 a restored dock width is clamped on (re)build and on every responsive pass",
       "Math.min(saved, _dockMaxW())" in EDITOR
       and EDITOR.count("_dockMaxW()") >= 4, "")
 check("D5 the fit maths also caps an already-too-wide dock (self-heal on resize/zoom)",
       "dk.getBoundingClientRect().width / z > cap + 0.5" in HTML
       and "dk.style.width = Math.round(cap)" in HTML, "")
+# JAG-3xx: both dock grips must work by TOUCH (a finger never fires mousedown), and the
+# mobile overlay must stop above the composer + tab bar so those buttons stay tappable.
+check("D6 both editor grips are touch-capable (pointer events + touch-action:none)",
+      "touch-action:none" in EDITOR
+      and 'addEventListener("pointerdown"' in EDITOR
+      and "setPointerCapture" in EDITOR, "")
+check("D7 the mobile overlay stays clear of the chat composer + tab bar",
+      "function _bottomChromeH()" in EDITOR
+      and "state.dock.style.bottom = _bottomChromeH()" in EDITOR, "")
 
 print("---")
 ok = sum(results)

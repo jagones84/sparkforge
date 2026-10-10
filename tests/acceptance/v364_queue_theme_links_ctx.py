@@ -148,12 +148,22 @@ check("E1 the app's overlay thresholds use the layout viewport (clientWidth)",
 check("E2 the editor dock's overlay decision + drag clamps use the layout viewport",
       "function _vw() { return document.documentElement.clientWidth" in EDITOR
       and "const overlay = _vw() < 1024;" in EDITOR
-      and "_vw() - 120" in EDITOR and "_vw() - 200" in EDITOR, "")
+      and "_vw() - 120" in EDITOR and "_vw() - 160" in EDITOR, "")
 check("E3 the viewport meta is mobile-ready (device-width + viewport-fit)",
       'name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"' in HTML, "")
 check("E4 on a phone the chat column drops its desktop 420px floor (no right-edge clip)",
       '[data-col="chat"] { min-width: 0; }' in HTML
       and 'min-width: 420px; display: flex; flex-direction: column' in HTML, "")
+# JAG-3xx: on a phone the settings' fixed 190px nav column left no room and could not be
+# reduced — it is now a horizontal TOP tab strip inside a full-screen window.
+check("E5 on a phone the settings nav is a top tab strip (no fixed left column)",
+      "@media (max-width: 640px)" in HTML
+      and "#settingsWin .sw-nav { flex: 0 0 auto; display: flex" in HTML, "")
+# JAG-3xx: the settings window drag/resize must work by touch, so it uses pointer events.
+check("E6 the settings window is movable/resizable by touch (pointer events)",
+      'handle.addEventListener("pointerdown", e => {' in HTML
+      and "handle.setPointerCapture(e.pointerId)" in HTML
+      and "function _clampBox(box)" in HTML, "")
 
 print("---")
 ok = sum(results)

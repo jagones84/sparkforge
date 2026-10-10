@@ -131,6 +131,28 @@ All notable changes to SparkForge are documented here. The format follows
   a thin façade — imports, constants, `stream_with_fallback` and the re-export blocks.
 
 ### Fixed
+- **Mobile WebUI: the editor's file-tree pane and the settings nav could not be resized
+  on a phone, and the editor overlay covered the bottom buttons (JAG-3xx).** Three
+  touch-unusable spots, all reported from a real phone:
+  - the editor dock's two grips (`.ed-resize`, `.ed-tree-resize`) dragged with
+    `mousedown`/`mousemove`/`mouseup` only — a finger fires *pointer* events, so on touch
+    the file tree stayed stuck at its 210px default (over half the dock) and the dock
+    width could not be changed at all. Both now use **pointer events** (with
+    `setPointerCapture`) + `touch-action:none`, a wider grip, and a 150px default tree on
+    coarse pointers.
+  - the settings window's nav was a fixed 190px column with no handle; the window
+    drag/resize (`dragify`/`resizify`) was mouse-only, and a position saved on a wide
+    desktop could land OFF-SCREEN on a phone. On ≤640px the nav is now a horizontal **top
+    tab strip** inside a full-screen window (no left column to fight), the drag/resize use
+    pointer events, and the window is clamped into the viewport on open.
+  - the editor dock's mobile overlay ran `top:44px -> bottom:0`, so it covered the chat
+    composer (send) and the whole `#tabbar` — those buttons looked DEAD because the dock
+    received every tap. The overlay now stops between the real header height and the
+    bottom chrome (`_headerH` / `_bottomChromeH`), so both stay visible and tappable.
+  Verified under Chrome DevTools device emulation (412×915, touch): `elementFromPoint` on
+  `send` and on every tab-bar button now returns the button itself, and a synthetic touch
+  drag shrinks the file tree (102 → 70). Desktop path re-checked (dock stays a column, nav
+  stays a 190px column). `v364`/`v368` assertions updated + extended; battery 121/121.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire
