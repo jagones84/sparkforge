@@ -535,7 +535,13 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=Non
                 if usage is not None and isinstance(chunk.get("usage"), dict):
                     usage.update(chunk["usage"])
                 delta = ((chunk.get("choices") or [{}])[0].get("delta")) or {}
-                rc = delta.get("reasoning_content")
+                # JAG-383: the reasoning delta has NO single name across providers —
+                # llama.cpp / vLLM (OpenAI-compat) use `reasoning_content`, OpenRouter
+                # uses `reasoning` (+ a structured `reasoning_details`). Reading only
+                # `reasoning_content` silently DROPPED every OpenRouter model's chain of
+                # thought (e.g. deepseek-v4.1-flash), so the live CoT drawer and the
+                # persisted `reasoning` stayed empty ("I can't see thoughts").
+                rc = delta.get("reasoning_content") or delta.get("reasoning")
                 c = delta.get("content")
                 piece = (rc or "") + (c or "")
                 if rg is not None and piece and rg.feed(piece):
@@ -570,9 +576,13 @@ def _router_stream(messages, model, on_delta, timeout=300, usage=None, guard=Non
         if usage is not None and isinstance(data.get("usage"), dict):
             usage.update(data["usage"])
         msg = (data.get("choices") or [{}])[0].get("message") or {}
-        rc = msg.get("reasoning_content") or ""
+        rc = msg.get("reasoning_content") or msg.get("reasoning") or ""
         c = msg.get("content") or ""
         if rc:
+            # JAG-383: append BEFORE emitting, exactly like the streaming branch — the
+            # caller persists the RETURNED think, so emitting without appending streamed
+            # the reasoning live but saved `reasoning: null` (thoughts lost on reload).
+            think.append(rc)
             on_delta("think", rc)
         clean, embedded = strip_think(c)
         if embedded:

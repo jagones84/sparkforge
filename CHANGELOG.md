@@ -191,6 +191,21 @@ All notable changes to SparkForge are documented here. The format follows
   fully on screen. Verified live (Chrome DevTools, 360 & 412 touch): the model button reads
   its full name (190px), every composer control hit-tests to itself, and the menu opens
   within the viewport (44 entries). `v282` extended; battery 121/121.
+- **The LLM's chain-of-thought was silently DROPPED for OpenRouter models (JAG-383).** The
+  reasoning delta has no single field name across providers: llama.cpp / vLLM
+  (OpenAI-compatible) stream `delta.reasoning_content`, but OpenRouter streams
+  `delta.reasoning` (+ a structured `reasoning_details`). `_router_stream` read only
+  `reasoning_content`, so every OpenRouter reasoning model — including the A8 Master's
+  `deepseek/deepseek-v4.1-flash` — emitted NO thoughts: the live CoT drawer stayed empty
+  and the persisted `reasoning` was null ("I can't see thoughts"). The parser now accepts
+  both names, in the streaming path AND the non-streaming fallback. A second, latent bug
+  surfaced in the fallback: it emitted `rc` via `on_delta` but never appended it to the
+  returned `think`, so a fallback turn streamed the reasoning yet persisted
+  `reasoning: null`; it now appends before emitting, exactly like the streaming branch.
+  Verified live (Chrome DevTools, 412×915 touch): an OpenRouter turn fills the CoT drawer
+  (2655 chars) and persists `reasoning` in the session. New `v383` (7/7, transport stubbed
+  — OpenRouter `reasoning`, local `reasoning_content`, and the fallback); battery
+  121 → 122 (`README` count updated).
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire
