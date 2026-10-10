@@ -53,6 +53,16 @@ TOOL_SCHEMAS = {
         "properties": {
             "command": {"type": "string", "description": "shell command to execute"},
             "timeout_secs": {"type": "integer", "description": "optional timeout override"},
+            # JAG-386: the model naturally reaches for `cwd` (the `git` tool
+            # documents it), but the shell only honoured an undocumented
+            # `workspace` key — so an explicit working directory was silently
+            # ignored and the command ran in the session workspace. `cwd` is now
+            # the advertised name (mirrors `git`); a relative `cwd` resolves
+            # against the server process cwd, like any shell.
+            "cwd": {"type": "string",
+                    "description": ("optional working directory (default: the "
+                                    "session workspace); relative paths resolve "
+                                    "against the server process cwd")},
         },
         "required": ["command"],
         "subject": "command",
@@ -568,6 +578,20 @@ def classify(tool, args, workspace=None):
         # approval the user never asked for (policy `auto` ignored).
         if p and not _under(p, workspace) and not _under(p, workspace_dir()):
             return "required", "path outside the session workspace"
+    # JAG-386: a shell command that pins an explicit `cwd` OUTSIDE the session
+    # workspace is the shell analogue of the fs.* rule above — confirm it. It
+    # runs AFTER the approvals.mode=full early-return, so `full`/`yolo` stay
+    # ungated (the operator explicitly opted out). The chat loop injects the
+    # session workspace into `workspace`, which is always INSIDE, so only a
+    # genuinely external `cwd` escalates. A relative `cwd` resolves against the
+    # server process cwd — the same dir the host subprocess will actually use.
+    if workspace and tool == "shell" \
+            and str(ap.get("outside_workspace", "required")).lower() == "required":
+        _cwd = (args or {}).get("cwd")
+        if _cwd:
+            p = os.path.realpath(str(_cwd))
+            if not _under(p, workspace) and not _under(p, workspace_dir()):
+                return "required", "shell cwd outside the session workspace"
     if spec["approval"] == "auto":
         return "auto", "tool policy is 'auto'"
     hit = _match(spec["auto_approve"], subject)

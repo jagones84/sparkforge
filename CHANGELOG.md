@@ -228,6 +228,20 @@ All notable changes to SparkForge are documented here. The format follows
   `#cotDrawer` element, `cotFeed`/`cotText` are `undefined`, and a `pushThink`/`flushThink`
   probe lands in exactly ONE inline `.think` block (`msg ai`) with zero bottom strip.
   `v274` extended (3 guards); battery stays 123/123.
+- **The `shell` tool ignored an explicit working directory — `cwd` was silently dropped
+  (JAG-386).** Reported: a command asked to run in a specific repo started from the SESSION
+  workspace instead. The `shell` schema advertised neither `cwd` nor `workspace`, and
+  `_shell` only read an UNDOCUMENTED `workspace` key, so the `cwd` the model emitted — the
+  very name the `git` tool documents — was ignored, and the chat loop's auto-injected
+  session workspace won. `cwd` is now a first-class property of the `shell` schema (mirrors
+  `git`), WINS over `workspace`, and is validated up front (a missing dir returns
+  `cwd not found` instead of a subprocess traceback). A relative `cwd` resolves against the
+  server process cwd, like any shell. A new approval rule mirrors the `fs.*` one: a `cwd`
+  OUTSIDE the session workspace escalates to `required` (unless `approvals.mode=full`, which
+  is the operator's explicit opt-out). New `v386` (14/14, `sandbox.run` stubbed — schema
+  advertises `cwd`, `cwd` reaches the sandbox and beats `workspace`, back-compat, missing
+  dir rejected without executing, and the inside/outside/full/relative gate); battery
+  123 → 124.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire
