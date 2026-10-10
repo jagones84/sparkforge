@@ -251,6 +251,21 @@ All notable changes to SparkForge are documented here. The format follows
   Global-approval-policy card on the approvals/config screen states the rule. `v386` extended
   (17/17) with the root tier, the root-vs-workspace distinction, the `full` bypass, and two
   static guards on the caption; battery stays 124/124.
+- **The session workspace now bounds EVERY tool — the `shell` cwd limit was a half-measure
+  (JAG-388).** The `cwd` gate (JAG-386/387) only checked the `cwd` PARAMETER, so the model
+  could still escape by writing the escape INTO the command: with `shell.approval` set to
+  `auto` (and the old `outside_workspace` toggle on `auto`), `cd /fuori && rm -rf x` — and even
+  `ls && cd /fuori && rm -rf x`, which rode the auto-approval of the leading `ls` — ran with
+  NO approval. There is now ONE rule, in `registry.classify`, applied to EVERY tool that
+  names a filesystem path: anything that lands OUTSIDE the session workspace is `required`.
+  It covers fs.* / diff (`path`), git (`cwd`) and shell (its `cwd`, any `cd`/`pushd`/`-C`,
+  and any absolute / `~` / `..` word in the command). The per-tool `approval: auto` and the
+  `outside_workspace` toggle can no longer defeat it — only `approvals.mode=full` (the
+  operator's explicit opt-out) relaxes the boundary. System/scratch trees (`/usr`, `/bin`,
+  `/lib`, `/dev`, `/proc`, `/sys`, `/tmp`, ...) and the agent's own sandbox stay "inside", so
+  ordinary commands (`ls /usr/bin`, `echo x > /tmp/y`) are unaffected; `/etc`, `/root` and
+  other repos still escalate. The inert `Outside workspace` toggle was removed from the
+  policy card and its caption rewritten. `v386` extended to 22/22; battery stays 124/124.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire

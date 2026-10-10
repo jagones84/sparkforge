@@ -15,11 +15,12 @@ This suite freezes the fix:
   D) `workspace` alone still works (back-compat);
   E) a missing `cwd` is rejected up front and nothing is executed;
   F) an empty command is still rejected;
-  G) approval policy (JAG-387, two tiers): a `cwd` OUTSIDE every allowed root, or
-     inside a root but outside the session workspace, escalates to `required`
-     (normal mode); inside the workspace stays `auto`; `mode=full` disables the
-     gate entirely; a RELATIVE `cwd` resolves against the server process cwd.
-  H) the approvals screen (policy card caption) documents the cwd rule.
+  G) (JAG-388) the SESSION WORKSPACE bounds EVERY tool: a shell cwd / `cd` / `-C`
+     / absolute path word, a fs.* path, or a git `cwd` that lands OUTSIDE it is
+     `required`, regardless of the per-tool policy and of the (now inert)
+     `outside_workspace` toggle; only `mode=full` relaxes it. A RELATIVE path
+     resolves against the session workspace; system/scratch trees stay auto.
+  H) the approvals screen (policy card caption) documents the rule.
 
 Deterministic, no model, no network. `sandbox.run` is stubbed, so no command is
 ever really executed.
@@ -116,58 +117,79 @@ check("E2 the sandbox is NOT called for a bad cwd", _calls == [], str(_calls))
 check("F1 an empty command is still rejected",
       tools._shell({"command": "   "}, "r5").get("ok") is False)
 
-# --- G: approval policy for an external cwd ----------------------------------
+# --- G: the session workspace bounds EVERY tool (JAG-388) ---------------------
 _cfg = json.loads(json.dumps(registry.load_config()))
 _cfg.setdefault("approvals", {})
 _cfg["approvals"]["mode"] = "normal"
-_cfg["approvals"]["outside_workspace"] = "required"
+# the OLD toggle must no longer defeat the boundary — prove it:
+_cfg["approvals"]["outside_workspace"] = "auto"
+# independent of whatever the live overlay set the shell policy to:
+_cfg.setdefault("tools", {}).setdefault("shell", {})["approval"] = "required"
 _real_load = registry.load_config
 registry.load_config = lambda reload=False: _cfg
+
+
+def _dec(tool, args):
+    return registry.classify(tool, args, workspace=wc)
+
+
 try:
     wc = wsdir("G")
     inside = os.path.join(wc, "sub")
     os.makedirs(inside, exist_ok=True)
-    outside_ws = wsdir("Groot")   # under a root, but NOT the session workspace
-    outside_root = tmp            # outside every allowed root
-    check("G1 cwd INSIDE the session workspace stays auto (read-only command)",
-          registry.classify("shell", {"command": "pwd", "cwd": inside},
-                            workspace=wc)[0] == "auto",
-          str(registry.classify("shell", {"command": "pwd", "cwd": inside}, workspace=wc)))
-    check("G2 cwd inside a root but OUTSIDE the session workspace -> required",
-          registry.classify("shell", {"command": "pwd", "cwd": outside_ws},
-                            workspace=wc)[0] == "required",
-          str(registry.classify("shell", {"command": "pwd", "cwd": outside_ws}, workspace=wc)))
+    outside = wsdir("Goutside")   # a real dir OUTSIDE the workspace
+    check("G1 a shell cwd INSIDE the workspace stays auto (read-only command)",
+          _dec("shell", {"command": "pwd", "cwd": inside})[0] == "auto",
+          str(_dec("shell", {"command": "pwd", "cwd": inside})))
+    check("G2 a shell cwd OUTSIDE the workspace -> required",
+          _dec("shell", {"command": "pwd", "cwd": outside})[0] == "required",
+          str(_dec("shell", {"command": "pwd", "cwd": outside})))
     check("G3 no cwd -> the normal policy applies (read-only command auto)",
-          registry.classify("shell", {"command": "pwd"}, workspace=wc)[0] == "auto",
-          str(registry.classify("shell", {"command": "pwd"}, workspace=wc)))
+          _dec("shell", {"command": "pwd"})[0] == "auto",
+          str(_dec("shell", {"command": "pwd"})))
+    # the REAL escape: an auto-approved read command that CHAINS a cd outside
+    check("G4 `ls && cd /fuori` cannot ride the auto-approve of `ls`",
+          _dec("shell", {"command": "ls && cd /fuori && rm -rf x"})[0] == "required",
+          str(_dec("shell", {"command": "ls && cd /fuori && rm -rf x"})))
+    check("G5 a bare `cd /fuori && cmd` is required",
+          _dec("shell", {"command": "cd /fuori && cmd"})[0] == "required",
+          str(_dec("shell", {"command": "cd /fuori && cmd"})))
+    check("G6 reading an absolute path OUTSIDE the ws (`cat /etc/shadow`) -> required",
+          _dec("shell", {"command": "cat /etc/shadow"})[0] == "required",
+          str(_dec("shell", {"command": "cat /etc/shadow"})))
+    check("G7 a system/scratch path (`ls /usr/bin`, `echo x > /tmp/y`) stays auto",
+          _dec("shell", {"command": "ls /usr/bin"})[0] == "auto"
+          and _dec("shell", {"command": "echo x > /tmp/y"})[0] == "auto",
+          str(_dec("shell", {"command": "ls /usr/bin"})))
+    check("G8 fs.read OUTSIDE the ws -> required, INSIDE -> auto",
+          _dec("fs.read", {"path": os.path.join(outside, "f.txt")})[0] == "required"
+          and _dec("fs.read", {"path": os.path.join(inside, "f.txt")})[0] == "auto",
+          str(_dec("fs.read", {"path": os.path.join(outside, "f.txt")})))
+    check("G9 `git -C` OUTSIDE the ws -> required",
+          _dec("git", {"args": "status", "cwd": outside})[0] == "required",
+          str(_dec("git", {"args": "status", "cwd": outside})))
     _cwd0 = os.getcwd()
     os.chdir(wc)
     try:
-        check("G4 a RELATIVE cwd resolves against the server process cwd",
-              registry.classify("shell", {"command": "pwd", "cwd": "sub"},
-                                workspace=wc)[0] == "auto",
-              str(registry.classify("shell", {"command": "pwd", "cwd": "sub"}, workspace=wc)))
+        check("G11 a RELATIVE cwd inside the ws stays auto",
+              _dec("shell", {"command": "pwd", "cwd": "sub"})[0] == "auto",
+              str(_dec("shell", {"command": "pwd", "cwd": "sub"})))
     finally:
         os.chdir(_cwd0)
-    check("G6 cwd OUTSIDE every allowed root -> required (root tier)",
-          registry.classify("shell", {"command": "pwd", "cwd": outside_root},
-                            workspace=wc)[0] == "required",
-          str(registry.classify("shell", {"command": "pwd", "cwd": outside_root}, workspace=wc)))
     _cfg["approvals"]["mode"] = "full"
-    check("G5 approvals.mode=full disables the cwd gate (root or workspace)",
-          registry.classify("shell", {"command": "pwd", "cwd": outside_root},
-                            workspace=wc)[0] == "auto",
-          str(registry.classify("shell", {"command": "pwd", "cwd": outside_root}, workspace=wc)))
+    check("G10 approvals.mode=full disables the whole boundary",
+          _dec("shell", {"command": "cat /etc/shadow"})[0] == "auto"
+          and _dec("fs.read", {"path": os.path.join(outside, "f.txt")})[0] == "auto")
 finally:
     registry.load_config = _real_load
 
-# --- H: the approvals screen documents the cwd rule (JAG-387) ----------------
+# --- H: the approvals screen documents the rule (JAG-388) --------------------
 with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as _f:
     _HTML = _f.read()
-check("H1 the approval-policy card documents the shell cwd rule",
-      "a shell <b>cwd</b>" in _HTML, "")
-check("H2 the caption spells out FULL = unrestricted, otherwise shells need approval",
-      "may point anywhere" in _HTML and "needs approval" in _HTML, "")
+check("H1 the policy card states the universal, mode-governed rule",
+      "outside the session workspace" in _HTML and "enforced in code" in _HTML, "")
+check("H2 the now-inert `Outside workspace` toggle is gone from the UI",
+      'mk("outside_workspace"' not in _HTML and "Outside workspace</span>" not in _HTML, "")
 
 print("---")
 passed = sum(results)

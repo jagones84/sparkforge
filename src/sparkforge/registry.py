@@ -541,12 +541,95 @@ def _under(path, root):
         return False
 
 
+# JAG-388: THE session workspace is the boundary for EVERY tool. Anything that
+# reaches outside it needs approval — governed by approvals.mode ALONE (mode=full
+# is the operator's explicit opt-out). These helpers decide, for a concrete
+# action, whether it touches a path OUTSIDE the session workspace.
+#
+# System / scratch trees an ordinary command legitimately references without
+# meaning to leave the workspace (`/usr/bin/python3`, `/tmp/...`, `/dev/null`).
+# Deliberately NOT included: `/etc`, `/root`, `/home` (other users / other repos)
+# — those still escalate.
+_SYSTEM_ROOTS = ("/usr", "/bin", "/sbin", "/lib", "/lib64", "/dev", "/proc",
+                 "/sys", "/run", "/tmp", "/opt", "/snap")
+# a shell word (no quotes / operators); we then look for path-like words
+_SHELL_WORD = re.compile(r"[^\s;|&()<>'\"]+")
+
+
+def _is_system(path):
+    return any(path == r or path.startswith(r + "/") for r in _SYSTEM_ROOTS)
+
+
+def _resolve_any(raw, base):
+    """Absolute-ize a path-like token: expand `~`, join a RELATIVE path against
+    `base` (the session workspace), then realpath. None when unresolvable."""
+    try:
+        p = os.path.expanduser(str(raw).strip("'\""))
+    except Exception:  # noqa: BLE001
+        return None
+    if not os.path.isabs(p):
+        p = os.path.join(base or os.getcwd(), p)
+    return os.path.realpath(p)
+
+
+def _shell_paths(command):
+    """Path-like words in a shell command: absolute, `~`, `./`/`../`, plus the
+    argument of a directory-changing builtin/flag (`cd`/`pushd`/`-C`). Best-effort:
+    it bounds the EXPLICIT intent, which is what an approval gate can review."""
+    out = []
+    prev = ""
+    for w in _SHELL_WORD.findall(command or ""):
+        cand = None
+        if w.startswith(("/", "~", "./", "../")) or w == "..":
+            cand = w
+        elif w.startswith("--directory="):
+            cand = w.split("=", 1)[1]
+        elif prev in ("cd", "pushd", "-C", "--directory"):
+            cand = w
+        prev = w
+        if cand:
+            out.append(cand)
+    return out
+
+
+def touches_outside(tool, args, workspace):
+    """JAG-388: a reason string if `tool` reaches OUTSIDE the session workspace,
+    else None. Applies to EVERY tool that names a filesystem path: fs.* / diff
+    (`path`), git (`cwd`), and shell (its `cwd`, any `cd`/`-C`, and any absolute /
+    `~` / `..` word). The agent's own sandbox scratch and the system/scratch trees
+    are treated as inside. Only meaningful when a session `workspace` is set."""
+    if not workspace:
+        return None
+    a = args or {}
+    paths = []
+    if tool in ("fs.read", "fs.write", "fs.edit", "diff"):
+        if a.get("path"):
+            paths.append(str(a["path"]))
+    elif tool == "git":
+        if a.get("cwd") or a.get("workspace"):
+            paths.append(str(a.get("cwd") or a.get("workspace")))
+    elif tool == "shell":
+        if a.get("cwd"):
+            paths.append(str(a["cwd"]))
+        paths.extend(_shell_paths(str(a.get("command", ""))))
+    else:
+        return None
+    for raw in paths:
+        p = _resolve_any(raw, workspace)
+        if p is None:
+            continue
+        if _under(p, workspace) or _under(p, workspace_dir()) or _is_system(p):
+            continue
+        return "path outside the session workspace: %s" % p
+    return None
+
+
 def classify(tool, args, workspace=None):
     """Approval decision for a concrete action.
 
-    JAG-127: when a `workspace` is given, a file op (fs.read/write/edit) targeting
-    a path OUTSIDE it is always `required` — reading or writing outside the folder
-    the user opened must be confirmed, even if the tool policy is 'auto'.
+    JAG-388: when a session `workspace` is given, ANY action — a file op, a git
+    repo, or a shell command — that reaches a path OUTSIDE it is `required`,
+    regardless of the per-tool policy. Only `approvals.mode=full` relaxes it.
     Returns (decision, reason) with decision in:
       disabled | denied | auto | required
     """
@@ -561,44 +644,22 @@ def classify(tool, args, workspace=None):
         return "denied", "matches hard-deny pattern %r" % hit
     if spec["approval"] == "denied":
         return "denied", "tool policy is 'denied'"
-    # JAG-127c: global approval switch, set from the Config panel (persisted in
-    # the overlay). `full` = never ask for anything (hard-deny/disabled still
-    # win); `outside_workspace` = required|auto controls the sandbox-escalation.
+    # JAG-127c/388: global approval switch, set from the Config panel (persisted
+    # in the overlay). `full` = never ask for anything (hard-deny/disabled still
+    # win). It is now the ONLY thing that relaxes the workspace boundary below.
     ap = load_config().get("approvals") or {}
     if str(ap.get("mode", "normal")).lower() in ("full", "auto", "yolo"):
         return "auto", "approvals.mode=full — never ask"
-    if workspace and tool in ("fs.read", "fs.write", "fs.edit") \
-            and str(ap.get("outside_workspace", "required")).lower() == "required":
-        p, _err = resolve_path(str((args or {}).get("path", "")), spec["roots"],
-                               base=workspace)
-        # JAG-127b: the per-run sandbox (data/sandbox/<run>) is the agent's own
-        # scratch area — it is always "inside" even when the session folder is
-        # elsewhere. Without this every sandbox file op was escalated to
-        # `required`, so a `fs.read` on the agent's OWN project raised an
-        # approval the user never asked for (policy `auto` ignored).
-        if p and not _under(p, workspace) and not _under(p, workspace_dir()):
-            return "required", "path outside the session workspace"
-    # JAG-386/387: a shell command that pins an explicit `cwd` is bounded like an
-    # fs op — TWO tiers, both escalated to `required` (never a hard deny):
-    #   * outside every ALLOWED ROOT -> required (the root is the outer boundary)
-    #   * inside a root but outside  -> required (the session workspace is the
-    #     the SESSION WORKSPACE          inner boundary)
-    # Both run AFTER the approvals.mode=full early-return, so `full`/`yolo` stay
-    # ungated (the operator explicitly opted out). The chat loop injects the
-    # session workspace into `workspace`, which is always INSIDE, so only a
-    # genuinely external `cwd` escalates. A relative `cwd` resolves against the
-    # server process cwd — the same dir the host subprocess will actually use.
-    if workspace and tool == "shell" \
-            and str(ap.get("outside_workspace", "required")).lower() == "required":
-        _cwd = (args or {}).get("cwd")
-        if _cwd:
-            _raw = str(_cwd)
-            p = os.path.realpath(_raw)
-            _rp, _rerr = resolve_path(_raw, spec["roots"], base=os.getcwd())
-            if _rerr:
-                return "required", "shell cwd outside the allowed roots"
-            if not _under(p, workspace) and not _under(p, workspace_dir()):
-                return "required", "shell cwd outside the session workspace"
+    # JAG-388: ONE rule for EVERY tool — anything that reaches OUTSIDE the session
+    # workspace needs approval, governed by approvals.mode ALONE. `mode=full` (the
+    # explicit opt-out) already returned above, so here mode != full. Neither the
+    # per-tool `approval: auto` nor the old `outside_workspace` toggle can defeat
+    # it: they used to let `shell.approval: auto` run `cd /fuori && rm -rf x`
+    # silently. Covers fs.* / diff, git, and shell (cwd, `cd`/`-C`, path args).
+    if workspace:
+        _out = touches_outside(tool, args, workspace)
+        if _out:
+            return "required", _out
     if spec["approval"] == "auto":
         return "auto", "tool policy is 'auto'"
     hit = _match(spec["auto_approve"], subject)

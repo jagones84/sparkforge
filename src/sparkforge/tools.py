@@ -53,14 +53,17 @@ def _shell(args, run_id):
     command = str(args.get("command", ""))
     if not command.strip():
         return {"ok": False, "error": "empty command"}
-    # JAG-386: honour an explicit working directory. `cwd` is the advertised name
-    # (mirrors the `git` tool) and WINS over `workspace`; `workspace` stays
-    # supported for back-compat (the chat loop injects the session workspace
-    # under that key, and that is the sensible default cwd). A relative `cwd`
-    # resolves against the server process cwd, exactly like a shell. Validated
-    # up front so a bad dir returns a clear error instead of a subprocess
-    # traceback.
-    cwd = args.get("cwd") or args.get("workspace")
+    # JAG-386/388: honour an explicit working directory. `cwd` is the advertised
+    # name (mirrors the `git` tool) and WINS over `workspace`; `workspace` stays
+    # supported for back-compat (the chat loop injects the session workspace under
+    # that key — the sensible default cwd). A RELATIVE `cwd` resolves against the
+    # session workspace, matching the boundary `registry.touches_outside` checks.
+    # Validated up front so a bad dir returns a clear error, not a traceback.
+    base = args.get("workspace")
+    cwd = args.get("cwd")
+    if cwd and base and not os.path.isabs(str(cwd)):
+        cwd = os.path.join(str(base), str(cwd))
+    cwd = cwd or base
     if cwd and not os.path.isdir(cwd):
         return {"ok": False, "error": "cwd not found: %s" % cwd}
     res = sandbox.run(command, run_id=run_id,

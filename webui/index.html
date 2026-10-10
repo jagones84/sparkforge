@@ -4054,19 +4054,14 @@ function renderTools(el, d) {
   // JAG-127c: global approval policy (persisted server-side in the overlay).
   const pol = (d && d.policy) || {};
   const mode = pol.mode || "normal";
-  const ow = pol.outside_workspace || "required";
   const mk = (k, v, cur, extra) => `<button class="ghost" data-pol="${k}" data-val="${v}" style="${cur === v ? "color:var(--ok);border-color:rgba(74,222,128,.5)" : ""}">${extra || v}</button>`;
   const policyCard =
     `<div class="card" style="margin-bottom:10px">
        <div style="font-weight:600;margin-bottom:6px">🔓 Global approval policy</div>
-       <div class="remaining" style="margin-bottom:8px"><b>FULL</b> = never ask (a shell <b>cwd</b> may point anywhere). <b>Outside workspace</b> = confirm file ops outside the session folder; and, unless FULL, a shell <b>cwd</b> outside the allowed roots or the session folder needs approval.</div>
-       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+       <div class="remaining" style="margin-bottom:8px"><b>FULL</b> = never ask — anything goes, anywhere. Otherwise ANY action that reaches <b>outside the session workspace</b> (file reads/writes, shell commands, git) needs approval. This rule is enforced in code, not by the model.</div>
+       <div style="display:flex;gap:6px;align-items:center">
          <span style="font-size:11px;color:var(--dim);min-width:126px">Approval mode</span>
          ${mk("mode", "normal", mode)} ${mk("mode", "full", mode, "FULL — never ask")}
-       </div>
-       <div style="display:flex;gap:6px;align-items:center">
-         <span style="font-size:11px;color:var(--dim);min-width:126px">Outside workspace</span>
-         ${mk("outside_workspace", "required", ow)} ${mk("outside_workspace", "auto", ow)}
        </div>
      </div>`;
   el.innerHTML = policyCard +
