@@ -59,6 +59,12 @@ nohup.out
 # archify: transient preview dirs left by the architecture-diagram generator.
 .archify-preview-*/
 
+# Working memory kept LOCAL only: the dated historical record (docs/archive) and
+# the superseded test set (tests/legacy — never discovered by the gate, which runs
+# only tests/acceptance/v*.py). Both stay on disk, neither ships in the repo.
+docs/archive/
+tests/legacy/
+
 # Hypothesis property-test database (tests/properties).
 .hypothesis/
 
