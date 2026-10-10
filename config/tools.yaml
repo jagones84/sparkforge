@@ -86,6 +86,13 @@ tools:
   shell:
     enabled: true
     approval: required
+    # JAG-387: allowed roots for an explicit `cwd`. A shell cwd OUTSIDE these
+    # roots (or outside the session workspace) needs approval — unless
+    # approvals.mode=full, which the operator sets to opt out of every gate.
+    # Same roots as the fs.* tools.
+    roots:
+      - "."
+      - "/home/jagones/Repositories"
     # read-only / non-mutating commands are auto-approved (still recorded)
     auto_approve:
       - "^ls(\\s|$)"

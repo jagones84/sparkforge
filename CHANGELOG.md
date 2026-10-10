@@ -242,6 +242,15 @@ All notable changes to SparkForge are documented here. The format follows
   advertises `cwd`, `cwd` reaches the sandbox and beats `workspace`, back-compat, missing
   dir rejected without executing, and the inside/outside/full/relative gate); battery
   123 → 124.
+- **Shell `cwd` policy refined into two approval tiers, root-scoped and documented in the UI
+  (JAG-387).** Follow-up to JAG-386: the boundary is now BOTH the allowed ROOTS and the
+  session workspace — a `cwd` outside every allowed root, or inside a root but outside the
+  session workspace, escalates to `required` (never a hard deny), while `approvals.mode=full`
+  disables the gate entirely (a `cwd` may then point anywhere). The `shell` tool now declares
+  `roots` (same as the `fs.*` tools: `.` + `/home/jagones/Repositories`), and the
+  Global-approval-policy card on the approvals/config screen states the rule. `v386` extended
+  (17/17) with the root tier, the root-vs-workspace distinction, the `full` bypass, and two
+  static guards on the caption; battery stays 124/124.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire

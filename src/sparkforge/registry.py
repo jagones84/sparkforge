@@ -578,9 +578,12 @@ def classify(tool, args, workspace=None):
         # approval the user never asked for (policy `auto` ignored).
         if p and not _under(p, workspace) and not _under(p, workspace_dir()):
             return "required", "path outside the session workspace"
-    # JAG-386: a shell command that pins an explicit `cwd` OUTSIDE the session
-    # workspace is the shell analogue of the fs.* rule above — confirm it. It
-    # runs AFTER the approvals.mode=full early-return, so `full`/`yolo` stay
+    # JAG-386/387: a shell command that pins an explicit `cwd` is bounded like an
+    # fs op — TWO tiers, both escalated to `required` (never a hard deny):
+    #   * outside every ALLOWED ROOT -> required (the root is the outer boundary)
+    #   * inside a root but outside  -> required (the session workspace is the
+    #     the SESSION WORKSPACE          inner boundary)
+    # Both run AFTER the approvals.mode=full early-return, so `full`/`yolo` stay
     # ungated (the operator explicitly opted out). The chat loop injects the
     # session workspace into `workspace`, which is always INSIDE, so only a
     # genuinely external `cwd` escalates. A relative `cwd` resolves against the
@@ -589,7 +592,11 @@ def classify(tool, args, workspace=None):
             and str(ap.get("outside_workspace", "required")).lower() == "required":
         _cwd = (args or {}).get("cwd")
         if _cwd:
-            p = os.path.realpath(str(_cwd))
+            _raw = str(_cwd)
+            p = os.path.realpath(_raw)
+            _rp, _rerr = resolve_path(_raw, spec["roots"], base=os.getcwd())
+            if _rerr:
+                return "required", "shell cwd outside the allowed roots"
             if not _under(p, workspace) and not _under(p, workspace_dir()):
                 return "required", "shell cwd outside the session workspace"
     if spec["approval"] == "auto":

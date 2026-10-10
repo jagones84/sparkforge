@@ -4059,7 +4059,7 @@ function renderTools(el, d) {
   const policyCard =
     `<div class="card" style="margin-bottom:10px">
        <div style="font-weight:600;margin-bottom:6px">🔓 Global approval policy</div>
-       <div class="remaining" style="margin-bottom:8px"><b>FULL</b> = never ask. <b>Outside workspace</b> = confirm file ops outside the session folder.</div>
+       <div class="remaining" style="margin-bottom:8px"><b>FULL</b> = never ask (a shell <b>cwd</b> may point anywhere). <b>Outside workspace</b> = confirm file ops outside the session folder; and, unless FULL, a shell <b>cwd</b> outside the allowed roots or the session folder needs approval.</div>
        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
          <span style="font-size:11px;color:var(--dim);min-width:126px">Approval mode</span>
          ${mk("mode", "normal", mode)} ${mk("mode", "full", mode, "FULL — never ask")}

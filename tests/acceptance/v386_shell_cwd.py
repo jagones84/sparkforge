@@ -15,9 +15,11 @@ This suite freezes the fix:
   D) `workspace` alone still works (back-compat);
   E) a missing `cwd` is rejected up front and nothing is executed;
   F) an empty command is still rejected;
-  G) approval policy: a `cwd` outside the session workspace escalates to
-     `required` (normal mode), inside stays `auto`, `mode=full` disables the gate,
-     and a RELATIVE `cwd` resolves against the server process cwd.
+  G) approval policy (JAG-387, two tiers): a `cwd` OUTSIDE every allowed root, or
+     inside a root but outside the session workspace, escalates to `required`
+     (normal mode); inside the workspace stays `auto`; `mode=full` disables the
+     gate entirely; a RELATIVE `cwd` resolves against the server process cwd.
+  H) the approvals screen (policy card caption) documents the cwd rule.
 
 Deterministic, no model, no network. `sandbox.run` is stubbed, so no command is
 ever really executed.
@@ -125,15 +127,16 @@ try:
     wc = wsdir("G")
     inside = os.path.join(wc, "sub")
     os.makedirs(inside, exist_ok=True)
-    outside = os.path.join(REPO, "data", "v386-outside-%d" % os.getpid())
-    check("G1 cwd INSIDE the workspace stays auto (read-only command)",
+    outside_ws = wsdir("Groot")   # under a root, but NOT the session workspace
+    outside_root = tmp            # outside every allowed root
+    check("G1 cwd INSIDE the session workspace stays auto (read-only command)",
           registry.classify("shell", {"command": "pwd", "cwd": inside},
                             workspace=wc)[0] == "auto",
           str(registry.classify("shell", {"command": "pwd", "cwd": inside}, workspace=wc)))
-    check("G2 cwd OUTSIDE the workspace escalates to required",
-          registry.classify("shell", {"command": "pwd", "cwd": outside},
+    check("G2 cwd inside a root but OUTSIDE the session workspace -> required",
+          registry.classify("shell", {"command": "pwd", "cwd": outside_ws},
                             workspace=wc)[0] == "required",
-          str(registry.classify("shell", {"command": "pwd", "cwd": outside}, workspace=wc)))
+          str(registry.classify("shell", {"command": "pwd", "cwd": outside_ws}, workspace=wc)))
     check("G3 no cwd -> the normal policy applies (read-only command auto)",
           registry.classify("shell", {"command": "pwd"}, workspace=wc)[0] == "auto",
           str(registry.classify("shell", {"command": "pwd"}, workspace=wc)))
@@ -146,13 +149,25 @@ try:
               str(registry.classify("shell", {"command": "pwd", "cwd": "sub"}, workspace=wc)))
     finally:
         os.chdir(_cwd0)
+    check("G6 cwd OUTSIDE every allowed root -> required (root tier)",
+          registry.classify("shell", {"command": "pwd", "cwd": outside_root},
+                            workspace=wc)[0] == "required",
+          str(registry.classify("shell", {"command": "pwd", "cwd": outside_root}, workspace=wc)))
     _cfg["approvals"]["mode"] = "full"
-    check("G5 approvals.mode=full disables the cwd gate",
-          registry.classify("shell", {"command": "pwd", "cwd": outside},
+    check("G5 approvals.mode=full disables the cwd gate (root or workspace)",
+          registry.classify("shell", {"command": "pwd", "cwd": outside_root},
                             workspace=wc)[0] == "auto",
-          str(registry.classify("shell", {"command": "pwd", "cwd": outside}, workspace=wc)))
+          str(registry.classify("shell", {"command": "pwd", "cwd": outside_root}, workspace=wc)))
 finally:
     registry.load_config = _real_load
+
+# --- H: the approvals screen documents the cwd rule (JAG-387) ----------------
+with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as _f:
+    _HTML = _f.read()
+check("H1 the approval-policy card documents the shell cwd rule",
+      "a shell <b>cwd</b>" in _HTML, "")
+check("H2 the caption spells out FULL = unrestricted, otherwise shells need approval",
+      "may point anywhere" in _HTML and "needs approval" in _HTML, "")
 
 print("---")
 passed = sum(results)
