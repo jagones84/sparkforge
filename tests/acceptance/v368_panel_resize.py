@@ -51,9 +51,10 @@ check("B1 a fixed DRAWER is resized through a CSS var (own width, not the column
       "function _drawerVar(key)" in HTML and '"--drawer-w-left"' in HTML
       and '"--drawer-w-right"' in HTML
       and 'document.documentElement.style.setProperty(_drawerVar(key), w + "px")' in HTML, "")
-check("B2 a drawer grip is glued to the drawer's inner edge",
+check("B2 a drawer grip is glued to the drawer's inner edge (centred on the border)",
       "function positionDrawerResizers()" in HTML
-      and 's.el.style.left = Math.round(s.side === "left" ? r.right : r.left) + "px";' in HTML, "")
+      and 'const edge = (s.side === "left") ? r.right : r.left;' in HTML
+      and 's.el.style.left = Math.round(edge - half) + "px";' in HTML, "")
 check("B3 each drawer carries a resizable width + a shown grip",
       'width: var(--drawer-w-right, 300px) !important' in HTML
       and 'body.show-right #resize-right { display: block !important; position: fixed;' in HTML
@@ -106,6 +107,32 @@ check("D6 both editor grips are touch-capable (pointer events + touch-action:non
 check("D7 the mobile overlay stays clear of the chat composer + tab bar",
       "function _bottomChromeH()" in EDITOR
       and "state.dock.style.bottom = _bottomChromeH()" in EDITOR, "")
+
+# --- E: the mobile bottom tab bar drives the REAL drawers (JAG-381) ------------
+# Tapping a tab used to add `#aside.open` + `#backdrop.show`: the screen just dimmed
+# while the drawer stayed `display:none` (mobile base) and its resize grip never
+# appeared. The tab bar must drive the same classes the panel handles do.
+check("E1 a tab opens the real drawer via body.show-left / body.show-right",
+      "function _closeDrawers()" in HTML
+      and 'document.body.classList.add(t.side === "left" ? "show-left" : "show-right");' in HTML
+      and 'document.body.classList.remove("show-left", "show-right");' in HTML, "")
+check("E2 the tab bar maps sessions->left, tasks/context/feed->right inspector",
+      "const _MOBILE_TABS = {" in HTML
+      and 'sessions: { side: "left" }' in HTML
+      and '{ side: "right", insp: "plan" }' in HTML
+      and '{ side: "right", insp: "context" }' in HTML
+      and '{ side: "right", insp: "feed" }' in HTML, "")
+check("E3 the legacy `#aside.open` mechanism is gone",
+      '$("aside").classList.add("open")' not in HTML, "")
+check("E4 the tab bar sits above the dimmer (and the open drawers) so a tab stays tappable",
+      "position: relative; z-index: 18;" in HTML, "")
+check("E5 the mobile drawer grips are finger-sized (16px)",
+      'body.show-left #resize-left { display: block !important; position: fixed;' in HTML
+      and HTML.count("width: 16px; z-index: 16;") >= 2, "")
+check("E6 an open drawer ends ABOVE the tab bar (bottom-chrome clearance)",
+      '"--sf-bottombar"' in HTML
+      and "bottom: var(--sf-bottombar, 0px)" in HTML
+      and HTML.count("var(--sf-bottombar, 0px)") >= 4, "")
 
 print("---")
 ok = sum(results)

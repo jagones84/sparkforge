@@ -501,6 +501,10 @@
     #tabbar {
       display: flex; border-top: 1px solid var(--line); background: rgba(8,10,20,.85); backdrop-filter: blur(12px);
       padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); gap: 6px;
+      /* JAG-381: the nav must stay above the dimmer (z-index 8) AND above the open
+         drawers (15/16) so a tab can be switched directly — else the drawer covers
+         most of the bar and only its exposed sliver responds. */
+      position: relative; z-index: 18;
     }
     #tabbar button { flex: 1; background: transparent; border: 1px solid var(--line); color: var(--dim);
       padding: 9px 4px; font-size: 11px; font-weight: 400; border-radius: 10px; }
@@ -570,11 +574,11 @@
   @media (max-width: 1100px) {
     [data-col="context"] { display: none; }
     .resizer { display: none; }
-    body.show-right [data-col="context"] { display: flex !important; position: fixed; right: 0; top: 44px; bottom: 0; width: var(--drawer-w-right, 300px) !important; transform: none; z-index: 15; box-shadow: -12px 0 30px rgba(0,0,0,.5); }
+    body.show-right [data-col="context"] { display: flex !important; position: fixed; right: 0; top: 44px; bottom: var(--sf-bottombar, 0px); width: var(--drawer-w-right, 300px) !important; transform: none; z-index: 15; box-shadow: -12px 0 30px rgba(0,0,0,.5); }
     /* JAG-368: a fixed DRAWER gets a draggable grip on its INNER edge (left, for the
        right drawer) so the inspector can be widened on a phone too. Positioned in JS. */
-    body.show-right #resize-right { display: block !important; position: fixed; top: 44px; bottom: 0;
-      width: 8px; z-index: 16; background: transparent; touch-action: none; }
+    body.show-right #resize-right { display: block !important; position: fixed; top: 44px; bottom: var(--sf-bottombar, 0px);
+      width: 16px; z-index: 16; background: transparent; touch-action: none; }
     body.show-right #resize-right.active { background: var(--accent); }
   }
   /* JAG-358: the sessions drawer must cover the SAME range the fixed #aside uses
@@ -584,10 +588,10 @@
      drawer never actually slid in on screen. */
   @media (max-width: 900px) {
     [data-col="sessions"] { display: none; }
-    body.show-left #aside { display: flex !important; position: fixed; left: 0; right: auto; top: 44px; bottom: 0; width: var(--drawer-w-left, 260px) !important; transform: none; z-index: 15; box-shadow: 12px 0 30px rgba(0,0,0,.5); }
+    body.show-left #aside { display: flex !important; position: fixed; left: 0; right: auto; top: 44px; bottom: var(--sf-bottombar, 0px); width: var(--drawer-w-left, 260px) !important; transform: none; z-index: 15; box-shadow: 12px 0 30px rgba(0,0,0,.5); }
     /* JAG-368: the left DRAWER gets a draggable grip on its inner (right) edge. */
-    body.show-left #resize-left { display: block !important; position: fixed; top: 44px; bottom: 0;
-      width: 8px; z-index: 16; background: transparent; touch-action: none; }
+    body.show-left #resize-left { display: block !important; position: fixed; top: 44px; bottom: var(--sf-bottombar, 0px);
+      width: 16px; z-index: 16; background: transparent; touch-action: none; }
     body.show-left #resize-left.active { background: var(--accent); }
   }
   /* JAG-124: workspace file tree + editor */
@@ -3967,14 +3971,43 @@ function connectFeed() {
 let _ctxT;
 function loadCtxSoon() { clearTimeout(_ctxT); _ctxT = setTimeout(loadCtx, 300); }
 
-/* ---- mobile tabs / drawer ---- */
-function openTab(name) {
+/* ---- mobile tabs / drawer ----
+   JAG-381: the bottom tab bar must drive the SAME mechanism the desktop panel
+   toggles use (`body.show-left` / `body.show-right`) — NOT the legacy `#aside.open`.
+   Before this, tapping "sessions" only added `#aside.open` + `#backdrop.show`: the
+   backdrop dimmed the screen, but `[data-col="sessions"]{display:none}` (mobile base)
+   still won because only `body.show-left #aside` re-shows the drawer — so the drawer
+   never appeared and the resize grip (also gated on `body.show-left`) never existed.
+   `sessions` -> left drawer; `tasks`/`context`/`feed` -> right inspector drawer with
+   the matching section focused; a second tap on the active tab (or `chat`) closes. */
+const _MOBILE_TABS = {
+  sessions: { side: "left" },
+  tasks:    { side: "right", insp: "plan" },
+  context:  { side: "right", insp: "context" },
+  feed:     { side: "right", insp: "feed" },
+};
+function _setTabbarActive(name) {
   document.querySelectorAll("#tabbar button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
-  if (name === "chat") return closeAside();
-  $("aside").classList.add("open");
-  $("backdrop").classList.add("show");
 }
-function closeAside() { $("aside").classList.remove("open"); $("backdrop").classList.remove("show"); }
+function _closeDrawers() {
+  document.body.classList.remove("show-left", "show-right");
+  const bd = $("backdrop"); if (bd) bd.classList.remove("show");
+}
+function openTab(name) {
+  const btn = document.querySelector('#tabbar button[data-tab="' + name + '"]');
+  const wasActive = !!btn && btn.classList.contains("active");
+  _closeDrawers();
+  if (name === "chat" || wasActive) { _setTabbarActive("chat"); _settleHandles(); return; }
+  _setTabbarActive(name);
+  const t = _MOBILE_TABS[name];
+  if (t) {
+    if (t.insp) focusInsp(t.insp);
+    document.body.classList.add(t.side === "left" ? "show-left" : "show-right");
+    $("backdrop").classList.add("show");
+  }
+  _settleHandles();
+}
+function closeAside() { _closeDrawers(); _setTabbarActive("chat"); }
 
 /* JAG-105: destructive actions ask ONCE, with a "don't ask again" checkbox that
  * suppresses the prompt until the page is reloaded (the user's "once per
@@ -5693,6 +5726,12 @@ function _drawerVar(key) { return key === "sf_w_left" ? "--drawer-w-left" : "--d
 /* Place each grip on the INNER edge of its panel while that panel is an on-screen
    drawer (its flex position is meaningless then — it is position:fixed). */
 function positionDrawerResizers() {
+  // JAG-381: publish the bottom-chrome height so an open drawer (and its grip) ends
+  // ABOVE the mobile tab bar instead of under it — the nav must stay reachable, not
+  // hidden behind the drawer. On desktop the tab bar is display:none, so this is 0.
+  const tb = document.getElementById("tabbar");
+  const bh = (tb && getComputedStyle(tb).display !== "none") ? tb.offsetHeight : 0;
+  document.documentElement.style.setProperty("--sf-bottombar", bh + "px");
   const spec = [
     { el: $("resize-left"), sel: '[data-col="sessions"]', side: "left" },
     { el: $("resize-right"), sel: '[data-col="context"]', side: "right" },
@@ -5702,7 +5741,12 @@ function positionDrawerResizers() {
     const col = document.querySelector(s.sel);
     if (!_isDrawer(col) || !_panelShown(s.sel)) { s.el.style.left = ""; s.el.style.right = ""; continue; }
     const r = col.getBoundingClientRect();
-    s.el.style.left = Math.round(s.side === "left" ? r.right : r.left) + "px";
+    // JAG-381: centre the (now 16px, touch-sized) grip ON the border so half lies over
+    // the drawer and half over the chat — an 8px sliver was too thin for a finger.
+    // offsetWidth is 0 while hidden, so fall back to the CSS default.
+    const half = Math.round((s.el.offsetWidth || 16) / 2);
+    const edge = (s.side === "left") ? r.right : r.left;
+    s.el.style.left = Math.round(edge - half) + "px";
     s.el.style.right = "";
   }
 }

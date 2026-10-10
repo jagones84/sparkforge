@@ -163,6 +163,23 @@ All notable changes to SparkForge are documented here. The format follows
   `send` and on every tab-bar button now returns the button itself, and a synthetic touch
   drag shrinks the file tree (102 → 70). Desktop path re-checked (dock stays a column, nav
   stays a 190px column). `v364`/`v368` assertions updated + extended; battery 121/121.
+- **Mobile WebUI: the bottom tab bar only DIMMED the screen, and the sessions panel could
+  not be resized (JAG-381).** Two connected defects, both reported from a real phone:
+  - the tab bar drove a DEAD mechanism: `openTab()` added `#aside.open` + `#backdrop.show`,
+    but the mobile CSS shows the drawer only via `body.show-left #aside` while the base
+    `[data-col="sessions"]{display:none}` still won — so the backdrop dimmed the screen and
+    NOTHING opened. The tab bar now drives the SAME classes the desktop panel handles use
+    (`show-left` for `sessions`; `show-right` for `tasks`/`context`/`feed`, each focusing its
+    inspector section); a second tap on the active tab (or `chat` / the backdrop) closes.
+  - the drawer's resize grip (gated on `body.show-left`) therefore never appeared either —
+    and once shown it was an 8px sliver, too thin for a finger. It is now 16px and centred
+    ON the border; an open drawer also ends ABOVE the tab bar (`--sf-bottombar`, published
+    from the tab bar's own height) so the nav is never covered, and the bar out-stacks the
+    dimmer and the drawers (z-index 18) so every tab stays tappable while a drawer is open.
+  Verified live (Chrome DevTools, 412×915 touch): tapping `sessions` opens the drawer
+  (`display:flex`, width 260), a synthetic touch drag on the grip resizes it 260→320, all
+  five tabs hit-test to themselves with the drawer open, and `tasks`/`context`/`feed` open
+  the right inspector. `v368` extended (E1–E6); battery 121/121.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire
