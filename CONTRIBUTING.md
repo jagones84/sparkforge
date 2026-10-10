@@ -54,7 +54,7 @@ bash tests/battery.sh          # → === battery: 125/125 GREEN ===
 | Path | What |
 |---|---|
 | `src/sparkforge/` | the harness package (server, agents, jobs, teams, taskgraph, tools, providers, …) |
-| `src2/orbit_beta/` | the Orbit mission-control deck (beta) |
+| `src/sparkforge/orbit/` | the Orbit command deck (`/orbit`) |
 | `webui/` | the main single-file WebUI |
 | `tests/acceptance/` | the deterministic gate (auto-discovered) |
 | `docs/` | architecture, CLI, testing playbook, and the historical record |

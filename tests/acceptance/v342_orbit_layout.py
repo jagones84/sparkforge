@@ -15,7 +15,7 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-HTML = open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8").read()
+HTML = open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8").read()
 
 results = []
 

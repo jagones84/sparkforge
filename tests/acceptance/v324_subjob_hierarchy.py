@@ -28,7 +28,7 @@ os.environ["SPARKFORGE_JOBS_FILE"] = os.path.join(TMP, "jobs.json")
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 from sparkforge import agents, jobs, taskgraph as tg  # noqa: E402
 
@@ -97,7 +97,7 @@ check("C4 the STORED job is untouched by the read-only enrichment",
 
 # ---- D: the constellation payload carries the subjob level ----------------
 try:
-    from orbit_beta import api as oapi
+    from sparkforge.orbit import api as oapi
     payload = oapi._subjobs_of(
         [{"id": "A1", "session": "s1"}],
         [{"id": "J1", "subjobs": {"J1.1": {"id": "J1.1", "agent": "A1", "deps": [],
@@ -113,7 +113,7 @@ except Exception as e:  # noqa: BLE001
 t = read("src", "sparkforge", "taskgraph.py")
 s = read("src", "sparkforge", "server.py") + read("src", "sparkforge", "httpapi.py")
 j = read("src", "sparkforge", "jobs.py")
-o = read("src2", "orbit_beta", "web", "orbit.html")
+o = read("src", "sparkforge", "orbit", "web", "orbit.html")
 i = read("webui", "index.html")
 check("E1 add_node tags the node with the graph subjob", '"subjob": graph.get("subjob")' in t)
 check("E2 a turn writes its subjob onto the graph",

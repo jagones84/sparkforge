@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""v285 — the detachable Orbit beta console (src2/orbit_beta).
+"""v285 — the optional Orbit command deck (sparkforge/orbit).
 
-JAG-285 (user): rebuild the /console deck as a coherent, OOP, DETACHABLE beta that
-orchestrates several sessions and can create them ahead of time; the Model Bay must
-show EVERY provider, not only the DGX router.
+JAG-285 (user): rebuild the /console deck as a coherent, OOP deck that orchestrates
+several sessions and can create them ahead of time; the Model Bay must show EVERY
+provider, not only the DGX router.
 
 Locked here:
-  * the beta is importable from `src2/` and exposes `serve_page` + `handle`;
+  * the deck is importable as `sparkforge.orbit` and exposes `serve_page` + `handle`;
   * the Model Bay reads the full `providers.catalog` (all providers), not just the
     local router roster, and maps each model with its context window;
   * the SessionRegistry can pre-create a session and bind a model;
   * the Orchestrator refuses an empty goal / no targets (and only then starts work);
-  * the server reaches the beta ONLY through guarded, swallowing hooks, and never
-    imports it at the top level — so deleting `src2/` leaves the app untouched;
-  * the beta routes never shadow a non-orbit path.
+  * the server reaches the deck ONLY through guarded, swallowing hooks, and never
+    imports it at the top level — so removing `sparkforge/orbit/` leaves the app
+    untouched;
+  * the deck's routes never shadow a non-orbit path.
 
-Deterministic, no live server. Run: python3 tests/v285_orbit_beta.py
+Deterministic, no live server. Run: python3 tests/v285_sparkforge.orbit.py
 """
 import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(REPO, "src2"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 results = []
@@ -41,23 +41,23 @@ class FakeHandler:
         return True
 
 
-# --- 0) importable from src2/ -------------------------------------------------
+# --- 0) importable as a normal sub-package ------------------------------------
 try:
-    import orbit_beta
-    check("the beta imports from src2/ and exposes the two hooks",
+    from sparkforge import orbit as orbit_beta
+    check("the deck imports as sparkforge.orbit and exposes the two hooks",
           callable(getattr(orbit_beta, "serve_page", None))
           and callable(getattr(orbit_beta, "handle", None)))
 except Exception as exc:  # noqa: BLE001
-    check("the beta imports from src2/ and exposes the two hooks", False, repr(exc))
+    check("the deck imports as sparkforge.orbit and exposes the two hooks", False, repr(exc))
     orbit_beta = None
 
 # --- 1) Model Bay = full catalogue -------------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "bay.py"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "bay.py"), encoding="utf-8") as f:
     bay_src = f.read()
 check("the Model Bay reads the FULL provider catalogue (not the DGX router only)",
       "catalog(loaded_aliases=" in bay_src and "providers" in bay_src)
 if orbit_beta:
-    from orbit_beta.bay import ModelBay
+    from sparkforge.orbit.bay import ModelBay
     snap = ModelBay().snapshot()
     check("the snapshot has the expected shape",
           isinstance(snap.get("providers"), list) and isinstance(snap.get("count"), int)
@@ -72,7 +72,7 @@ if orbit_beta:
 
 # --- 2) Session registry: list + pre-create ----------------------------------
 if orbit_beta:
-    from orbit_beta.registry import SessionRegistry
+    from sparkforge.orbit.registry import SessionRegistry
     reg = SessionRegistry()
     listed = reg.list()
     check("the roster lists sessions with a running flag",
@@ -84,15 +84,15 @@ if orbit_beta:
 
 # --- 3) Orchestrator guards ---------------------------------------------------
 if orbit_beta:
-    from orbit_beta.orchestrator import Orchestrator
+    from sparkforge.orbit.orchestrator import Orchestrator
     orch = Orchestrator()
     check("dispatch with no goal is refused", orch.dispatch(["s1"], "").get("ok") is False)
     check("dispatch with no target is refused", orch.dispatch([], "do it").get("ok") is False)
 
 # --- 3b) Attention feed ("what needs me", Paperclip-style) -------------------
 if orbit_beta:
-    from orbit_beta.attention import AttentionFeed
-    from orbit_beta.registry import SessionRegistry as _Reg
+    from sparkforge.orbit.attention import AttentionFeed
+    from sparkforge.orbit.registry import SessionRegistry as _Reg
     feed = AttentionFeed(_Reg(), lambda: [{"job": "j1", "session": "s1", "state": "error",
                                            "error": "boom", "started": 1}])
     snap = feed.snapshot()
@@ -109,7 +109,7 @@ if orbit_beta:
 
 # --- 4) API surface: routing + page ------------------------------------------
 if orbit_beta:
-    from orbit_beta import api
+    from sparkforge.orbit import api
     fh = FakeHandler()
     check("serve_page answers /orbit", api.serve_page(fh, "/orbit") is True
           and "Orbit" in (fh.sent or {}).get("obj", ""))
@@ -126,39 +126,47 @@ if orbit_beta:
     check("GET /api/orbit/attention answers 200 with a board",
           ok is True and fh4b.sent["code"] == 200 and "board" in fh4b.sent["obj"])
     fh5 = FakeHandler()
-    check("the beta NEVER shadows a non-orbit path",
+    check("the deck NEVER shadows a non-orbit path",
           api.handle(fh5, "GET", "/api/status", {}, None) is False and fh5.sent is None)
     fh6 = FakeHandler()
     ok = api.handle(fh6, "POST", "/api/orbit/dispatch", {}, {"goal": ""})
     check("POST dispatch with no goal is a clean 200 + ok:false",
           ok is True and fh6.sent["obj"].get("ok") is False)
 
-# --- 5) detachability: server reaches the beta only via guarded hooks ---------
-# JAG-370: the hooks moved to `bridge.py`; server.py imports them from there.
+# --- 5) detachability: server reaches the deck only via guarded hooks ---------
+# JAG-370: the hooks live in `bridge.py`; JAG-393: the deck moved into the package.
 with open(os.path.join(REPO, "src", "sparkforge", "bridge.py"), encoding="utf-8") as f:
     srv = f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "server.py"), encoding="utf-8") as f:
     server_src = f.read()
 with open(os.path.join(REPO, "src", "sparkforge", "httpapi.py"), encoding="utf-8") as f:
     server_src += f.read()
-check("the server never imports the beta at the top level (no hard dependency)",
-      "\nimport orbit_beta" not in server_src and "\nimport orbit_beta" not in srv)
+
+
+def _top_level_deck_import(text):
+    return any(ln.startswith(("import orbit", "from . import orbit",
+                              "from sparkforge import orbit"))
+               for ln in text.splitlines())
+
+
+check("the app never imports the deck at the top level (no hard dependency)",
+      not _top_level_deck_import(server_src) and not _top_level_deck_import(srv))
 check("the bridge exposes a swallowing _orbit_module()",
       "def _orbit_module(" in srv and "except Exception:" in srv
       and "_orbit_cache[\"mod\"] = None" in srv)
-check("the server serves the beta page only behind a guarded hook",
+check("the server serves the deck page only behind a guarded hook",
       "if _orbit_page(self, path):" in server_src)
-check("the server delegates beta API routes on every method",
+check("the server delegates deck API routes on every method",
       all(("_orbit_handle(self, %r" % m).replace("'", '"') in server_src
           for m in ("GET", "POST", "PATCH", "DELETE")))
 
 # --- 6) the UI is OOP + self-contained ---------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the Orbit UI is object-oriented (classes)",
       all(("class %s" % c) in ui for c in ("Api", "AgentsView", "OrgChartView",
                                            "JobsView", "RoutinesView", "FeedView", "OrbitApp")))
-check("the UI drives the beta + orchestration endpoints",
+check("the UI drives the deck + orchestration endpoints",
       "/api/orbit/models" in ui and "/api/orbit/sessions" in ui
       and "/api/agents/tree" in ui and "/api/jobs" in ui)
 check("the UI renders a graphical org chart with node boxes + connectors",

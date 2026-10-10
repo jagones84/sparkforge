@@ -20,7 +20,7 @@ def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + detail) if detail else ""))
 
 
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     o = f.read()
 
 check("A1 the job->agent edge is drawn from the job's COORDINATOR",

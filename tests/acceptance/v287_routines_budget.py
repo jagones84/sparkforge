@@ -109,7 +109,7 @@ check("a non routines path is not shadowed",
       orchestration.handle(fh, "GET", "/api/status", {}, None) is False and fh.sent is None)
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the Orbit UI has a routines view wired to /api/routines",
       "class RoutinesView" in ui and "/api/routines" in ui and 'id="rtCreate"' in ui)

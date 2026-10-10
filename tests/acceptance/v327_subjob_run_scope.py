@@ -7,7 +7,7 @@ so no new plan opened and `subjob_todos` merged the previous run's todos with th
 run's — a subjob "embraced" stale work.
 
 Fix: a re-run opens a FRESH plan per participating agent (`jobs._run`), and the two
-read-only views (`JobRegistry.subjob_todos`, `orbit_beta.api._subjobs_of`) scope a
+read-only views (`JobRegistry.subjob_todos`, `sparkforge.orbit.api._subjobs_of`) scope a
 subjob to the LATEST plan it appeared in — so the mapping survives a later, unrelated
 plan on the same session but never merges two runs.
 
@@ -27,7 +27,7 @@ os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 from sparkforge import agents, jobs, taskgraph as tg  # noqa: E402
 
@@ -94,7 +94,7 @@ check("B4 a later unrelated plan does not drop the subjob's todos",
 
 # ---- C: the constellation view scopes the same way ------------------------
 try:
-    from orbit_beta import api as oapi
+    from sparkforge.orbit import api as oapi
     payload = oapi._subjobs_of(
         [{"id": "A1", "session": "s1"}],
         [{"id": "J1", "subjobs": {"J1.1": {"id": "J1.1", "agent": "A1", "deps": [],
@@ -111,7 +111,7 @@ src = read("src", "sparkforge", "jobs.py")
 check("D1 the runner opens a fresh plan on a RE-RUN",
       'if _g.get("jid") == jid:' in src and "begin_plan(_g)" in src)
 check("D2 subjob_todos uses the latest-plan scope", "latest_plan_nodes([" in src)
-apy = read("src2", "orbit_beta", "api.py")
+apy = read("src", "sparkforge", "orbit", "api.py")
 check("D3 the constellation view uses the shared scope",
       "from sparkforge.jobs import latest_plan_nodes" in apy)
 

@@ -21,11 +21,11 @@ os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
 os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
-sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 from sparkforge import agents, teams, jobs  # noqa: E402
-from orbit_beta import api as orbit_api  # noqa: E402
+from sparkforge.orbit import api as orbit_api  # noqa: E402
 
 results = []
 
@@ -59,7 +59,7 @@ check("B3 the payload echoes the selected team", t1c["team"] == "T1")
 html = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8").read()
 check("C1 the main app renders AX.nY", '(y ? ".n" + y : "")' in html and '".T" + y' not in html)
 check("C2 the docstring no longer claims AX.TY", "AX.nY is its todo Y" in html)
-orbit = open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8").read()
+orbit = open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8").read()
 check("C3 Orbit renders AX.nY everywhere (label + SVG node text + hint)",
       '".n" + String(node.id)' in orbit          # the popover label
       and "'.n' + esc(y)" in orbit               # the SVG node text (JAG-342 miss)

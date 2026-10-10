@@ -17,7 +17,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 results = []
 
@@ -96,7 +96,7 @@ check("the turn writes its jid onto the graph", '_existing["jid"] = jid' in s)
 check("the non-stream chat path clears the job tag", '_ex["jid"] = None' in s)
 check("a job passes its jid into the turn", "autonomous=True, jid=jid" in j)
 
-o = read("src2", "orbit_beta", "web", "orbit.html")
+o = read("src", "sparkforge", "orbit", "web", "orbit.html")
 check("constellation header shows the job tag", "jtag" in o and "n.jid" in o)
 
 gi = read("webui", "index.html")

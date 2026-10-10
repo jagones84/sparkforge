@@ -104,7 +104,7 @@ check("a compaction notice is shown in the chat feed", 'es.addEventListener("con
 check("the composer bar has a VISIBLE reset button", 'id="resetBtn"' in gui and 'onclick="clearSession()"' in gui)
 check("the overflow menu offers reset session", "reset session" in gui)
 
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     orb = f.read()
 check("Orbit agent row has a clear button", 'data-clear' in orb)
 check("Orbit clear calls /clear", "/clear" in orb)

@@ -60,7 +60,7 @@ check("the WebUI does NOT read a nested meta.hitl (contract mismatch)",
       "m.meta.hitl" not in gui)
 
 # --- Orbit deck ------------------------------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("Orbit opens the constellation from an org-chart box",
       'id="constPanel"' in ui and 'id="constSvg"' in ui and "class Constellation" in ui

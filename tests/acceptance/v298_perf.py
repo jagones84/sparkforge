@@ -15,7 +15,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
 
 results = []
 
@@ -67,17 +67,17 @@ check("NORMAL pragma is set", "PRAGMA synchronous=NORMAL" in ev)
 check("pruner is started in main()", "_start_event_pruning()" in src)
 
 # JAG-300: the attention route must not read the roster twice per poll.
-from orbit_beta.attention import AttentionFeed  # noqa: E402
+from sparkforge.orbit.attention import AttentionFeed  # noqa: E402
 import inspect  # noqa: E402
 
 sig = inspect.signature(AttentionFeed.snapshot)
 check("snapshot() accepts an optional session roster", "sessions" in sig.parameters,
       "params=%s" % list(sig.parameters))
-orbit_api = read("src2", "orbit_beta", "api.py")
+orbit_api = read("src", "sparkforge", "orbit", "api.py")
 check("attention route passes the roster to snapshot()",
       "snap = _ATTN.snapshot(sessions)" in orbit_api)
 check("decision queue reuses one roster read",
-      "self.feed.snapshot(sessions)" in read("src2", "orbit_beta", "decisions.py"))
+      "self.feed.snapshot(sessions)" in read("src", "sparkforge", "orbit", "decisions.py"))
 
 # JAG-300: the budget alert must be measured against the SESSION's own model.
 _saved_ctx = srv.context_usage

@@ -20,7 +20,7 @@ that built this.
 ## The 60-second mental model
 
 - A stdlib-only Python **agent harness** (`src/sparkforge/`), HTTP on `:8790`,
-  SPA at `webui/index.html`, optional Orbit beta at `src2/orbit_beta/`.
+  SPA at `webui/index.html`, optional Orbit deck at `src/sparkforge/orbit/`.
 - **Five object levels**: `Team (TN) → Job (JN) → Subjob (JN.j) → Agent (AX) → Todo
   (AX.nY)`. A **team** owns its roster; an **agent IS a session**
   (`agent["session"] == sid`). A **job** runs a coordinator + its team in dependency

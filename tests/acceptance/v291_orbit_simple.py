@@ -65,7 +65,7 @@ ok = orchestration.handle(fh, "POST", "/api/jobs", {}, {"goal": "x", "assignee":
 check("a job for an unknown agent is refused", ok and fh.sent["obj"]["ok"] is False)
 
 # --- UI wiring -------------------------------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the agents table has a model + reports-to control",
       'id="agBody"' in ui and 'data-f="model"' in ui and 'data-f="reports_to"' in ui)

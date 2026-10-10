@@ -8,7 +8,7 @@ teams**. It serves a single-file WebUI, a mission-control deck (Orbit), a CLI an
 mobile-ready HTTP API — all from one process on `:8790`.
 
 ```
-        WebUI (webui/index.html)   Orbit (src2/orbit_beta)   CLI (forge.py)   Mobile
+        WebUI (webui/index.html)   Orbit (src/sparkforge/orbit)   CLI (forge.py)   Mobile
               │  SSE  ▲  │ HTTP          │  SSE ▲                │ SSE ▲         │
               ▼       │  ▼               ▼      │                ▼     │         ▼
         ┌───────────────────────────────────────────────────────────────────────────┐
@@ -103,7 +103,7 @@ or `bwrap` / `nsjail`) so the agent never touches the host. Hard-denied patterns
 ## Interfaces
 
 - **WebUI** `webui/index.html` — one file, no build step; chat + CoT, task graph, feed.
-- **Orbit** `src2/orbit_beta/` — beta mission-control deck at `/orbit`: org chart,
+- **Orbit** `src/sparkforge/orbit/` — optional command deck at `/orbit`: org chart,
   constellation, job create/dispatch, team selector, model policy.
 - **CLI** `forge.py` — chat, agent runs, tasks, models, MCP.
 - **HTTP API** — see [CLI.md](CLI.md); optional bearer auth (`--token`).

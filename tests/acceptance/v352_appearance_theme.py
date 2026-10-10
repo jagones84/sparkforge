@@ -18,8 +18,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HTML = open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8").read()
-ORBIT = open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8").read()
-API = open(os.path.join(REPO, "src2", "orbit_beta", "api.py"), encoding="utf-8").read()
+ORBIT = open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8").read()
+API = open(os.path.join(REPO, "src", "sparkforge", "orbit", "api.py"), encoding="utf-8").read()
 
 results = []
 

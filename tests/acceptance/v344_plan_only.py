@@ -28,7 +28,7 @@ os.environ["SPARKFORGE_GRAPH_DIR"] = os.path.join(TMP, "graphs")
 os.environ["SPARKFORGE_DB"] = os.path.join(TMP, "events.db")
 os.makedirs(os.environ["SPARKFORGE_SESSIONS_DIR"], exist_ok=True)
 os.makedirs(os.environ["SPARKFORGE_GRAPH_DIR"], exist_ok=True)
-sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 from sparkforge import jobs, server  # noqa: E402

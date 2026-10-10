@@ -55,7 +55,7 @@ check("B3 numeric order is stable and total", sorted(got, key=subjob_num) == exp
 src = read("src", "sparkforge", "jobs.py")
 check("C1 the coordinator's delegation record sorts naturally",
       'key=lambda x: subjob_num(x.get("id"))' in src)
-orbit = read("src2", "orbit_beta", "web", "orbit.html")
+orbit = read("src", "sparkforge", "orbit", "web", "orbit.html")
 check("C2 the Orbit JobsView sorts subjobs numerically",
       "_jn(a) - _jn(b)" in orbit and "String(s).match(/(\\d+)$/)" in orbit)
 

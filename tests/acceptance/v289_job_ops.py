@@ -50,7 +50,7 @@ check("dispatch clears the stale error", (reg.get(jid).get("error") or "") == ""
 check("dispatch refuses a job already running", reg.dispatch(jid)["ok"] is False)
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the Orbit UI can create + designate an agent",
       'id="agNew"' in ui and "async create()" in ui and '"/api/agents"' in ui

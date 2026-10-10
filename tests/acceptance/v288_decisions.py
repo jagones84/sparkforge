@@ -23,7 +23,7 @@ import types
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "src"))
-sys.path.insert(0, os.path.join(REPO, "src2"))
+sys.path.insert(0, os.path.join(REPO, "src"))
 TMP = tempfile.mkdtemp(prefix="sf-v288-")
 os.environ["SPARKFORGE_DECISIONS_FILE"] = os.path.join(TMP, "decisions.json")
 
@@ -36,8 +36,8 @@ def check(name, ok, detail=""):
 
 
 from sparkforge import approvals  # noqa: E402
-from orbit_beta import api as oapi  # noqa: E402
-from orbit_beta.decisions import DecisionQueue  # noqa: E402
+from sparkforge.orbit import api as oapi  # noqa: E402
+from sparkforge.orbit.decisions import DecisionQueue  # noqa: E402
 
 decided, retried = [], []
 approvals.decide = lambda aid, decision, by="human": decided.append((aid, decision, by)) or {
@@ -127,7 +127,7 @@ check("a non-orbit path is not shadowed",
       oapi.handle(fh, "GET", "/api/status", {}, None) is False and fh.sent is None)
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     ui = f.read()
 check("the decision queue is retired from the simplified Orbit page",
       "Decision queue" not in ui and "AttentionView" not in ui)

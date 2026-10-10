@@ -122,7 +122,7 @@ check("GET /api/agents/<sid>/chain answers the chain",
       ok and fh.sent["obj"]["chain"] == ["A3", "A2", "A1"])
 
 # --- UI wiring --------------------------------------------------------------
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as fh2:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as fh2:
     ui = fh2.read()
 check("the Orbit job form assigns by recipient (assignee)",
       'id="jobTo"' in ui and "{goal, assignee}" in ui)

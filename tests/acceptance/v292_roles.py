@@ -104,7 +104,7 @@ with open(os.path.join(REPO, "webui", "index.html"), encoding="utf-8") as f:
 check("the primary WebUI has the Rules panel (role + global/project rules)",
       'data-insp="rules"' in gui and "async function loadRole()" in gui
       and "/api/roles" in gui and "/api/rules" in gui)
-with open(os.path.join(REPO, "src2", "orbit_beta", "web", "orbit.html"), encoding="utf-8") as f:
+with open(os.path.join(REPO, "src", "sparkforge", "orbit", "web", "orbit.html"), encoding="utf-8") as f:
     oui = f.read()
 check("the Orbit deck edits the same role API",
       '"/api/roles?session="' in oui and 'data-p="role"' in oui)
