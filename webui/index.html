@@ -5,7 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#06070c">
 <title>⚡ SparkForge — DGX Harness</title>
-<link rel="icon" href="data:,">
+<!-- JAG-390: PWA. The manifest is injected at boot (setupPWA) so its start_url
+     can carry the API token; icons are served from /assets. -->
+<link rel="icon" href="/assets/icon-192.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SparkForge">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
   :root {
     --bg: #070810; --panel: rgba(18,22,38,.74); --panel2: rgba(13,17,32,.82);
@@ -1682,6 +1689,21 @@ async function ensureToken() {
 }
 function authQS() { return TOKEN ? "token=" + encodeURIComponent(TOKEN) : ""; }
 function authHeaders() { return TOKEN ? {"Authorization": "Bearer " + TOKEN} : {}; }
+
+/* JAG-390: make the WebUI installable as an app. The manifest is injected (not a
+ * static <link>) so its `start_url` can carry the SAME token this tab was opened
+ * with — the installed icon then opens an AUTHENTICATED shell, and the HTML route
+ * stays token-gated (no security change). The service worker is public. */
+function setupPWA() {
+  try {
+    let l = document.querySelector('link[rel="manifest"]');
+    if (!l) { l = document.createElement("link"); l.rel = "manifest"; document.head.appendChild(l); }
+    l.href = "/manifest.webmanifest" + (TOKEN ? ("?token=" + encodeURIComponent(TOKEN)) : "");
+  } catch (e) {}
+  try {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  } catch (e) {}
+}
 
 /* JAG-116: never yank the reader to the bottom mid-stream — auto-scroll only when
    already at the bottom; a floating arrow returns there on demand. */
@@ -5993,6 +6015,7 @@ $("agentBtn").onclick = () => { const g = $("inp").value.trim() || "make progres
 $("compactBtn").onclick = compactNow;
 
 ensureToken().then(() => {
+  setupPWA();   // JAG-390: inject the manifest (with the token) + register the SW
   loadSessions(); loadPlan(); loadGraph(); loadStatus(); loadModels(); loadApprovals(); loadCtx(); loadRole(); loadHistory(); connectFeed(); loadSkills(); loadCompactionRef(); loadCosts();
 
 /* JAG-362: a long-lived tab must notice that the app on disk was updated. The

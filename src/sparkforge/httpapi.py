@@ -1103,6 +1103,29 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, f.read(), ctype="text/html; charset=utf-8")
             except FileNotFoundError:
                 return self._send(404, {"error": "console missing"})
+        # JAG-390: PWA plumbing. Both routes are PUBLIC (non-secret): the browser
+        # fetches them during install WITHOUT the API token, and the SW must live
+        # at the root so its scope covers the whole app. The manifest injects the
+        # caller's token into `start_url` (when given) so the installed icon opens
+        # an AUTHENTICATED shell — the HTML route stays token-gated (no change).
+        if path == "/manifest.webmanifest":
+            import json as _json
+            from urllib.parse import quote
+            try:
+                with open(os.path.join(WEBUI_DIR, "manifest.webmanifest"), "r", encoding="utf-8") as f:
+                    man = _json.load(f)
+            except (FileNotFoundError, ValueError):
+                return self._send(404, {"error": "manifest missing"})
+            tok = qs.get("token")
+            if tok:
+                man["start_url"] = "/?token=" + quote(tok)
+            return self._send(200, _json.dumps(man), ctype="application/manifest+json")
+        if path == "/sw.js":
+            try:
+                with open(os.path.join(WEBUI_DIR, "sw.js"), "r", encoding="utf-8") as f:
+                    return self._send(200, f.read(), ctype="text/javascript; charset=utf-8")
+            except FileNotFoundError:
+                return self._send(404, {"error": "sw missing"})
         if not check_auth(self.headers, qs):
             return self._send(401, {"error": "unauthorized"})
         if api_v02.handle(self, "GET", path, qs, None):

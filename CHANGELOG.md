@@ -6,6 +6,21 @@ All notable changes to SparkForge are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **The WebUI is installable as an app — PWA scaffolding (JAG-390).** Adds a web app
+  manifest (`webui/manifest.webmanifest`: standalone, 192/512 + maskable icons), a minimal
+  service worker (`webui/sw.js`: network-first shell cache that NEVER intercepts `/api`, so
+  the harness stays live-only), the head metadata (`icon`, `apple-touch-icon`,
+  `apple-mobile-web-app-*`) and a boot-time `setupPWA()` that injects the manifest with the
+  caller's token folded into `start_url` — so the installed icon opens an AUTHENTICATED
+  shell while the HTML route stays token-gated (no security change). The icons are generated
+  by `webui/assets/make-icons.py` (Pillow, dev-only, not served). The server serves
+  `/manifest.webmanifest` and `/sw.js` PUBLICLY (the browser fetches them without the token;
+  the SW must live at the root for its scope). NOTE: a service worker / rich install needs a
+  **secure context** — over plain HTTP the SW is skipped and Chrome only offers the plain
+  "Add to Home screen" shortcut; over HTTPS (e.g. Tailscale) it becomes a full installable
+  PWA. New `v390` (8/8); battery 124 → 125.
+
 ### Changed
 - **`server.py` split, phase 1 (JAG-370).** The external review was right on one
   point: `server.py` was a 6,432-line / 309 KB god-file. Three self-contained leaf
