@@ -22,6 +22,13 @@ All notable changes to Longrun are documented here. The format follows
   PWA. New `v390` (8/8); battery 124 → 125.
 
 ### Changed
+- **Renamed the whole project SparkForge → Longrun.** The package moves from
+  `src/sparkforge/` to `src/longrun/`, the env prefix `SPARKFORGE_*` → `LONGRUN_*`, the
+  display name and the systemd unit from `sparkforge` to `longrun`, the on-host folder
+  from `~/Repositories/sparkforge` to `~/Repositories/longrun`, and the GitHub repo from
+  `jagones84/sparkforge` to `jagones84/longrun`. The optional Beta deck is folded from the
+  separate `src2/orbit_beta/` into the package as `src/longrun/orbit/` (one `src/` dir,
+  no more beta tree). Battery kept 125/125 GREEN.
 - **`server.py` split, phase 1 (JAG-370).** The external review was right on one
   point: `server.py` was a 6,432-line / 309 KB god-file. Three self-contained leaf
   clusters moved out, mechanically, with the module keeping thin re-exports so every
