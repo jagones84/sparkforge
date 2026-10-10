@@ -476,6 +476,20 @@
        every control full-size and tappable (the log shrinks first, see #log min-height:0). */
     #composerBar { flex-wrap: wrap; }
   }
+  /* JAG-382: the right group was `nowrap` (+ `justify-content:flex-end`) and the model
+     button had `min-width:0`, so on a phone — where mic + model + agent + stop + reset +
+     ⋯ + send are wider than the row — the flex-end group overflowed to the LEFT: the mic
+     and the model selector were pushed off-screen (or the model button was squeezed to a
+     ~24px sliver showing only its ▾), and its 360px popover hung off the left edge. Let
+     the right group WRAP, keep the model label readable, and re-anchor the menu to the
+     FULL-WIDTH right group so it always opens fully on screen. Scoped to WIDTH only, so a
+     wide-but-short desktop window keeps its right-aligned toolbar. */
+  @media (max-width: 920px) {
+    #composerBar .cb-right { flex-wrap: wrap; justify-content: flex-start; position: relative; }
+    #composerBar .cb-right .model-wrap { position: static; }
+    #composerBar .cb-right .model-wrap > button { min-width: 96px; }
+    #modelMenu { left: 0; right: 0; width: auto; }
+  }
 
   /* CoT live drawer (mobile) */
   #cotDrawer { display: none; max-height: 34dvh; overflow-y: auto; padding: 10px 22px;

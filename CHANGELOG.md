@@ -180,6 +180,17 @@ All notable changes to SparkForge are documented here. The format follows
   (`display:flex`, width 260), a synthetic touch drag on the grip resizes it 260→320, all
   five tabs hit-test to themselves with the drawer open, and `tasks`/`context`/`feed` open
   the right inspector. `v368` extended (E1–E6); battery 121/121.
+- **Mobile WebUI: the LLM (model) picker was invisible / unusable (JAG-382).** On a phone
+  the composer's right group is `nowrap` with `justify-content: flex-end` and the model
+  button had `min-width: 0`, so — with mic + model + agent + stop + reset + ⋯ + send wider
+  than the row — the group overflowed to the LEFT: at 360px the mic and the model selector
+  (and its `▾`) were pushed off-screen; at 412px the model button was squeezed to a ~24px
+  sliver, and its 360px popover hung off the left edge. On ≤920px the right group now
+  WRAPS, the model label keeps a readable `min-width: 96px`, and the model menu re-anchors
+  to the FULL-WIDTH right group (`position: static` on `.model-wrap`) so it always opens
+  fully on screen. Verified live (Chrome DevTools, 360 & 412 touch): the model button reads
+  its full name (190px), every composer control hit-tests to itself, and the menu opens
+  within the viewport (44 entries). `v282` extended; battery 121/121.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire

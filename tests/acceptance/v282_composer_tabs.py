@@ -51,6 +51,16 @@ check("the model picker is the flexible element and truncates",
 check("the model label targets .mname (robust, keeps the caret)",
       'b.querySelector(".mname")' in ui and 'class="mname"' in ui)
 check("the composer placeholder is compact", "⏎ send" in ui)
+# JAG-382: on a phone the RIGHT group must wrap too (it was nowrap + justify-content:
+# flex-end), the model label must stay readable, and the menu must re-anchor to the
+# FULL-WIDTH right group — else the model selector shrank to a ~24px sliver / its 360px
+# popover hung off the left edge (mic + model pushed off-screen at 360px).
+check("the phone right group WRAPS and keeps the model label readable",
+      "#composerBar .cb-right { flex-wrap: wrap; justify-content: flex-start; position: relative; }" in ui
+      and "#composerBar .cb-right .model-wrap > button { min-width: 96px; }" in ui)
+check("the mobile model menu re-anchors to the full-width right group (stays on screen)",
+      "#composerBar .cb-right .model-wrap { position: static; }" in ui
+      and "#modelMenu { left: 0; right: 0; width: auto; }" in ui)
 
 # --- 2) editor tabs: path, copy-path menu, outside-workspace marker ----------
 check("a tab shows its full path on hover",
