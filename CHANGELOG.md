@@ -206,6 +206,18 @@ All notable changes to SparkForge are documented here. The format follows
   (2655 chars) and persists `reasoning` in the session. New `v383` (7/7, transport stubbed
   — OpenRouter `reasoning`, local `reasoning_content`, and the fallback); battery
   121 → 122 (`README` count updated).
+- **"The model says it will proceed, then does nothing" — the harness missed a promise that
+  was not the first sentence (JAG-384).** Live (session `34e0630510f2`, goal "…non cambiare
+  nulla proponi solo"): the model answered "No: … non l'ho ancora provata … / Da ora procedo
+  in sola lettura: analizzo e propongo …" and the turn ended `plan.stopped reason=goal_reached`
+  with 0 open steps — so the JAG-74 "act, don't announce" nudge never fired and the announced
+  work was never done (a background fallback planner then added `todo` nodes a few seconds
+  later, which nobody executes — see JAG-308). Root cause: `_PROMISE_RE` was anchored to the
+  START of the message, and this promise is the SECOND paragraph, after the actual answer. It
+  now matches the verb at ANY sentence/line start too, with a short lead-in ("Da ora procedo",
+  "Adesso analizzo", "Then I'll …"), so the harness gets its "last word": it nudges the model
+  to call the tool NOW or conclude. Verified deterministically with the exact live reply. New
+  `v384` (10/10); battery 122 → 123.
 - **A tool request answered in the model's NATIVE markup was silently dropped,
   freezing the turn (JAG-369).** The A8 "Master" agent runs on
   `openrouter:deepseek/deepseek-v4.1-flash`, which — with no `tools` array on the wire

@@ -563,21 +563,32 @@ def _looks_like_action_dict(act):
     return bool(keys & set(_JSON_TOOL_ARG_KEYS))
 
 
-# JAG-74: "act, don't announce". A reply that OPENS with an action verb in the
-# first person and is short is a promise of imminent work, not a result. If no
-# tool ran this turn we nudge the model once to actually do it (or conclude).
+# JAG-74: "act, don't announce". A reply that ANNOUNCES work in the first person
+# (and is short) is a promise of imminent work, not a result. If no tool ran this
+# turn we nudge the model once to actually do it (or conclude).
+# JAG-384: the announcement is often NOT the first sentence. Observed live: the
+# turn goal "…non cambiare nulla proponi solo" got the reply "No: **non l'ho ancora
+# provata sulla codebase**. …\n\nDa ora procedo **in sola lettura**: analizzo e
+# propongo …". The START-anchored match MISSED it, so the nudge never fired and the
+# turn ended (goal_reached, 0 open steps) with the model having promised work it
+# never did. Match the verb at ANY sentence/line start too, allowing a short lead-in
+# ("Da ora procedo", "Adesso analizzo", "Then I'll …").
+_PROMISE_VERBS = (
+    r"carico|procedo|eseguo|lancio|creo|installo|avvio|aggiorno|"
+    r"verifico|controllo|continuo|cerco|consulto|analizzo|recupero|"
+    r"preparo|inizio|comincio|elaboro|determino|sintetizzo|organizzo|"
+    r"accedo|scarico|i'?ll|i will|i'?m going to|let me|loading|running")
 _PROMISE_RE = re.compile(
-    r"^\s*(?:\*\*)?(?:carico|procedo|eseguo|lancio|creo|installo|avvio|aggiorno|"
-    r"verifico|controllo|continuo|cerco|consulto|analizzo|recupero|preparo|"
-    r"inizio|comincio|elaboro|determino|sintetizzo|organizzo|accedo|scarico|"
-    r"i'?ll|i will|i'?m going to|let me|loading|running)\b",
+    r"(?:^|\n|[.!?]\s+)\s*(?:\*\*)?"
+    r"(?:da ora|adesso|ora|poi|quindi|dopo|subito|allora|"
+    r"then|now|next|soon|from now)?\s*(?:\*\*)?(?:" + _PROMISE_VERBS + r")\b",
     re.IGNORECASE)
 
 
 def _looks_like_promise(text):
     """True when the reply only announces an action (and is not a result)."""
     t = (text or "").strip()
-    return bool(t) and len(t) <= 400 and bool(_PROMISE_RE.match(t))
+    return bool(t) and len(t) <= 400 and bool(_PROMISE_RE.search(t))
 
 
 def _skill_hints(text, limit=3):
