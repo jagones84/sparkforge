@@ -146,6 +146,22 @@ All notable changes to SparkForge are documented here. The format follows
   a thin façade — imports, constants, `stream_with_fallback` and the re-export blocks.
 
 ### Fixed
+- **Mobile WebUI: the right side panel was transparent, and the bottom tab bar opened the
+  drawer on the WRONG section (JAG-391).** Two independent defects reported together:
+  - *Translucent panels.* `aside { background: var(--aside) }` paints BOTH the left
+    sessions panel and the right inspector rail, and `--aside` was a translucent
+    `rgba(...)` in all six themes — so the chat bled through the rail (the user's
+    "Rh side panel is transparent"). The token is now a SOLID colour per theme
+    (`#10131f`, `#12151b`, `#e6d6b2`, `#0c1526`, `#221a11`, `#111d16`).
+  - *Tabs landing on the wrong section.* `openTab()` called `focusInsp()` BEFORE adding
+    `body.show-right`; on a phone the rail is `display:none` until that class arrives, so
+    `focusInsp`'s `scrollIntoView()` was a no-op and every tab (tasks/context/feed) opened
+    the drawer at its FIRST section (Context) instead of its own. The drawer class is now
+    applied FIRST, and `focusInsp` defers the scroll by one frame
+    (`requestAnimationFrame`) so the freshly-shown rail has laid out. Live (412×915 touch):
+    `openTab('tasks')` now puts `Plan / Tasks` at the rail top (scroll 713, offset 14px),
+    `context` likewise; `feed` (the last section) scrolls to the end and is visible.
+    Guards in `v368` (E7/E8) and `v352` (L1/L2); battery 125/125.
 - **Mobile WebUI: the composer toolbar's buttons overlapped each other (JAG-3xx).** On a
   phone `#composerBar` was forced to `flex-wrap: nowrap`, so the flex algorithm SHRANK
   `.cb-right`; because that group is `justify-content: flex-end`, its buttons spilled

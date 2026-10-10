@@ -803,7 +803,7 @@
   /* ==== theme system: indigo (default) · dark · midnight · sand · sepia ==== */
   :root {
     --grad-a: #141a3a; --grad-b: #241638; --hdr: rgba(8,10,20,.6);
-    --bg2: #121722; --aside: rgba(8,10,20,.45); --composer: rgba(8,10,20,.6);
+    --bg2: #121722; --aside: #10131f; --composer: rgba(8,10,20,.6);
     --hover: rgba(120,140,255,.14); --sel: rgba(120,140,255,.2);
     --hl: rgba(120,140,255,.22); --menubg: #0f1320;
     --menuline: rgba(120,140,255,.28); --chipbg: rgba(120,140,255,.14);
@@ -816,7 +816,7 @@
     --accent: #9fb0cb; --you: #a9c2e8; --info: #6fc7e8;
     --bg-2: #14171e; --bg-3: #181c24; --line-2: #232833; --ink: #c7ced9; --muted: #7e8697;
     --bg2: #14171e; --grad-a: #1b2029; --grad-b: #121319; --hdr: rgba(11,13,18,.74);
-    --aside: rgba(8,10,14,.5); --composer: rgba(8,10,14,.7);
+    --aside: #12151b; --composer: rgba(8,10,14,.7);
     --hover: rgba(159,176,203,.12); --sel: rgba(159,176,203,.18);
     --hl: rgba(159,176,203,.2); --menubg: #0d1015;
     --menuline: rgba(159,176,203,.24); --chipbg: rgba(159,176,203,.12);
@@ -830,7 +830,7 @@
     --accent: #9c5f24; --you: #3a648f; --info: #3a767d;
     --bg-2: #d2bd94; --bg-3: #cbb588; --line-2: #c2ad84; --ink: #453b2c; --muted: #665639;
     --bg2: #d2bd94; --grad-a: #ddc9a3; --grad-b: #d6c4a6; --hdr: rgba(222,208,178,.95);
-    --aside: rgba(226,212,182,.66); --composer: rgba(226,212,182,.82);
+    --aside: #e6d6b2; --composer: rgba(226,212,182,.82);
     --hover: rgba(156,95,36,.12); --sel: rgba(156,95,36,.18);
     --hl: rgba(156,95,36,.2); --menubg: #ddcba6;
     --menuline: rgba(156,95,36,.32); --chipbg: rgba(156,95,36,.12);
@@ -844,7 +844,7 @@
     --accent: #6b8cff; --you: #8fb6ff; --info: #5ac8fa;
     --bg-2: #0d1729; --bg-3: #111d33; --line-2: #1a2740; --ink: #c3cfe4; --muted: #7d89a6;
     --bg2: #0d1729; --grad-a: #101c38; --grad-b: #0d1428; --hdr: rgba(8,14,26,.8);
-    --aside: rgba(8,13,24,.55); --composer: rgba(8,14,26,.66);
+    --aside: #0c1526; --composer: rgba(8,14,26,.66);
     --hover: rgba(107,140,255,.14); --sel: rgba(107,140,255,.2);
     --hl: rgba(107,140,255,.22); --menubg: #0b1424;
     --menuline: rgba(107,140,255,.3); --chipbg: rgba(107,140,255,.14);
@@ -858,7 +858,7 @@
     --accent: #c99a5b; --you: #b9c0d6; --info: #8fb3b8;
     --bg-2: #221a12; --bg-3: #2a2016; --line-2: #3a2d1e; --ink: #d3c3a6; --muted: #9c8767;
     --bg2: #221a12; --grad-a: #2a2015; --grad-b: #1d160f; --hdr: rgba(23,18,12,.82);
-    --aside: rgba(20,15,10,.55); --composer: rgba(23,18,12,.7);
+    --aside: #221a11; --composer: rgba(23,18,12,.7);
     --hover: rgba(201,154,91,.14); --sel: rgba(201,154,91,.2);
     --hl: rgba(201,154,91,.22); --menubg: #211a11;
     --menuline: rgba(201,154,91,.3); --chipbg: rgba(201,154,91,.14);
@@ -872,7 +872,7 @@
     --accent: #7fbf95; --you: #a9c9d8; --info: #7fb8c4;
     --bg-2: #122019; --bg-3: #16281f; --line-2: #20352a; --ink: #c3d4c9; --muted: #7f9488;
     --bg2: #122019; --grad-a: #14301f; --grad-b: #0e1a14; --hdr: rgba(11,19,15,.8);
-    --aside: rgba(10,17,13,.55); --composer: rgba(11,19,15,.66);
+    --aside: #111d16; --composer: rgba(11,19,15,.66);
     --hover: rgba(111,174,139,.14); --sel: rgba(111,174,139,.2);
     --hl: rgba(111,174,139,.22); --menubg: #101d16;
     --menuline: rgba(111,174,139,.3); --chipbg: rgba(111,174,139,.14);
@@ -4018,9 +4018,9 @@ function openTab(name) {
   _setTabbarActive(name);
   const t = _MOBILE_TABS[name];
   if (t) {
-    if (t.insp) focusInsp(t.insp);
     document.body.classList.add(t.side === "left" ? "show-left" : "show-right");
-    $("backdrop").classList.add("show");
+    const bd = $("backdrop"); if (bd) bd.classList.add("show");
+    if (t.insp) focusInsp(t.insp);
   }
   _settleHandles();
 }
@@ -4991,7 +4991,7 @@ function focusInsp(name) {
   if (sec) {
     sec.querySelector(".insp-body").hidden = false;
     sec.classList.add("insp-open");
-    sec.scrollIntoView({ block: "start" });
+    requestAnimationFrame(function () { sec.scrollIntoView({ block: "start" }); });
   }
   localStorage.setItem("sf_insp_" + key, "1");
   if (key === "plan") { loadPlan(); loadGraph(); }

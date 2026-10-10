@@ -133,6 +133,17 @@ check("E6 an open drawer ends ABOVE the tab bar (bottom-chrome clearance)",
       '"--sf-bottombar"' in HTML
       and "bottom: var(--sf-bottombar, 0px)" in HTML
       and HTML.count("var(--sf-bottombar, 0px)") >= 4, "")
+# JAG-391: tapping a tab must LAND on its section, not merely open the drawer at the
+# top. The rail is `display:none` until body.show-right is added, so the old order
+# called focusInsp() while it was hidden -> scrollIntoView() was a no-op and the panel
+# always opened at its first section (Context). The drawer class must come FIRST, and
+# the scroll must wait one frame so the freshly-shown rail has laid out.
+_OT = HTML.split("function openTab(name)")[1].split("function closeAside")[0]
+check("E7 the drawer class is applied BEFORE focusing its section",
+      _OT.find('document.body.classList.add(t.side') != -1
+      and _OT.find('document.body.classList.add(t.side') < _OT.find('focusInsp(t.insp)'), "")
+check("E8 the inspector scroll is deferred one frame (works on a just-shown rail)",
+      'requestAnimationFrame(function () { sec.scrollIntoView({ block: "start" }); });' in HTML, "")
 
 print("---")
 ok = sum(results)

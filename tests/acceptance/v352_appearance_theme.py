@@ -156,6 +156,17 @@ check("K7 the toggle thresholds match the CSS overlays (900 / 1100)",
       and "return _vw() <= 900" in HTML
       and "return _vw() <= 1100" in HTML, "")
 
+# --- L: the side panels are OPAQUE (JAG-391) --------------------------------
+# `aside { background: var(--aside); }` paints BOTH the left sessions panel and the
+# right inspector rail. A translucent --aside let the chat bleed through the panel
+# (the user reported the right rail as "transparent"). Every theme must use a SOLID
+# colour for the token — no alpha channel — so the panels read as real surfaces.
+check("L1 the panel token is a solid colour (no alpha) in every theme",
+      "--aside: rgba(" not in HTML and HTML.count("--aside: #") == 6,
+      str(HTML.count("--aside: #")))
+check("L2 both panels paint from that token",
+      "aside { background: var(--aside); }" in HTML, "")
+
 print("---")
 ok = sum(results)
 print("%d/%d PASS" % (ok, len(results)))
